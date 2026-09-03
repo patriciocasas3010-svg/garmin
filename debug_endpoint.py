@@ -48,7 +48,12 @@ def main():
     nombre = sys.argv[1]
     args = sys.argv[2:]
     resultado = COMANDOS[nombre](args)
-    print(json.dumps(resultado, indent=2, ensure_ascii=False)[:8000])
+    texto = json.dumps(resultado, indent=2, ensure_ascii=False)
+    # Solo recorta si se está viendo en pantalla; si se redirige a un archivo
+    # (> archivo.json) o a otro comando, se imprime completo.
+    if sys.stdout.isatty() and len(texto) > 8000:
+        texto = texto[:8000] + "\n... (recortado; redirige a un archivo con '> salida.json' para verlo completo)"
+    print(texto)
 
 
 if __name__ == "__main__":
