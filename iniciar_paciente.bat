@@ -1,27 +1,33 @@
 @echo off
 REM Doble clic para abrir el dashboard de Garmin (Windows).
-REM La primera vez tarda mas porque instala todo; luego es rapido.
+REM La primera vez tarda mas porque prepara todo automaticamente -- no hace
+REM falta instalar Python a mano, este script lo resuelve solo.
 
 cd /d "%~dp0"
 
-where python >nul 2>nul
-if errorlevel 1 goto :sin_python
+set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 
-python -c "import sys" >nul 2>nul
-if errorlevel 1 goto :alias_tienda
+where uv >nul 2>nul
+if not errorlevel 1 goto :uv_lista
 
-python -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
-if errorlevel 1 goto :python_viejo
+echo Primera vez: preparando todo automaticamente, puede tardar uno o dos minutos...
+echo (necesitas conexion a internet solo para este paso)
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
+set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 
+where uv >nul 2>nul
+if errorlevel 1 goto :falla_uv
+
+:uv_lista
 if not exist .venv (
-    echo Primera vez: preparando todo, puede tardar uno o dos minutos...
-    python -m venv .venv
+    echo Preparando el programa (puede tardar un minuto la primera vez)...
+    uv venv --python 3.11 .venv
     if errorlevel 1 goto :falla_venv
 )
 
 call .venv\Scripts\activate.bat
-python -m pip install --quiet --upgrade pip
-pip install --quiet -r requirements.txt
+uv pip install -q -r requirements.txt
 if errorlevel 1 goto :falla_pip
 
 echo.
@@ -38,34 +44,10 @@ streamlit run dashboard.py
 pause
 exit /b 0
 
-:sin_python
-echo No encuentro Python instalado. Abriendo la pagina para descargarlo...
-start "" "https://www.python.org/downloads/windows/"
-echo Descarga el boton amarillo grande de esa pagina.
-echo IMPORTANTE: en la primera pantalla del instalador marca la casilla
-echo "Add python.exe to PATH" antes de darle a instalar.
-echo Luego vuelve a hacer doble clic en este archivo.
-pause
-exit /b 1
-
-:alias_tienda
-echo Windows tiene instalado un "python" que en realidad abre la Microsoft Store
-echo en vez de ejecutar Python de verdad. Para arreglarlo:
-echo   1. Ve a Configuracion - Aplicaciones - Alias de ejecucion de aplicaciones.
-echo   2. Apaga los alias de "python.exe" y "python3.exe".
-echo   3. Instala Python desde https://www.python.org/downloads/windows/
-echo      marcando la casilla "Add python.exe to PATH".
-start "" "https://www.python.org/downloads/windows/"
-pause
-exit /b 1
-
-:python_viejo
-echo Tu version de Python es muy antigua para este programa. Abriendo la
-echo pagina para descargar una nueva...
-start "" "https://www.python.org/downloads/windows/"
-echo Descarga el boton amarillo grande de esa pagina y marca la casilla
-echo "Add python.exe to PATH" al instalar. Luego vuelve a hacer doble clic
-echo en este archivo.
+:falla_uv
+echo No se pudo preparar el programa automaticamente.
+echo Revisa tu conexion a internet e intentalo de nuevo, o avisale a tu
+echo nutriologo con una foto de esta ventana.
 pause
 exit /b 1
 

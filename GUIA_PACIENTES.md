@@ -20,22 +20,10 @@ Entra a la carpeta que te dieron y haz doble clic en:
 - **Mac**: `iniciar_paciente.command`
 - **Windows**: `iniciar_paciente.bat`
 
-Se va a abrir una ventana de texto (Terminal) que instala todo lo necesario
-(la primera vez tarda 1-2 minutos, después es más rápido).
-
-**Si no tienes Python instalado**, la ventana te lo va a decir y va a abrir
-sola la página correcta para descargarlo. Solo tienes que:
-
-- **Mac**: descargar el botón amarillo grande e instalar con las opciones
-  por defecto.
-- **Windows**: descargar el botón amarillo grande y, **muy importante**, en
-  la primera pantalla del instalador marcar la casilla "Add python.exe to
-  PATH" antes de darle a instalar.
-
-Cuando termine de instalar, vuelve a hacer doble clic en
-`iniciar_paciente.command` / `iniciar_paciente.bat` para seguir. Si ya
-tenías Python instalado, la ventana pasa directo a este paso sin pedirte
-nada.
+Se va a abrir una ventana de texto (Terminal). **No necesitas instalar nada
+por tu cuenta**: la primera vez que la abres, el programa prepara todo solo
+(necesita internet para eso), lo cual tarda 1-2 minutos; después es mucho
+más rápido. Solo espera sin cerrar la ventana.
 
 ### Si Mac no te deja abrirlo ("no se puede abrir porque es de un desarrollador no identificado")
 

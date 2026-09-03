@@ -185,10 +185,11 @@ Para compartirle esto a un paciente:
    que uses con pacientes (correo, WhatsApp, USB). No hace falta que el
    paciente tenga cuenta de GitHub ni sepa usar git.
 2. Dale el archivo **`GUIA_PACIENTES.md`** — está escrito para alguien sin
-   experiencia técnica, sin comandos de terminal. Le explica instalar Python
-   una vez y usar `iniciar_paciente.command` (Mac) / `iniciar_paciente.bat`
-   (Windows): un archivo de doble clic que instala todo, pide su login de
-   Garmin la primera vez, y abre el dashboard.
+   experiencia técnica, sin comandos de terminal. Le explica usar
+   `iniciar_paciente.command` (Mac) / `iniciar_paciente.bat` (Windows): un
+   archivo de doble clic que prepara todo automáticamente (el paciente no
+   instala Python ni nada por su cuenta), pide su login de Garmin la
+   primera vez, y abre el dashboard.
 3. En consulta, el paciente solo necesita traer su computadora y volver a
    hacer doble clic en ese archivo — como ya inició sesión antes, abre
    directo con sus datos actualizados.
