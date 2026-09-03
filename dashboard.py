@@ -35,6 +35,38 @@ ZONE_RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # Z1 (suave
 alt.themes.enable("none")
 
 
+def _score_range(value, low_bad, low_ok, high_ok, high_bad):
+    """100 dentro de [low_ok, high_ok], baja a 0 conforme se acerca a los límites *_bad."""
+    if value is None or pd.isna(value):
+        return None
+    if low_ok <= value <= high_ok:
+        return 100.0
+    if value < low_ok:
+        if value <= low_bad:
+            return 0.0
+        return (value - low_bad) / (low_ok - low_bad) * 100
+    if value >= high_bad:
+        return 0.0
+    return (high_bad - value) / (high_bad - high_ok) * 100
+
+
+def _score_ramp(value, target):
+    """0 en 0, 100 al llegar (o pasar) la meta."""
+    if value is None or pd.isna(value):
+        return None
+    return max(0.0, min(100.0, value / target * 100))
+
+
+def _score_label(score: float) -> str:
+    if score >= 85:
+        return "Excelente"
+    if score >= 70:
+        return "Buena"
+    if score >= 50:
+        return "Regular"
+    return "Baja"
+
+
 def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float | None = None, fmt: str = ".1f", height: int = 220):
     """Línea de una sola serie, con línea de referencia punteada opcional."""
     data = series.dropna().reset_index()
@@ -279,6 +311,55 @@ tab_resumen, tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas
 
 # --- Resumen ---
 with tab_resumen:
+    st.subheader(f"Calificación del mes (últimos {WELLNESS_DAYS} días)")
+
+    recovery_score = readiness_series.dropna().mean() if readiness_series.notna().any() else None
+
+    sleep_hours_avg = sleep_df["hours"].dropna().mean() if sleep_df["hours"].notna().any() else None
+    sleep_score_garmin = sleep_df["score"].dropna().mean() if sleep_df["score"].notna().any() else None
+    sleep_score = sleep_score_garmin if sleep_score_garmin is not None else _score_range(sleep_hours_avg, 4, 7, 9, 11)
+
+    active_kcal_avg = calories_df["active_kcal"].dropna().mean() if calories_df["active_kcal"].notna().any() else None
+    activity_score = _score_ramp(active_kcal_avg, 400)
+
+    sub_scores = [s for s in [recovery_score, sleep_score, activity_score] if s is not None]
+    overall_score = sum(sub_scores) / len(sub_scores) if sub_scores else None
+
+    if overall_score is None:
+        st.info("No hay suficientes datos de recuperación, sueño o calorías en el periodo para calcular una calificación.")
+    else:
+        etiqueta = _score_label(overall_score)
+        emoji = {"Excelente": "🟢", "Buena": "🟢", "Regular": "🟡", "Baja": "🔴"}[etiqueta]
+        st.markdown(
+            f'<div style="font-size:56px; font-weight:700; line-height:1.1;">{overall_score:.0f}'
+            f'<span style="font-size:22px; color:{INK_MUTED}; font-weight:500;"> /100 &nbsp;·&nbsp; {emoji} {etiqueta}</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Promedio simple de tres partes iguales: recuperación, sueño y actividad física. "
+            "Es una calificación propia de este dashboard, no un puntaje oficial de Garmin."
+        )
+
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.metric(
+            "Recuperación", f"{recovery_score:.0f}/100" if recovery_score is not None else "N/D",
+            help="Promedio de Training Readiness de Garmin en el mes." if recovery_score is not None
+            else "Tu reloj/cuenta no reporta Training Readiness.",
+        )
+        if sleep_score_garmin is not None:
+            sleep_help = f"Sleep Score de Garmin, promedio del mes ({sleep_hours_avg:.1f} h/noche)."
+        elif sleep_hours_avg is not None:
+            sleep_help = f"Estimado por horas de sueño ({sleep_hours_avg:.1f} h/noche); tu reloj no reporta Sleep Score."
+        else:
+            sleep_help = "No hay datos de sueño en el periodo."
+        sc2.metric("Sueño", f"{sleep_score:.0f}/100" if sleep_score is not None else "N/D", help=sleep_help)
+        sc3.metric(
+            "Actividad física", f"{activity_score:.0f}/100" if activity_score is not None else "N/D",
+            help=f"{active_kcal_avg:.0f} kcal/día promedio por actividad (meta: 400 kcal/día)." if active_kcal_avg is not None
+            else "No hay calorías de actividad registradas en el periodo.",
+        )
+
+    st.divider()
     st.subheader("¿Cómo vengo hoy?")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
