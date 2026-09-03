@@ -304,7 +304,7 @@ def render_dashboard_body(data: dict):
 
         st.divider()
         st.subheader("¿Cómo vengo hoy?")
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
         c2.metric("HRV (Z-score)", f"{ultimo_hrv_z:.2f}" if ultimo_hrv_z is not None else "—", help="Qué tan lejos está tu HRV de tu línea base de 60 días")
         c3.metric(
@@ -315,7 +315,12 @@ def render_dashboard_body(data: dict):
         )
         sueno_7d = sleep_df["hours"].tail(7).mean()
         c4.metric("Sueño (7d)", f"{sueno_7d:.1f} h" if pd.notna(sueno_7d) else "—")
-        c5.metric("Alertas activas", str(alertas_activas), delta=None)
+        promedio_ml_dia = (data.get("hidratacion_diaria") or {}).get("promedio_ml_dia")
+        c5.metric(
+            "Líquido/día activo", f"{promedio_ml_dia:.0f} mL" if promedio_ml_dia is not None else "—",
+            help="Promedio de pérdida de líquidos estimada en días con actividad (ver pestaña Sueño y Bienestar).",
+        )
+        c6.metric("Alertas activas", str(alertas_activas), delta=None)
 
         if alertas_activas:
             st.error(f"Hay {alertas_activas} indicador(es) en alerta esta semana — revisa la pestaña 🚦 Alertas.")
