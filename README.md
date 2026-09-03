@@ -60,6 +60,45 @@ Si el inicio de sesión es correcto, el script:
 - Muestra tu nombre de usuario y la lista de relojes/dispositivos vinculados
   a tu cuenta, confirmando que la conexión funcionó.
 
+## Reportes y gráficas
+
+Una vez conectado (con `connect_garmin.py` ya corrido al menos una vez),
+puedes generar reportes con tus datos reales:
+
+```bash
+python3 garmin_reports.py
+```
+
+Esto corre los 4 reportes y guarda las gráficas en la carpeta `graficas/`:
+
+- **Frecuencia cardiaca en reposo** (últimos 3 meses), con línea de tendencia
+  y si está mejorando o empeorando → `graficas/frecuencia_reposo.png`.
+- **Carga de entrenamiento semanal vs horas de sueño** (últimas 12 semanas),
+  para ver si las semanas de más carga coinciden con menos sueño →
+  `graficas/carga_vs_sueno.png`.
+- **Resumen semanal estilo Strava**: kilómetros, tiempo en movimiento,
+  desnivel y ritmo promedio, comparado contra la semana pasada.
+- **Récords personales del año**: mejor 5K, mejor 10K y salida más larga en
+  bici.
+
+También puedes pedir solo uno:
+
+```bash
+python3 garmin_reports.py rhr       # frecuencia cardiaca en reposo
+python3 garmin_reports.py carga     # carga de entrenamiento vs sueño
+python3 garmin_reports.py semana    # resumen semanal
+python3 garmin_reports.py records   # récords personales del año
+```
+
+Las gráficas (`.png`) quedan en la carpeta `graficas/` de tu computadora;
+ábrelas con doble clic desde el Finder para verlas.
+
+**Nota sobre la carga de entrenamiento:** si tu reloj/cuenta no reporta el
+campo oficial de "Training Load" de Garmin para una actividad, el script usa
+una estimación propia (minutos en movimiento ponderados por tu frecuencia
+cardiaca promedio), así que es un valor aproximado, no el número exacto que
+verías en la app de Garmin.
+
 ## Solución de problemas
 
 - **"Credenciales incorrectas"**: revisa que el correo y la contraseña sean

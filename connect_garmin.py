@@ -27,7 +27,7 @@ from garminconnect import (
     GarminConnectTooManyRequestsError,
 )
 
-TOKENSTORE = os.path.expanduser(os.getenv("GARMINTOKENS", "~/.garminconnect"))
+from garmin_session import TOKENSTORE
 
 
 def ask_credentials():
