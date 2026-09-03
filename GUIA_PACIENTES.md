@@ -36,6 +36,23 @@ más rápido. Solo espera sin cerrar la ventana.
 Haz clic derecho (o Ctrl+clic) sobre `iniciar_paciente.command` → "Abrir" →
 confirma "Abrir" en la ventana de advertencia. Solo hace falta la primera vez.
 
+### Si Mac dice que el archivo "está dañado" y que lo muevas a la basura
+
+No lo muevas a la basura, no está dañado de verdad — esto pasa cuando el
+`.zip` viajó por WhatsApp (a veces lo recomprime y eso confunde a macOS).
+Se arregla así:
+
+1. Dale "Cancelar" a ese aviso.
+2. Abre la app **Terminal** (Spotlight con Cmd+Espacio, escribe "Terminal").
+3. Escribe `xattr -cr ` (con un espacio al final, sin Enter todavía).
+4. Arrastra la carpeta del programa desde el Finder hacia la ventana de
+   Terminal — se pega sola la ruta.
+5. Presiona Enter.
+6. Vuelve a intentar abrir `iniciar_paciente.command` como de costumbre.
+
+Si te vuelve a pasar seguido, pide que te compartan la carpeta por Google
+Drive o correo en vez de WhatsApp — así no debería volver a pasar.
+
 ## Paso 3: Inicia sesión (solo la primera vez)
 
 La ventana te va a pedir:

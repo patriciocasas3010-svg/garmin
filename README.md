@@ -185,9 +185,12 @@ datos.
 Para compartirle esto a un paciente:
 
 1. En GitHub, en este repositorio, usa "Code → Download ZIP" (o haz tú el
-   `git clone` una vez y comprime la carpeta) y pásale el `.zip` por el medio
-   que uses con pacientes (correo, WhatsApp, USB). No hace falta que el
-   paciente tenga cuenta de GitHub ni sepa usar git.
+   `git clone` una vez y comprime la carpeta) y pásale el `.zip` por **Google
+   Drive (link para compartir) o correo**. No hace falta que el paciente
+   tenga cuenta de GitHub ni sepa usar git. **Evita mandar el `.zip` como
+   adjunto de WhatsApp**: a veces lo recomprime y eso hace que macOS lo
+   marque como "dañado" al abrirlo — el link de Drive o el correo no tienen
+   ese problema.
 2. Dale el archivo **`GUIA_PACIENTES.md`** — está escrito para alguien sin
    experiencia técnica, sin comandos de terminal. Le explica usar
    `iniciar_paciente.command` (Mac) / `iniciar_paciente.bat` (Windows): un
