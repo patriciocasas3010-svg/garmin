@@ -118,4 +118,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"(No se pudo enviar tu resumen al nutriólogo: {e}. Tu dashboard local sigue funcionando normal.)")
+        detalle = str(e) or repr(e)
+        print(f"(No se pudo enviar tu resumen al nutriólogo: [{type(e).__name__}] {detalle}")
+        print("Tu dashboard local sigue funcionando normal de todas formas.)")
+        import traceback
+        traceback.print_exc()
