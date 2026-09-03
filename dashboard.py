@@ -117,7 +117,7 @@ else:
             "hr_primera_mitad": "FC 1a mitad",
             "hr_segunda_mitad": "FC 2a mitad",
         }),
-        use_container_width=True,
+        width="stretch",
     )
     peor_deriva = efficiency_df["deriva_pct"].max()
     st.metric("Peor deriva cardiaca de la semana", f"{peor_deriva:.1f}%")
@@ -182,8 +182,150 @@ with col4:
             recovery_df[["fecha", "actividad", "caida_2min", "caida_por_minuto"]].rename(
                 columns={"caida_2min": "Caída en 2min (lpm)", "caida_por_minuto": "Caída por minuto (lpm)"}
             ),
-            use_container_width=True,
+            width="stretch",
         )
+
+# ---------------------------------------------------------------------------
+# Panel 5: Sueño, hidratación, desgaste físico y recuperación
+# ---------------------------------------------------------------------------
+
+WELLNESS_DAYS = 30
+
+
+@st.cache_data(ttl=3600)
+def _load_wellness_data():
+    client = _client()
+    end = date.today()
+    start = end - timedelta(days=WELLNESS_DAYS)
+    return {
+        "sleep": gm.fetch_sleep_series(client, start, end),
+        "hydration": gm.fetch_hydration_series(client, start, end),
+        "readiness": gm.fetch_training_readiness_series(client, start, end),
+        "battery": gm.fetch_body_battery_series(client, start, end),
+    }
+
+
+st.header("5. Panel de Sueño, Hidratación, Desgaste Físico y Recuperación")
+st.caption(f"Últimos {WELLNESS_DAYS} días.")
+
+with st.spinner("Descargando sueño, hidratación, Body Battery y Training Readiness..."):
+    wellness = _load_wellness_data()
+
+sleep_df = wellness["sleep"]
+hydration_df = wellness["hydration"]
+readiness_series = wellness["readiness"]
+battery_df = wellness["battery"]
+
+col5, col6 = st.columns(2)
+with col5:
+    st.subheader("Sueño")
+    if sleep_df["hours"].notna().any():
+        st.line_chart(sleep_df[["hours"]].dropna())
+        st.metric("Promedio", f"{sleep_df['hours'].dropna().mean():.1f} h/noche")
+        if sleep_df["score"].notna().any():
+            st.metric("Sleep Score promedio", f"{sleep_df['score'].dropna().mean():.0f}/100")
+    else:
+        st.info("No hay datos de sueño en el periodo.")
+
+with col6:
+    st.subheader("Hidratación")
+    if hydration_df["value_l"].notna().any():
+        st.bar_chart(hydration_df[["value_l"]].dropna())
+        st.metric("Promedio", f"{hydration_df['value_l'].dropna().mean():.2f} L/día")
+    else:
+        st.info(
+            "No hay registros de hidratación (solo cuenta si la registras a mano en "
+            "la app; el reloj solo no mide cuánta agua tomas)."
+        )
+
+col7, col8 = st.columns(2)
+with col7:
+    st.subheader("Desgaste físico (Body Battery)")
+    battery_valid = battery_df.dropna(how="all")
+    if not battery_valid.empty:
+        st.bar_chart(battery_valid[["charged", "drained"]])
+        avg_charged = battery_df["charged"].dropna().mean()
+        avg_drained = battery_df["drained"].dropna().mean()
+        st.metric("Recarga promedio/día", f"{avg_charged:.0f}" if pd.notna(avg_charged) else "N/D")
+        st.metric("Gasto promedio/día", f"{avg_drained:.0f}" if pd.notna(avg_drained) else "N/D")
+    else:
+        st.info("No hay datos de Body Battery en el periodo.")
+
+with col8:
+    st.subheader("Recuperación (Training Readiness)")
+    if readiness_series.notna().any():
+        st.line_chart(readiness_series.dropna())
+        st.metric("Promedio", f"{readiness_series.dropna().mean():.0f}/100")
+    else:
+        st.info("Tu cuenta/reloj no reporta Training Readiness (requiere modelos más recientes).")
+
+# ---------------------------------------------------------------------------
+# Panel 6: Calorías (reposo, actividad y total)
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=3600)
+def _load_calories_data():
+    client = _client()
+    end = date.today()
+    start = end - timedelta(days=WELLNESS_DAYS)
+    return gm.fetch_calories_series(client, start, end)
+
+
+st.header("6. Calorías (reposo, actividad y total)")
+st.caption(f"Últimos {WELLNESS_DAYS} días.")
+
+with st.spinner("Descargando calorías diarias..."):
+    calories_df = _load_calories_data()
+
+if calories_df["total_kcal"].notna().any():
+    st.bar_chart(calories_df[["resting_kcal", "active_kcal"]].dropna(how="all"))
+
+    avg_resting = calories_df["resting_kcal"].dropna().mean()
+    avg_active = calories_df["active_kcal"].dropna().mean()
+    avg_total = calories_df["total_kcal"].dropna().mean()
+    sum_resting = calories_df["resting_kcal"].dropna().sum()
+    sum_active = calories_df["active_kcal"].dropna().sum()
+    sum_total = calories_df["total_kcal"].dropna().sum()
+
+    colc1, colc2, colc3 = st.columns(3)
+    colc1.metric(
+        "Reposo (BMR)", f"{avg_resting:.0f} kcal/día" if pd.notna(avg_resting) else "N/D",
+        help=f"Total en {WELLNESS_DAYS} días: {sum_resting:.0f} kcal" if pd.notna(sum_resting) else None,
+    )
+    colc2.metric(
+        "Por actividad", f"{avg_active:.0f} kcal/día" if pd.notna(avg_active) else "N/D",
+        help=f"Total en {WELLNESS_DAYS} días: {sum_active:.0f} kcal" if pd.notna(sum_active) else None,
+    )
+    colc3.metric(
+        "Total", f"{avg_total:.0f} kcal/día" if pd.notna(avg_total) else "N/D",
+        help=f"Total en {WELLNESS_DAYS} días: {sum_total:.0f} kcal" if pd.notna(sum_total) else None,
+    )
+else:
+    st.info("No hay datos de calorías disponibles en el periodo.")
+
+wellness_window_start = pd.Timestamp(date.today() - timedelta(days=WELLNESS_DAYS))
+activities_calorias = [
+    a for a in activities
+    if a.get("startTimeLocal")
+    and pd.Timestamp(a["startTimeLocal"][:10]) >= wellness_window_start
+    and a.get("calories")
+]
+if activities_calorias:
+    cal_activity_df = pd.DataFrame([
+        {
+            "Fecha": a.get("startTimeLocal", "")[:10],
+            "Actividad": a.get("activityName"),
+            "Calorías": a.get("calories"),
+        }
+        for a in activities_calorias
+    ]).sort_values("Fecha", ascending=False)
+    st.dataframe(cal_activity_df, width="stretch")
+    st.metric(
+        f"Calorías totales por actividades ({WELLNESS_DAYS}d)",
+        f"{cal_activity_df['Calorías'].sum():.0f} kcal",
+    )
+else:
+    st.info(f"No hay actividades con calorías registradas en los últimos {WELLNESS_DAYS} días.")
 
 # ---------------------------------------------------------------------------
 # Índice unificado / tabla de alertas

@@ -104,6 +104,114 @@ def fetch_day_hr_summary(client, day: date) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Sueño, hidratación, desgaste físico (Body Battery) y recuperación
+# ---------------------------------------------------------------------------
+
+def fetch_sleep_series(client, start: date, end: date) -> pd.DataFrame:
+    rows = []
+    d = start
+    while d <= end:
+        try:
+            sleep = client.get_sleep_data(d.isoformat())
+        except Exception:
+            sleep = None
+        dto = (sleep or {}).get("dailySleepDTO") or {}
+        secs = dto.get("sleepTimeSeconds")
+        score = ((sleep or {}).get("sleepScores") or {}).get("overall", {}).get("value")
+        rows.append({
+            "date": d,
+            "hours": secs / 3600 if secs else None,
+            "deep_min": (dto.get("deepSleepSeconds") or 0) / 60,
+            "light_min": (dto.get("lightSleepSeconds") or 0) / 60,
+            "rem_min": (dto.get("remSleepSeconds") or 0) / 60,
+            "awake_min": (dto.get("awakeSleepSeconds") or 0) / 60,
+            "score": score,
+        })
+        d += timedelta(days=1)
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date")
+
+
+def fetch_hydration_series(client, start: date, end: date) -> pd.DataFrame:
+    rows = []
+    d = start
+    while d <= end:
+        try:
+            hydration = client.get_hydration_data(d.isoformat())
+        except Exception:
+            hydration = None
+        value = (hydration or {}).get("valueInML")
+        goal = (hydration or {}).get("goalInML")
+        rows.append({
+            "date": d,
+            "value_l": value / 1000 if value is not None else None,
+            "goal_l": goal / 1000 if goal else None,
+        })
+        d += timedelta(days=1)
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date")
+
+
+def fetch_training_readiness_series(client, start: date, end: date) -> pd.Series:
+    rows = []
+    d = start
+    while d <= end:
+        try:
+            readiness = client.get_training_readiness(d.isoformat())
+        except Exception:
+            readiness = None
+        rows.append({"date": d, "score": (readiness or {}).get("score")})
+        d += timedelta(days=1)
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date")["score"]
+
+
+def fetch_calories_series(client, start: date, end: date) -> pd.DataFrame:
+    """Calorías diarias: reposo (BMR), actividad y total, según el resumen diario de Garmin."""
+    rows = []
+    d = start
+    while d <= end:
+        try:
+            summary = client.get_user_summary(d.isoformat())
+        except Exception:
+            summary = None
+        summary = summary or {}
+        rows.append({
+            "date": d,
+            "resting_kcal": summary.get("bmrKilocalories"),
+            "active_kcal": summary.get("activeKilocalories"),
+            "total_kcal": summary.get("totalKilocalories"),
+        })
+        d += timedelta(days=1)
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date")
+
+
+def fetch_body_battery_series(client, start: date, end: date) -> pd.DataFrame:
+    try:
+        days_data = client.get_body_battery(start.isoformat(), end.isoformat()) or []
+    except Exception:
+        days_data = []
+
+    idx = _date_index(start, end)
+    by_day = {d.get("date"): d for d in days_data if d.get("date")}
+    rows = []
+    for d in idx:
+        entry = by_day.get(d.date().isoformat(), {})
+        rows.append({"charged": entry.get("charged"), "drained": entry.get("drained")})
+
+    return pd.DataFrame(rows, index=idx)
+
+
+# ---------------------------------------------------------------------------
 # Panel 1: ACWR vs HRV (Z-score)
 # ---------------------------------------------------------------------------
 

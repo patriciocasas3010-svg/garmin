@@ -112,19 +112,18 @@ del reporte lo indica en vez de fallar.
 
 ## Tablero Maestro de Rendimiento (dashboard avanzado)
 
-Un dashboard más avanzado, con 4 paneles y una tabla de alertas automáticas,
+Un dashboard más avanzado, con 6 paneles y una tabla de alertas automáticas,
 pensado para entrenamiento serio:
 
 ```bash
 streamlit run dashboard.py
 ```
 
-Esto abre una pestaña en tu navegador (normalmente http://localhost:8501)
-con datos de tus últimos 90 días:
+Esto abre una pestaña en tu navegador (normalmente http://localhost:8501):
 
 1. **Alerta temprana (Carga vs. Preparación)**: ACWR (carga aguda 7 días /
    crónica 28 días) cruzado con el Z-score de tu HRV nocturna (7 días vs. tu
-   línea base de 60 días).
+   línea base de 60 días). Últimos 90 días.
 2. **Eficiencia y economía cardiovascular**: deriva cardiaca (%) entre la
    primera y segunda mitad de tus actividades sostenidas (>20 min) de la
    última semana — cuántos latidos de más te cuesta sostener el mismo ritmo.
@@ -134,6 +133,12 @@ con datos de tus últimos 90 días:
    gris" intermedia.
 4. **Resiliencia del sistema nervioso autónomo**: tu FC en reposo frente a
    qué tan rápido baja tu FC en los primeros 2 minutos después de esforzarte.
+   Últimos 90 días.
+5. **Sueño, hidratación, desgaste físico y recuperación**: horas y etapas de
+   sueño, Sleep Score, hidratación diaria vs meta, Body Battery (recarga vs.
+   gasto) y Training Readiness. Últimos 30 días.
+6. **Calorías**: quemadas en reposo (BMR), por actividad y total por día,
+   más el desglose de calorías de cada actividad individual. Últimos 30 días.
 
 Al final hay una **tabla de indicadores unificados** que marca 🔴 ALERTA o
 🟢 OK para: Índice de Disrupción Fisiológica (ACWR + HRV), Pérdida de
