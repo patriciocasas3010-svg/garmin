@@ -13,6 +13,12 @@ Tu nutriólogo te va a dar una carpeta (o un archivo .zip). Si es un .zip,
 descomprímelo (doble clic en Mac, clic derecho → "Extraer todo" en Windows)
 y pon la carpeta resultante en tu Escritorio.
 
+**¿Van a usar la misma computadora dos personas de la familia, cada quien
+con su propio Garmin?** Cada persona necesita su **propia copia** de esta
+carpeta (por ejemplo, cambia el nombre de cada copia a "garmin - Juan",
+"garmin - María"). No compartan una sola copia entre dos cuentas de Garmin
+distintas, o la sesión de uno se va a sobreescribir con la del otro.
+
 ## Paso 2: Abre el programa con doble clic
 
 Entra a la carpeta que te dieron y haz doble clic en:

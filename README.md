@@ -53,10 +53,14 @@ Se te pedirá:
 
 Si el inicio de sesión es correcto, el script:
 
-- Guarda los tokens de sesión (OAuth) en `~/.garminconnect` (fuera del
-  repositorio, puedes cambiar la ruta con la variable de entorno
-  `GARMINTOKENS`) para que las próximas ejecuciones no vuelvan a pedir la
-  contraseña.
+- Guarda los tokens de sesión (OAuth) en una carpeta `.garminconnect` dentro
+  de este mismo proyecto (fuera del repositorio de git, puedes cambiar la
+  ruta con la variable de entorno `GARMINTOKENS`) para que las próximas
+  ejecuciones no vuelvan a pedir la contraseña. Al guardarse dentro del
+  proyecto y no en la computadora en general, dos personas distintas pueden
+  compartir una misma computadora sin pisarse la sesión, siempre que cada
+  quien tenga su propia copia de esta carpeta (ver la sección de pacientes
+  más abajo).
 - Muestra tu nombre de usuario y la lista de relojes/dispositivos vinculados
   a tu cuenta, confirmando que la conexión funcionó.
 
@@ -195,8 +199,17 @@ Para compartirle esto a un paciente:
    directo con sus datos actualizados.
 
 Cada paciente termina con su propia copia de la carpeta, su propia sesión
-guardada (`~/.garminconnect` en su equipo) y su propio dashboard corriendo
+guardada (dentro de esa misma copia) y su propio dashboard corriendo
 localmente — nada de esto pasa por tu computadora ni por ningún servidor.
+
+**Si varios pacientes (por ejemplo, una familia) comparten una misma
+computadora:** cada uno necesita su **propia copia** de la carpeta (por
+ejemplo `garmin - Juan`, `garmin - Maria`), no la misma. Como la sesión de
+Garmin y el nombre se guardan dentro de cada carpeta, dos copias distintas
+nunca se pisan entre sí, aunque estén en la misma computadora. Si por error
+alguien abre la copia de otra persona, el programa muestra de inmediato de
+quién es la cuenta conectada ("Usuario: ...") — si no es la persona
+correcta, hay que cerrar y abrir la copia que sí es suya.
 
 ### Un link central donde eliges al paciente y ves su dashboard completo
 

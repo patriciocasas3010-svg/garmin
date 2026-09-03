@@ -17,7 +17,15 @@ from garth.exc import GarthHTTPError
 
 from garminconnect import Garmin, GarminConnectAuthenticationError
 
-TOKENSTORE = os.path.expanduser(os.getenv("GARMINTOKENS", "~/.garminconnect"))
+# Por defecto, la sesión se guarda DENTRO de esta misma carpeta (no en el
+# home de la computadora) para que dos personas -- por ejemplo dos miembros
+# de una familia -- puedan tener cada quien su sesión de Garmin, siempre y
+# cuando cada uno tenga su propia copia de esta carpeta. Se puede sobreescribir
+# con la variable de entorno GARMINTOKENS si de verdad se quiere compartir.
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+TOKENSTORE = os.path.expanduser(
+    os.getenv("GARMINTOKENS") or os.path.join(_PROJECT_DIR, ".garminconnect")
+)
 
 
 def _token_from_streamlit_secrets() -> str | None:
