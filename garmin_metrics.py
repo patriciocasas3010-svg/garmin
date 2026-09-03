@@ -522,3 +522,264 @@ def compute_recovery_report(client, activities: list) -> pd.DataFrame:
         if r:
             rows.append(r)
     return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Snapshot completo del dashboard: junta todo lo que necesita
+# garmin_dashboard_ui.render_dashboard_body() en un solo diccionario.
+#
+# build_runtime_data(client) lo arma en vivo (dashboard.py, tu propia
+# cuenta). snapshot_to_json()/snapshot_from_json() lo convierten a/desde un
+# formato guardable como texto (push_resumen.py lo manda a la hoja de
+# Google; dashboard_pacientes.py lo reconstruye para dibujar el mismo
+# dashboard con los datos ya guardados de un paciente, sin necesitar una
+# sesión de Garmin en vivo).
+# ---------------------------------------------------------------------------
+
+_ACTIVITY_FIELDS_TO_KEEP = [
+    "activityId", "activityName", "startTimeLocal", "distance", "duration",
+    "movingDuration", "elevationGain", "averageHR", "calories",
+]
+
+
+def _trim_activity(a: dict) -> dict:
+    """Solo los campos que usa el dashboard -- las actividades de Garmin
+    traen decenas de campos (roles, URLs de imágenes, etc.) que no hacen
+    falta y solo inflan el tamaño al guardar."""
+    out = {k: a.get(k) for k in _ACTIVITY_FIELDS_TO_KEEP}
+    out["activityType"] = {"typeKey": (a.get("activityType") or {}).get("typeKey")}
+    return out
+
+
+def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WELLNESS_DAYS_DEFAULT) -> dict:
+    """Junta en un solo dict todo lo que necesita render_dashboard_body()."""
+    end = date.today()
+    start90 = end - timedelta(days=lookback_days)
+    start30 = end - timedelta(days=wellness_days)
+
+    activities = fetch_activities(client, start90, end)
+    load_series = fetch_daily_load(client, start90, end, activities=activities)
+    rhr_series = fetch_rhr_series(client, start90, end)
+    hrv_series = fetch_hrv_series(client, start90, end)
+
+    sleep_df = fetch_sleep_series(client, start30, end)
+    hydration_df = fetch_hydration_series(client, start30, end)
+    readiness_series = fetch_training_readiness_series(client, start30, end)
+    battery_df = fetch_body_battery_series(client, start30, end)
+    calories_df = fetch_calories_series(client, start30, end)
+
+    week_ago = pd.Timestamp(end - timedelta(days=7))
+    wellness_window_start = pd.Timestamp(start30)
+    activities_last_week = [
+        a for a in activities
+        if a.get("startTimeLocal") and pd.Timestamp(a["startTimeLocal"][:10]) >= week_ago
+    ]
+    activities_calorias = [
+        a for a in activities
+        if a.get("startTimeLocal")
+        and pd.Timestamp(a["startTimeLocal"][:10]) >= wellness_window_start
+        and a.get("calories")
+    ]
+
+    acwr_df = compute_acwr(load_series)
+    hrv_df = compute_hrv_zscore(hrv_series)
+    ultimo_acwr = acwr_df["acwr"].dropna().iloc[-1] if acwr_df["acwr"].notna().any() else None
+    ultimo_hrv_z = hrv_df["hrv_zscore"].dropna().iloc[-1] if hrv_df["hrv_zscore"].notna().any() else None
+
+    efficiency_df = compute_efficiency_report(client, activities_last_week)
+    peor_deriva_val = efficiency_df["deriva_pct"].max() if not efficiency_df.empty else None
+
+    rhr_recent = rhr_series.dropna()
+    rhr_avg = rhr_recent.tail(7).mean() if not rhr_recent.empty else None
+    rhr_baseline = rhr_series.dropna().iloc[:-7].tail(60).mean() if rhr_series.dropna().shape[0] > 14 else None
+    rhr_today = rhr_series.dropna().iloc[-1] if not rhr_series.dropna().empty else None
+    max_hr = estimate_max_hr(client, start90, end)
+
+    recovery_df = compute_recovery_report(client, activities_last_week)
+    peor_caida_min = recovery_df["caida_por_minuto"].min() if not recovery_df.empty else None
+
+    zone_seconds = None
+    if rhr_avg is not None and max_hr is not None:
+        zone_seconds = weekly_zone_distribution(client, activities_last_week, rhr_avg, max_hr)
+
+    alerta_disrupcion = ultimo_acwr is not None and ultimo_hrv_z is not None and ultimo_acwr > 1.4 and ultimo_hrv_z < -1.5
+    alerta_eficiencia = peor_deriva_val is not None and peor_deriva_val > 5
+    alerta_vagal = (
+        rhr_today is not None and rhr_baseline is not None and peor_caida_min is not None
+        and rhr_today > rhr_baseline + 5 and peor_caida_min < 20
+    )
+
+    resumen_mes = compute_monthly_score(client, days=wellness_days)
+
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "lookback_days": lookback_days,
+        "wellness_days": wellness_days,
+        "activities": activities,
+        "load_series": load_series,
+        "rhr_series": rhr_series,
+        "hrv_series": hrv_series,
+        "sleep_df": sleep_df,
+        "hydration_df": hydration_df,
+        "readiness_series": readiness_series,
+        "battery_df": battery_df,
+        "calories_df": calories_df,
+        "activities_last_week": activities_last_week,
+        "activities_calorias": activities_calorias,
+        "acwr_df": acwr_df,
+        "hrv_df": hrv_df,
+        "ultimo_acwr": ultimo_acwr,
+        "ultimo_hrv_z": ultimo_hrv_z,
+        "efficiency_df": efficiency_df,
+        "peor_deriva_val": peor_deriva_val,
+        "rhr_avg": rhr_avg,
+        "rhr_baseline": rhr_baseline,
+        "rhr_today": rhr_today,
+        "max_hr": max_hr,
+        "recovery_df": recovery_df,
+        "peor_caida_min": peor_caida_min,
+        "zone_seconds": zone_seconds,
+        "alerta_disrupcion": alerta_disrupcion,
+        "alerta_eficiencia": alerta_eficiencia,
+        "alerta_vagal": alerta_vagal,
+        "alertas_activas": sum([alerta_disrupcion, alerta_eficiencia, alerta_vagal]),
+        "resumen_mes": resumen_mes,
+    }
+
+
+def _num(v):
+    """A float nativo de Python (o None) -- numpy.float64 no siempre se
+    puede mandar tal cual a JSON / a la API de Google Sheets."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return float(v)
+
+
+def _series_to_json(s: pd.Series) -> dict:
+    out = {}
+    for idx, v in s.items():
+        key = idx.isoformat() if hasattr(idx, "isoformat") else str(idx)
+        out[key] = _num(v)
+    return out
+
+
+def _series_from_json(d: dict | None, name: str | None = None) -> pd.Series:
+    if not d:
+        return pd.Series(dtype="float64", name=name)
+    idx = pd.to_datetime(list(d.keys()))
+    return pd.Series(list(d.values()), index=idx, name=name, dtype="float64").sort_index()
+
+
+def _df_to_json(df: pd.DataFrame, cols: list[str] | None = None) -> dict:
+    """cols limita qué columnas se guardan -- render_dashboard_body no usa
+    todas las que trae cada DataFrame, y cada columna extra de 90 días pesa
+    varios miles de caracteres (el límite real de una celda de Sheets es
+    50,000)."""
+    use_cols = cols if cols is not None else list(df.columns)
+    return {col: _series_to_json(df[col]) for col in use_cols if col in df.columns}
+
+
+def _df_from_json(d: dict | None) -> pd.DataFrame:
+    if not d:
+        return pd.DataFrame()
+    cols = {col: _series_from_json(vals, name=col) for col, vals in d.items()}
+    return pd.DataFrame(cols)
+
+
+def _trim_activity_calorias(a: dict) -> dict:
+    """Solo lo que usa la tabla de calorías por actividad."""
+    return {
+        "activityName": a.get("activityName"),
+        "startTimeLocal": a.get("startTimeLocal"),
+        "calories": a.get("calories"),
+    }
+
+
+_SCALAR_KEYS = [
+    "ultimo_acwr", "ultimo_hrv_z", "peor_deriva_val", "rhr_avg",
+    "rhr_baseline", "rhr_today", "max_hr", "peor_caida_min",
+]
+
+_RESUMEN_MES_NUM_KEYS = [
+    "overall_score", "recovery_score", "sleep_score", "sleep_score_garmin",
+    "sleep_hours_avg", "activity_score", "active_kcal_avg", "rhr_avg_7d",
+]
+
+
+def snapshot_to_json(data: dict) -> dict:
+    """Convierte el dict de build_runtime_data() a algo 100% serializable a
+    JSON (para guardarlo como texto en una celda de Google Sheets)."""
+    out = dict(data)
+
+    # La lista completa de 90 días, y algunas columnas de varios DataFrames,
+    # no las usa render_dashboard_body -- se calculan server-side nada más
+    # para llegar a ultimo_acwr/ultimo_hrv_z/etc, que ya se guardan aparte.
+    # Omitirlas ahorra espacio real: el límite de una celda de Sheets es
+    # 50,000 caracteres, y para alguien muy activo cada columna de sobra
+    # de 90 días pesa varios miles.
+    out.pop("activities", None)
+    out.pop("activities_last_week", None)
+    out["activities_calorias"] = [_trim_activity_calorias(a) for a in data["activities_calorias"]]
+
+    out["load_series"] = _series_to_json(data["load_series"])
+    out["rhr_series"] = _series_to_json(data["rhr_series"])
+    out["hrv_series"] = _series_to_json(data["hrv_series"])
+    out["readiness_series"] = _series_to_json(data["readiness_series"])
+    out["sleep_df"] = _df_to_json(data["sleep_df"], cols=["hours", "score"])
+    out["hydration_df"] = _df_to_json(data["hydration_df"], cols=["value_l"])
+    out["battery_df"] = _df_to_json(data["battery_df"])
+    out["calories_df"] = _df_to_json(data["calories_df"])
+    out["acwr_df"] = _df_to_json(data["acwr_df"], cols=["acwr"])
+    out["hrv_df"] = _df_to_json(data["hrv_df"], cols=["hrv_zscore"])
+    out["efficiency_df"] = data["efficiency_df"].to_dict(orient="records")
+    out["recovery_df"] = data["recovery_df"].to_dict(orient="records")
+
+    for k in _SCALAR_KEYS:
+        out[k] = _num(out.get(k))
+
+    # bool()/int() explícitos -- comparaciones sobre numpy.float64 dan
+    # numpy.bool_/numpy.int64, que json.dumps no acepta.
+    out["alerta_disrupcion"] = bool(out["alerta_disrupcion"])
+    out["alerta_eficiencia"] = bool(out["alerta_eficiencia"])
+    out["alerta_vagal"] = bool(out["alerta_vagal"])
+    out["alertas_activas"] = int(out["alertas_activas"])
+
+    if out.get("zone_seconds"):
+        out["zone_seconds"] = {str(int(k)): _num(v) for k, v in out["zone_seconds"].items()}
+
+    if out.get("resumen_mes"):
+        rm = dict(out["resumen_mes"])
+        for k in _RESUMEN_MES_NUM_KEYS:
+            rm[k] = _num(rm.get(k))
+        out["resumen_mes"] = rm
+
+    return out
+
+
+def snapshot_from_json(d: dict) -> dict:
+    """El inverso de snapshot_to_json(): reconstruye DataFrames/Series a
+    partir del dict guardado, listo para render_dashboard_body()."""
+    out = dict(d)
+
+    out["load_series"] = _series_from_json(d.get("load_series"), name="load")
+    out["rhr_series"] = _series_from_json(d.get("rhr_series"), name="rhr")
+    out["hrv_series"] = _series_from_json(d.get("hrv_series"), name="hrv")
+    out["readiness_series"] = _series_from_json(d.get("readiness_series"))
+    out["sleep_df"] = _df_from_json(d.get("sleep_df"))
+    out["hydration_df"] = _df_from_json(d.get("hydration_df"))
+    out["battery_df"] = _df_from_json(d.get("battery_df"))
+    out["calories_df"] = _df_from_json(d.get("calories_df"))
+    out["acwr_df"] = _df_from_json(d.get("acwr_df"))
+    out["hrv_df"] = _df_from_json(d.get("hrv_df"))
+    out["efficiency_df"] = pd.DataFrame(d.get("efficiency_df") or [])
+    out["recovery_df"] = pd.DataFrame(d.get("recovery_df") or [])
+
+    zone_seconds = d.get("zone_seconds")
+    out["zone_seconds"] = {int(k): v for k, v in zone_seconds.items()} if zone_seconds else None
+
+    return out

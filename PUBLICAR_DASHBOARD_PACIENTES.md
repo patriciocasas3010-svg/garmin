@@ -1,21 +1,23 @@
 # Dashboard central de pacientes (un link, cada quien ve lo suyo)
 
 Esto te da **un solo link** donde cada paciente elige su nombre de una
-lista y ve su resumen del mes — sin que nadie escriba su contraseña de
-Garmin en ninguna página web. Cada paciente sigue conectando su Garmin en
-su propio equipo (como ya hacen); lo único nuevo es que, al abrir su
-dashboard local, su resumen se manda solo a una hoja de Google que tu
-dashboard central lee.
+lista y ve su **Tablero Maestro de Rendimiento completo** — las mismas 6
+pestañas y gráficas de tu propio dashboard (ACWR, zonas, eficiencia, sueño,
+calorías, alertas) — sin que nadie escriba su contraseña de Garmin en
+ninguna página web. Cada paciente sigue conectando su Garmin en su propio
+equipo (como ya hacen); lo único nuevo es que, al abrir su dashboard local,
+todo ese dashboard se manda solo a una hoja de Google que tu dashboard
+central lee y vuelve a dibujar igual.
 
 ```
 Paciente hace doble clic (como siempre)
         │
         ├─► conecta con SU Garmin (local, sin cambios)
-        ├─► push_resumen.py manda su resumen a tu hoja de Google (nuevo, automático)
+        ├─► push_resumen.py manda su dashboard completo a tu hoja de Google (nuevo, automático)
         └─► abre su dashboard local (sin cambios)
 
 Tu hoja de Google  ──►  dashboard_pacientes.py (publicado, un link)
-                         el paciente elige su nombre → ve su resumen → "Salir"
+                         el paciente elige su nombre → ve su dashboard completo → "Salir"
 ```
 
 ## Parte 1: Crear la hoja de Google y las credenciales
@@ -107,9 +109,12 @@ Desde este momento, cada vez que un paciente haga doble clic en
 ## Cómo se ve en consulta
 
 1. El paciente ya corrió `iniciar_paciente.command`/`.bat` antes de llegar
-   (o lo corre ahí mismo si trae su laptop) — su resumen ya está en la hoja.
+   (o lo corre ahí mismo si trae su laptop) — su dashboard completo ya está
+   en la hoja.
 2. Tú abres tu link, el paciente (o tú) selecciona su nombre de la lista.
-3. Ven el resumen juntos.
+3. Revisan juntos las 6 pestañas (Resumen, Carga y Preparación, Eficiencia
+   y Zonas, Sueño y Bienestar, Calorías, Alertas) — lo mismo que vería el
+   paciente en su propia computadora.
 4. Le das a **"🚪 Salir"** arriba a la derecha antes de la siguiente consulta.
 
 ## Quitarle el acceso a un paciente

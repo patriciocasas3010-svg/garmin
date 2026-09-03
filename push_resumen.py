@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Manda tu resumen del mes a la hoja de Google de tu nutriólogo.
+"""Manda tu resumen (y el dashboard completo) a la hoja de Google de tu
+nutriólogo.
 
 Se ejecuta automáticamente cada vez que abres iniciar_paciente.command /
 iniciar_paciente.bat -- no necesitas correrlo a mano.
@@ -15,17 +16,21 @@ omite -- tu dashboard local (connect_garmin.py / dashboard.py) sigue
 funcionando normal de todas formas.
 """
 
+import json
 import os
-import sys
 from datetime import date
 
 CREDENCIALES_PATH = "credenciales_hoja.json"
 SHEET_ID_PATH = "hoja_id.txt"
 NOMBRE_PATH = ".nombre_paciente.txt"
 
+# Límite real de Google Sheets es 50,000 caracteres por celda; avisamos
+# antes de llegar ahí para no fallar la escritura a medias.
+LIMITE_CARACTERES_CELDA = 45000
+
 ENCABEZADOS = [
     "Nombre", "Fecha", "Calificacion", "Recuperacion", "Sueno", "Actividad",
-    "DiasConActividad", "DiasSinActividad", "RHR7d",
+    "DiasConActividad", "DiasSinActividad", "RHR7d", "Datos",
 ]
 
 
@@ -74,9 +79,20 @@ def main():
 
     nombre = _get_nombre()
 
-    print("Calculando tu resumen del mes para tu nutriólogo...")
+    print("Calculando tu dashboard completo para tu nutriólogo (puede tardar un poco)...")
     client = get_client()
-    resumen = gm.compute_monthly_score(client)
+    runtime_data = gm.build_runtime_data(client)
+    resumen = runtime_data["resumen_mes"]
+
+    snapshot = gm.snapshot_to_json(runtime_data)
+    datos_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
+
+    if len(datos_json) > LIMITE_CARACTERES_CELDA:
+        print(
+            f"Aviso: tu dashboard completo pesa más de lo normal ({len(datos_json)} caracteres) "
+            "y puede que no quepa en la hoja. Se manda el resumen igual, pero avísale a tu "
+            "nutriólogo si el dashboard central no te muestra el detalle completo."
+        )
 
     fila = [
         nombre,
@@ -88,6 +104,7 @@ def main():
         resumen.get("dias_con_actividad"),
         resumen.get("dias_sin_actividad"),
         _fmt(resumen.get("rhr_avg_7d")),
+        datos_json,
     ]
 
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -99,6 +116,11 @@ def main():
     if not registros:
         ws.append_row(ENCABEZADOS)
         registros = [ENCABEZADOS]
+    elif "Datos" not in registros[0]:
+        # Hoja creada con una versión anterior de este script, sin la
+        # columna de datos completos -- la agregamos sin tocar lo demás.
+        ws.update("A1:J1", [ENCABEZADOS])
+        registros[0] = ENCABEZADOS
 
     fila_index = None
     for i, row in enumerate(registros):
@@ -107,11 +129,11 @@ def main():
             break
 
     if fila_index:
-        ws.update(f"A{fila_index}:I{fila_index}", [fila])
+        ws.update(f"A{fila_index}:J{fila_index}", [fila])
     else:
         ws.append_row(fila)
 
-    print(f"Listo, tu resumen se envió a tu nutriólogo ({nombre}).")
+    print(f"Listo, tu dashboard se envió a tu nutriólogo ({nombre}).")
 
 
 if __name__ == "__main__":

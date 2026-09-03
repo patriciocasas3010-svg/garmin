@@ -197,16 +197,18 @@ Cada paciente termina con su propia copia de la carpeta, su propia sesión
 guardada (`~/.garminconnect` en su equipo) y su propio dashboard corriendo
 localmente — nada de esto pasa por tu computadora ni por ningún servidor.
 
-### Un link central donde eliges al paciente y ves su resumen
+### Un link central donde eliges al paciente y ves su dashboard completo
 
 Si además quieres un solo link (para no depender de que cada paciente traiga
 su laptop a consulta), cada vez que un paciente abre su dashboard local su
-resumen del mes se manda automáticamente a una hoja de Google tuya —
-[`push_resumen.py`](push_resumen.py), ya integrado en los lanzadores de
-doble clic. Tú publicas [`dashboard_pacientes.py`](dashboard_pacientes.py)
-con un link: el paciente elige su nombre de una lista (nunca su Garmin) y ve
-su resumen, con un botón "Salir" para la siguiente consulta. Tú controlas
-quién aparece en la lista (borrar su fila de la hoja le quita el acceso).
+**Tablero Maestro de Rendimiento completo** (las mismas 6 pestañas y
+gráficas, no solo un resumen) se manda automáticamente a una hoja de Google
+tuya — [`push_resumen.py`](push_resumen.py), ya integrado en los
+lanzadores de doble clic. Tú publicas
+[`dashboard_pacientes.py`](dashboard_pacientes.py) con un link: el paciente
+elige su nombre de una lista (nunca su Garmin) y ve su dashboard completo,
+con un botón "Salir" para la siguiente consulta. Tú controlas quién
+aparece en la lista (borrar su fila de la hoja le quita el acceso).
 
 Guía paso a paso completa: [`PUBLICAR_DASHBOARD_PACIENTES.md`](PUBLICAR_DASHBOARD_PACIENTES.md).
 
