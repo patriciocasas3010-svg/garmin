@@ -161,6 +161,32 @@ cerrarlo, vuelve a la Terminal y presiona `Ctrl+C`.
   (ver el encabezado del archivo) para ver la respuesta cruda y así poder
   ajustar el cálculo correspondiente.
 
+## Dar esto a tus pacientes (consultorio)
+
+Cada persona (tú o cada paciente) corre esta carpeta **en su propia
+computadora, con su propia cuenta de Garmin**. Así nadie más ve ni guarda las
+contraseñas de nadie — cada quien es dueño de su propia sesión y sus propios
+datos.
+
+Para compartirle esto a un paciente:
+
+1. En GitHub, en este repositorio, usa "Code → Download ZIP" (o haz tú el
+   `git clone` una vez y comprime la carpeta) y pásale el `.zip` por el medio
+   que uses con pacientes (correo, WhatsApp, USB). No hace falta que el
+   paciente tenga cuenta de GitHub ni sepa usar git.
+2. Dale el archivo **`GUIA_PACIENTES.md`** — está escrito para alguien sin
+   experiencia técnica, sin comandos de terminal. Le explica instalar Python
+   una vez y usar `iniciar_paciente.command` (Mac) / `iniciar_paciente.bat`
+   (Windows): un archivo de doble clic que instala todo, pide su login de
+   Garmin la primera vez, y abre el dashboard.
+3. En consulta, el paciente solo necesita traer su computadora y volver a
+   hacer doble clic en ese archivo — como ya inició sesión antes, abre
+   directo con sus datos actualizados.
+
+Cada paciente termina con su propia copia de la carpeta, su propia sesión
+guardada (`~/.garminconnect` en su equipo) y su propio dashboard corriendo
+localmente — nada de esto pasa por tu computadora ni por ningún servidor.
+
 ## Solución de problemas
 
 - **"Credenciales incorrectas"**: revisa que el correo y la contraseña sean
