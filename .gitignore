@@ -5,3 +5,4 @@ venv/
 .garminconnect
 .garminconnect_base64
 graficas/
+.streamlit/secrets.toml

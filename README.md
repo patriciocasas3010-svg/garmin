@@ -161,6 +161,16 @@ a la Terminal y presiona `Ctrl+C`.
   (ver el encabezado del archivo) para ver la respuesta cruda y así poder
   ajustar el cálculo correspondiente.
 
+### Publicar tu dashboard con un link
+
+Si quieres ver tu propio dashboard desde cualquier computadora (no solo la
+tuya), sin depender de tenerla prendida, ve a
+[`PUBLICAR_DASHBOARD.md`](PUBLICAR_DASHBOARD.md) — usa Streamlit Community
+Cloud (gratis) con una contraseña propia para que el link no quede abierto
+a cualquiera. Esto es solo para tu propia cuenta; para que cada paciente
+tenga su propio link con su propio Garmin hace falta el camino de la Garmin
+Health API (ver la sección de abajo).
+
 ## Dar esto a tus pacientes (consultorio)
 
 Cada persona (tú o cada paciente) corre esta carpeta **en su propia

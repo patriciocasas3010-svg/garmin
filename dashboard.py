@@ -18,6 +18,36 @@ from garmin_session import get_client
 
 st.set_page_config(page_title="Tablero Maestro de Rendimiento", layout="wide", page_icon="🏃")
 
+
+def _check_password() -> bool:
+    """Si hay un APP_PASSWORD en Secrets, pide contraseña antes de mostrar nada.
+
+    Sin ese Secret configurado (uso normal en tu propia computadora) no pide
+    nada. Se activa solo cuando el dashboard corre publicado con un link.
+    """
+    try:
+        expected = st.secrets.get("APP_PASSWORD")
+    except Exception:
+        expected = None
+    if not expected:
+        return True
+
+    if st.session_state.get("_authed"):
+        return True
+
+    st.title("🏃 Tablero Maestro de Rendimiento")
+    pwd = st.text_input("Contraseña", type="password")
+    if pwd == expected:
+        st.session_state["_authed"] = True
+        st.rerun()
+    elif pwd:
+        st.error("Contraseña incorrecta.")
+    return False
+
+
+if not _check_password():
+    st.stop()
+
 LOOKBACK_DAYS = 90
 WELLNESS_DAYS = 30
 
