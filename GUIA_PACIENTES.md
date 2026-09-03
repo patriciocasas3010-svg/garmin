@@ -13,19 +13,7 @@ Tu nutriólogo te va a dar una carpeta (o un archivo .zip). Si es un .zip,
 descomprímelo (doble clic en Mac, clic derecho → "Extraer todo" en Windows)
 y pon la carpeta resultante en tu Escritorio.
 
-## Paso 2: Instala Python (solo la primera vez)
-
-- **Mac**: ve a https://www.python.org/downloads/macos/, descarga el botón
-  amarillo grande, ábrelo e instala con las opciones por defecto.
-- **Windows**: ve a https://www.python.org/downloads/windows/, descarga el
-  botón amarillo grande. **Muy importante**: en la primera pantalla del
-  instalador, marca la casilla que dice "Add python.exe to PATH" antes de
-  darle a instalar.
-
-Si ya tenías Python instalado no hace falta reinstalarlo, pero si algo falla
-más adelante, prueba instalando la versión de arriba.
-
-## Paso 3: Abre el programa con doble clic
+## Paso 2: Abre el programa con doble clic
 
 Entra a la carpeta que te dieron y haz doble clic en:
 
@@ -35,12 +23,26 @@ Entra a la carpeta que te dieron y haz doble clic en:
 Se va a abrir una ventana de texto (Terminal) que instala todo lo necesario
 (la primera vez tarda 1-2 minutos, después es más rápido).
 
+**Si no tienes Python instalado**, la ventana te lo va a decir y va a abrir
+sola la página correcta para descargarlo. Solo tienes que:
+
+- **Mac**: descargar el botón amarillo grande e instalar con las opciones
+  por defecto.
+- **Windows**: descargar el botón amarillo grande y, **muy importante**, en
+  la primera pantalla del instalador marcar la casilla "Add python.exe to
+  PATH" antes de darle a instalar.
+
+Cuando termine de instalar, vuelve a hacer doble clic en
+`iniciar_paciente.command` / `iniciar_paciente.bat` para seguir. Si ya
+tenías Python instalado, la ventana pasa directo a este paso sin pedirte
+nada.
+
 ### Si Mac no te deja abrirlo ("no se puede abrir porque es de un desarrollador no identificado")
 
 Haz clic derecho (o Ctrl+clic) sobre `iniciar_paciente.command` → "Abrir" →
 confirma "Abrir" en la ventana de advertencia. Solo hace falta la primera vez.
 
-## Paso 4: Inicia sesión (solo la primera vez)
+## Paso 3: Inicia sesión (solo la primera vez)
 
 La ventana te va a pedir:
 
@@ -55,7 +57,7 @@ te lo va a pedir esta primera vez.
 Enseguida tu navegador va a abrir una página con tus datos. Las próximas
 veces que abras el programa, ya no te va a pedir nada de esto.
 
-## Paso 5: En la consulta
+## Paso 4: En la consulta
 
 Simplemente lleva tu computadora con la carpeta del programa. Antes de la
 consulta (o al llegar), haz doble clic en `iniciar_paciente.command` /
