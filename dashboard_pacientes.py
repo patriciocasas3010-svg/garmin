@@ -95,15 +95,38 @@ if filas_paciente.empty:
 
 fila = filas_paciente.iloc[-1]
 datos_json = fila.get("Datos")
+fuente = fila.get("Fuente") or "Garmin"
 
-top_col1, top_col2 = st.columns([6, 1])
+top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
-    st.title(f"🏃 {paciente}")
-    st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')}")
+    icono = "🍎" if fuente == "Apple Health" else "🏃"
+    st.title(f"{icono} {paciente}")
+    st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')} · Fuente: {fuente}")
 with top_col2:
-    if st.button("🚪 Salir", type="secondary"):
+    if st.button("🔄 Actualizar", width="stretch"):
+        st.cache_data.clear()
+        st.rerun()
+with top_col3:
+    if st.button("🚪 Salir", type="secondary", width="stretch"):
         st.session_state["paciente_actual"] = None
         st.rerun()
+
+with st.expander("¿Cómo actualiza sus datos este paciente?"):
+    if fuente == "Apple Health":
+        st.markdown(
+            "Tiene que **volver a exportar** desde su iPhone (Ajustes → Salud → foto de "
+            "perfil → \"Exportar todos los datos de salud\"), reemplazar el `.zip` en su "
+            "carpeta, y volver a abrir `iniciar_paciente_apple.command`/`.bat`. Después de eso, "
+            "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
+            "tardar hasta 5 minutos en reflejarlo sola)."
+        )
+    else:
+        st.markdown(
+            "Solo tiene que volver a abrir `iniciar_paciente.command`/`.bat` en su computadora "
+            "(no necesita hacer nada más, su sesión de Garmin ya está guardada). Después de eso, "
+            "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
+            "tardar hasta 5 minutos en reflejarlo sola)."
+        )
 
 if not datos_json:
     st.warning(

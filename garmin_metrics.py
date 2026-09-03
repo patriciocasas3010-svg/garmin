@@ -269,8 +269,12 @@ def compute_monthly_score(client, days: int = WELLNESS_DAYS_DEFAULT) -> dict:
     total_dias = len(sleep_df)
     dias_inactivos_ts = sorted(set(sleep_df.index) - dias_activos)
 
-    rhr_recent = rhr_series.dropna()
-    rhr_avg_7d = rhr_recent.tail(7).mean() if not rhr_recent.empty else None
+    # tail(7) sobre la serie completa (no sobre .dropna()) para que sea de
+    # verdad un promedio de los últimos 7 días de calendario -- si esos 7
+    # días no tienen datos, debe decir que no hay datos, no promediar
+    # valores viejos de hace semanas y mostrarlos como si fueran recientes.
+    rhr_avg_7d = rhr_series.tail(7).mean()
+    rhr_avg_7d = rhr_avg_7d if pd.notna(rhr_avg_7d) else None
 
     return {
         "overall_score": overall_score,
@@ -589,8 +593,10 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
     efficiency_df = compute_efficiency_report(client, activities_last_week)
     peor_deriva_val = efficiency_df["deriva_pct"].max() if not efficiency_df.empty else None
 
-    rhr_recent = rhr_series.dropna()
-    rhr_avg = rhr_recent.tail(7).mean() if not rhr_recent.empty else None
+    # tail(7) sobre la serie completa (no sobre .dropna()) -- ver el
+    # comentario equivalente en compute_monthly_score().
+    rhr_avg = rhr_series.tail(7).mean()
+    rhr_avg = rhr_avg if pd.notna(rhr_avg) else None
     rhr_baseline = rhr_series.dropna().iloc[:-7].tail(60).mean() if rhr_series.dropna().shape[0] > 14 else None
     rhr_today = rhr_series.dropna().iloc[-1] if not rhr_series.dropna().empty else None
     max_hr = estimate_max_hr(client, start90, end)

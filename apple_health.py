@@ -329,7 +329,13 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
     peor_deriva_val = None
 
     rhr_recent = rhr_series.dropna()
-    rhr_avg = rhr_recent.tail(7).mean() if not rhr_recent.empty else None
+    # tail(7) sobre la serie completa (no sobre .dropna()) para que sea un
+    # promedio de verdad de los últimos 7 días de calendario -- si esos 7
+    # días no tienen datos, debe decir que no hay datos, no promediar
+    # valores viejos de hace semanas/meses y mostrarlos como si fueran
+    # recientes (con Apple Health, donde puede haber huecos, esto importa).
+    rhr_avg = rhr_series.tail(7).mean()
+    rhr_avg = rhr_avg if pd.notna(rhr_avg) else None
     rhr_baseline = rhr_series.dropna().iloc[:-7].tail(60).mean() if rhr_series.dropna().shape[0] > 14 else None
     rhr_today = rhr_recent.iloc[-1] if not rhr_recent.empty else None
     max_hr = max((v for _, v in raw.hr), default=None)
@@ -515,8 +521,8 @@ def _monthly_score(activities: list[dict], sleep_df: pd.DataFrame, calories_df: 
     total_dias = len(sleep_df)
     dias_inactivos_ts = sorted(set(sleep_df.index) - dias_activos)
 
-    rhr_recent = rhr_series.dropna()
-    rhr_avg_7d = rhr_recent.tail(7).mean() if not rhr_recent.empty else None
+    rhr_avg_7d = rhr_series.tail(7).mean()
+    rhr_avg_7d = rhr_avg_7d if pd.notna(rhr_avg_7d) else None
 
     return {
         "overall_score": overall_score,

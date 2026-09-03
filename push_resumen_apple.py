@@ -49,7 +49,7 @@ def main():
 
     print(f"Leyendo tu archivo de Salud ({export_zip})... puede tardar un poco si tienes mucho historial.")
     runtime_data = ah.build_runtime_data(export_zip)
-    push_snapshot(nombre, runtime_data)
+    push_snapshot(nombre, runtime_data, fuente="Apple Health")
 
 
 if __name__ == "__main__":

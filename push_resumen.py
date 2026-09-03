@@ -30,7 +30,7 @@ LIMITE_CARACTERES_CELDA = 45000
 
 ENCABEZADOS = [
     "Nombre", "Fecha", "Calificacion", "Recuperacion", "Sueno", "Actividad",
-    "DiasConActividad", "DiasSinActividad", "RHR7d", "Datos",
+    "DiasConActividad", "DiasSinActividad", "RHR7d", "Datos", "Fuente",
 ]
 
 
@@ -63,7 +63,7 @@ def sheet_config_disponible() -> bool:
     return os.path.exists(CREDENCIALES_PATH) and os.path.exists(SHEET_ID_PATH)
 
 
-def push_snapshot(nombre: str, runtime_data: dict) -> None:
+def push_snapshot(nombre: str, runtime_data: dict, fuente: str = "Garmin") -> None:
     """Manda un runtime_data (de garmin_metrics.build_runtime_data o
     apple_health.build_runtime_data -- misma forma exacta) a la hoja de
     Google del nutriólogo. Compartido por push_resumen.py (Garmin) y
@@ -99,6 +99,7 @@ def push_snapshot(nombre: str, runtime_data: dict) -> None:
         resumen.get("dias_sin_actividad"),
         _fmt(resumen.get("rhr_avg_7d")),
         datos_json,
+        fuente,
     ]
 
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -110,10 +111,11 @@ def push_snapshot(nombre: str, runtime_data: dict) -> None:
     if not registros:
         ws.append_row(ENCABEZADOS)
         registros = [ENCABEZADOS]
-    elif "Datos" not in registros[0]:
-        # Hoja creada con una versión anterior de este script, sin la
-        # columna de datos completos -- la agregamos sin tocar lo demás.
-        ws.update("A1:J1", [ENCABEZADOS])
+    elif registros[0] != ENCABEZADOS:
+        # Hoja creada con una versión anterior de este script, a la que le
+        # falta alguna columna nueva ("Datos", "Fuente", ...) -- se agrega
+        # sin tocar los datos ya guardados de cada paciente.
+        ws.update(f"A1:{chr(ord('A') + len(ENCABEZADOS) - 1)}1", [ENCABEZADOS])
         registros[0] = ENCABEZADOS
 
     fila_index = None
@@ -122,8 +124,9 @@ def push_snapshot(nombre: str, runtime_data: dict) -> None:
             fila_index = i + 1  # 1-indexado para la hoja
             break
 
+    ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
     if fila_index:
-        ws.update(f"A{fila_index}:J{fila_index}", [fila])
+        ws.update(f"A{fila_index}:{ultima_col}{fila_index}", [fila])
     else:
         ws.append_row(fila)
 
@@ -150,7 +153,7 @@ def main():
     print("Calculando tu dashboard completo para tu nutriólogo (puede tardar un poco)...")
     client = get_client()
     runtime_data = gm.build_runtime_data(client)
-    push_snapshot(nombre, runtime_data)
+    push_snapshot(nombre, runtime_data, fuente="Garmin")
 
 
 if __name__ == "__main__":

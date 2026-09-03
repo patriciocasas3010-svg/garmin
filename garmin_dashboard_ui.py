@@ -261,7 +261,8 @@ def render_dashboard_body(data: dict):
             delta=f"{rhr_today - rhr_baseline:+.0f} vs. tu media" if rhr_today is not None and rhr_baseline is not None else None,
             delta_color="inverse",
         )
-        c4.metric("Sueño (7d)", f"{sleep_df['hours'].dropna().tail(7).mean():.1f} h" if sleep_df["hours"].notna().any() else "—")
+        sueno_7d = sleep_df["hours"].tail(7).mean()
+        c4.metric("Sueño (7d)", f"{sueno_7d:.1f} h" if pd.notna(sueno_7d) else "—")
         c5.metric("Alertas activas", str(alertas_activas), delta=None)
 
         if alertas_activas:
