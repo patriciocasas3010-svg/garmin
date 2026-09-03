@@ -97,11 +97,18 @@ Desde este momento, cada vez que un paciente haga doble clic en
    GOOGLE_CREDENTIALS_JSON = '''
    PEGA_AQUI_TODO_EL_CONTENIDO_DEL_ARCHIVO_credenciales_hoja.json
    '''
+   APP_PASSWORD = "UNA_CONTRASEÑA_QUE_TU_ELIJAS"
    ```
 
    Para el segundo valor, abre `credenciales_hoja.json` con un editor de
    texto, selecciona todo su contenido (es un bloque `{ ... }`), y pégalo
    completo entre las comillas triples.
+
+   **`APP_PASSWORD` es muy importante aquí** — a diferencia de tu dashboard
+   personal, este junta la información de *todos* tus pacientes en un solo
+   link. Sin esta contraseña, cualquiera que consiga el link puede ver todo.
+   Ponle una contraseña que tú vayas a recordar; te la va a pedir cada vez
+   que abras el link (o cuando reinicies la sesión del navegador).
 
 4. **Deploy**. En un par de minutos tienes tu link
    (`https://tu-app.streamlit.app`) — ese es el que abres tú en consulta.

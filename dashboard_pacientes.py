@@ -31,6 +31,40 @@ from garmin_dashboard_ui import render_dashboard_body
 st.set_page_config(page_title="Resumen de pacientes", layout="wide", page_icon="🩺")
 
 
+def _check_password() -> bool:
+    """Pide una contraseña (guardada como Secret APP_PASSWORD) antes de
+    mostrar nada -- este dashboard reúne la información de TODOS los
+    pacientes, así que a diferencia del dashboard personal, aquí sí
+    recomendamos fuerte configurar este Secret."""
+    try:
+        expected = st.secrets.get("APP_PASSWORD")
+    except Exception:
+        expected = None
+    if not expected:
+        st.warning(
+            "⚠️ Este dashboard reúne los datos de todos tus pacientes y no tiene contraseña "
+            "configurada -- cualquiera con este link puede verlo. Configura el Secret "
+            "APP_PASSWORD en Streamlit Cloud (Settings → Secrets) lo antes posible."
+        )
+        return True
+
+    if st.session_state.get("_authed"):
+        return True
+
+    st.title("🩺 Resumen de pacientes")
+    pwd = st.text_input("Contraseña", type="password")
+    if pwd == expected:
+        st.session_state["_authed"] = True
+        st.rerun()
+    elif pwd:
+        st.error("Contraseña incorrecta.")
+    return False
+
+
+if not _check_password():
+    st.stop()
+
+
 @st.cache_resource
 def _worksheet():
     creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
