@@ -4,11 +4,12 @@
 Requiere haber corrido antes connect_garmin.py (usa la misma sesión guardada).
 
 Uso:
-    python3 garmin_reports.py                # corre los 4 reportes
+    python3 garmin_reports.py                # corre los 5 reportes
     python3 garmin_reports.py rhr             # solo frecuencia cardiaca en reposo
     python3 garmin_reports.py carga           # solo carga de entrenamiento vs sueño
     python3 garmin_reports.py semana          # solo resumen semanal estilo Strava
     python3 garmin_reports.py records         # solo récords personales del año
+    python3 garmin_reports.py bienestar       # sueño, hidratación, desgaste y recuperación
 
 Las gráficas se guardan como archivos .png en la carpeta 'graficas/'.
 """
@@ -381,11 +382,155 @@ def personal_records(client, year: int = None):
     )
 
 
+# ---------------------------------------------------------------------------
+# 5. Sueño, hidratación, desgaste físico y recuperación
+# ---------------------------------------------------------------------------
+
+def wellness_report(client, days: int = 14):
+    print("\n--- Sueño, hidratación, desgaste físico y recuperación ---")
+    end = date.today()
+    start = end - timedelta(days=days - 1)
+
+    sleep_hours = []
+    sleep_scores = []
+    stage_totals = {"deep": 0, "light": 0, "rem": 0, "awake": 0}
+    hydration_ml = []
+    hydration_goal_ml = []
+    readiness_scores = []
+
+    d = start
+    while d <= end:
+        cdate = d.isoformat()
+
+        try:
+            sleep = client.get_sleep_data(cdate)
+        except Exception:
+            sleep = None
+        dto = (sleep or {}).get("dailySleepDTO") or {}
+        secs = dto.get("sleepTimeSeconds")
+        if secs:
+            sleep_hours.append((d, secs / 3600))
+            stage_totals["deep"] += dto.get("deepSleepSeconds") or 0
+            stage_totals["light"] += dto.get("lightSleepSeconds") or 0
+            stage_totals["rem"] += dto.get("remSleepSeconds") or 0
+            stage_totals["awake"] += dto.get("awakeSleepSeconds") or 0
+        score = ((sleep or {}).get("sleepScores") or {}).get("overall", {}).get("value")
+        if score:
+            sleep_scores.append(score)
+
+        try:
+            hydration = client.get_hydration_data(cdate)
+        except Exception:
+            hydration = None
+        if hydration:
+            v = hydration.get("valueInML")
+            g = hydration.get("goalInML")
+            if v is not None:
+                hydration_ml.append(v)
+            if g:
+                hydration_goal_ml.append(g)
+
+        try:
+            readiness = client.get_training_readiness(cdate)
+        except Exception:
+            readiness = None
+        if readiness and readiness.get("score") is not None:
+            readiness_scores.append((d, readiness["score"]))
+
+        d += timedelta(days=1)
+
+    try:
+        battery_days = client.get_body_battery(start.isoformat(), end.isoformat()) or []
+    except Exception:
+        battery_days = []
+    body_battery_charged = [b["charged"] for b in battery_days if b.get("charged") is not None]
+    body_battery_drained = [b["drained"] for b in battery_days if b.get("drained") is not None]
+
+    # --- Sueño ---
+    if sleep_hours:
+        avg_hours = sum(h for _, h in sleep_hours) / len(sleep_hours)
+        peor = min(sleep_hours, key=lambda x: x[1])
+        mejor = max(sleep_hours, key=lambda x: x[1])
+        print(f"Sueño: promedio {avg_hours:.1f}h/noche en los últimos {days} días.")
+        print(f"  Peor noche: {peor[1]:.1f}h el {peor[0]}.  Mejor noche: {mejor[1]:.1f}h el {mejor[0]}.")
+        total_stage_secs = sum(stage_totals.values())
+        if total_stage_secs:
+            print(
+                "  Distribución de etapas: "
+                f"profundo {stage_totals['deep'] / total_stage_secs * 100:.0f}%, "
+                f"ligero {stage_totals['light'] / total_stage_secs * 100:.0f}%, "
+                f"REM {stage_totals['rem'] / total_stage_secs * 100:.0f}%, "
+                f"despierto {stage_totals['awake'] / total_stage_secs * 100:.0f}%."
+            )
+        if sleep_scores:
+            print(f"  Sleep Score promedio de Garmin: {sum(sleep_scores) / len(sleep_scores):.0f}/100.")
+    else:
+        print("Sueño: no hay datos de sueño en el periodo (revisa que duermas con el reloj puesto).")
+
+    # --- Hidratación ---
+    if hydration_ml:
+        avg_ml = sum(hydration_ml) / len(hydration_ml)
+        print(f"\nHidratación: promedio {avg_ml / 1000:.2f} L/día registrados en los últimos {days} días.")
+        if hydration_goal_ml:
+            avg_goal = sum(hydration_goal_ml) / len(hydration_goal_ml)
+            dias_meta = sum(1 for v in hydration_ml if v >= avg_goal)
+            print(f"  Meta diaria: ~{avg_goal / 1000:.2f} L. Cumpliste la meta {dias_meta}/{len(hydration_ml)} días.")
+    else:
+        print(
+            "\nHidratación: no encontré registros. Garmin solo la cuenta si la registras a mano "
+            "en la app o con un dispositivo conectado (el reloj solo no mide cuánta agua tomas)."
+        )
+
+    # --- Desgaste físico (Body Battery) ---
+    if body_battery_charged or body_battery_drained:
+        avg_charged = sum(body_battery_charged) / len(body_battery_charged) if body_battery_charged else 0
+        avg_drained = sum(body_battery_drained) / len(body_battery_drained) if body_battery_drained else 0
+        print(
+            f"\nDesgaste físico (Body Battery): en promedio recargas {avg_charged:.0f} "
+            f"y gastas {avg_drained:.0f} puntos por día."
+        )
+        if avg_drained > avg_charged:
+            print("  Estás gastando más energía de la que recargas en promedio: señal de desgaste acumulado.")
+        else:
+            print("  Tu recarga promedio cubre lo que gastas: buen balance de energía.")
+    else:
+        print("\nDesgaste físico (Body Battery): no hay datos disponibles para tu cuenta/reloj en este periodo.")
+
+    # --- Recuperación ---
+    if readiness_scores:
+        avg_r = sum(s for _, s in readiness_scores) / len(readiness_scores)
+        ultimo = readiness_scores[-1][1]
+        print(
+            f"\nRecuperación (Training Readiness de Garmin): promedio {avg_r:.0f}/100, "
+            f"último día disponible: {ultimo}/100."
+        )
+    else:
+        print("\nRecuperación: tu cuenta/reloj no reporta 'Training Readiness' (requiere modelos más recientes).")
+
+    if sleep_hours:
+        _ensure_graficas_dir()
+        dates_s = [d for d, _ in sleep_hours]
+        hours_s = [h for _, h in sleep_hours]
+        plt.figure(figsize=(10, 5))
+        plt.bar(dates_s, hours_s, color="tab:purple", alpha=0.6, label="Horas de sueño")
+        plt.axhline(7, color="gray", linestyle=":", linewidth=1, label="Meta orientativa (7h)")
+        plt.title(f"Sueño de los últimos {days} días")
+        plt.ylabel("Horas")
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.tight_layout()
+        out_path = f"{GRAFICAS_DIR}/sueno.png"
+        plt.savefig(out_path, dpi=150)
+        plt.close()
+        print(f"\nGráfica guardada en '{out_path}'.")
+
+
 REPORTES = {
     "rhr": resting_heart_rate_trend,
     "carga": training_load_vs_sleep,
     "semana": weekly_summary,
     "records": personal_records,
+    "bienestar": wellness_report,
 }
 
 

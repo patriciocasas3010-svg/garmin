@@ -35,6 +35,9 @@ COMANDOS = {
     "activity_details": lambda args: client.get_activity_details(args[0]),
     "sleep": lambda args: client.get_sleep_data(args[0]),
     "userprofile_settings": lambda args: client.get_userprofile_settings(),
+    "hydration": lambda args: client.get_hydration_data(args[0]),
+    "training_readiness": lambda args: client.get_training_readiness(args[0]),
+    "body_battery": lambda args: client.get_body_battery(args[0], args[1] if len(args) > 1 else None),
 }
 
 

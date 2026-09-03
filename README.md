@@ -69,7 +69,7 @@ puedes generar reportes con tus datos reales:
 python3 garmin_reports.py
 ```
 
-Esto corre los 4 reportes y guarda las gráficas en la carpeta `graficas/`:
+Esto corre los 5 reportes y guarda las gráficas en la carpeta `graficas/`:
 
 - **Frecuencia cardiaca en reposo** (últimos 3 meses), con línea de tendencia
   y si está mejorando o empeorando → `graficas/frecuencia_reposo.png`.
@@ -80,14 +80,19 @@ Esto corre los 4 reportes y guarda las gráficas en la carpeta `graficas/`:
   desnivel y ritmo promedio, comparado contra la semana pasada.
 - **Récords personales del año**: mejor 5K, mejor 10K y salida más larga en
   bici.
+- **Sueño, hidratación, desgaste físico y recuperación** (últimos 14 días):
+  horas de sueño y etapas (profundo/ligero/REM), Sleep Score, hidratación
+  diaria vs meta, Body Battery (cuánto recargas vs. gastas) y Training
+  Readiness → `graficas/sueno.png`.
 
 También puedes pedir solo uno:
 
 ```bash
-python3 garmin_reports.py rhr       # frecuencia cardiaca en reposo
-python3 garmin_reports.py carga     # carga de entrenamiento vs sueño
-python3 garmin_reports.py semana    # resumen semanal
-python3 garmin_reports.py records   # récords personales del año
+python3 garmin_reports.py rhr         # frecuencia cardiaca en reposo
+python3 garmin_reports.py carga       # carga de entrenamiento vs sueño
+python3 garmin_reports.py semana      # resumen semanal
+python3 garmin_reports.py records     # récords personales del año
+python3 garmin_reports.py bienestar   # sueño, hidratación, desgaste y recuperación
 ```
 
 Las gráficas (`.png`) quedan en la carpeta `graficas/` de tu computadora;
@@ -98,6 +103,12 @@ campo oficial de "Training Load" de Garmin para una actividad, el script usa
 una estimación propia (minutos en movimiento ponderados por tu frecuencia
 cardiaca promedio), así que es un valor aproximado, no el número exacto que
 verías en la app de Garmin.
+
+**Nota sobre el reporte de bienestar:** hidratación, Body Battery y Training
+Readiness dependen de que tu reloj los soporte y de que los uses (la
+hidratación en particular solo cuenta si la registras a mano en la app, el
+reloj no mide cuánta agua tomas). Si tu modelo no los reporta, esa sección
+del reporte lo indica en vez de fallar.
 
 ## Tablero Maestro de Rendimiento (dashboard avanzado)
 
