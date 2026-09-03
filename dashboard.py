@@ -57,6 +57,13 @@ def _score_ramp(value, target):
     return max(0.0, min(100.0, value / target * 100))
 
 
+_MESES_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+def _fmt_dia_es(d: pd.Timestamp) -> str:
+    return f"{d.day} {_MESES_ABBR[d.month - 1]}"
+
+
 def _score_label(score: float) -> str:
     if score >= 85:
         return "Excelente"
@@ -368,12 +375,18 @@ with tab_resumen:
         }
         total_dias = len(sleep_df)
         num_dias_activos = len(dias_activos)
-        num_dias_sin_actividad = total_dias - num_dias_activos
+        dias_inactivos_ts = sorted(set(sleep_df.index) - dias_activos)
+        num_dias_sin_actividad = len(dias_inactivos_ts)
+
+        dias_inactivos_fmt = ", ".join(_fmt_dia_es(d) for d in dias_inactivos_ts)
 
         st.markdown(f"**Días con actividad física** (de los últimos {total_dias} días)")
         d1, d2 = st.columns(2)
         d1.metric("Días con actividad", str(num_dias_activos), help=f"{num_dias_activos / total_dias * 100:.0f}% de los días")
-        d2.metric("Días sin actividad", str(num_dias_sin_actividad))
+        d2.metric(
+            "Días sin actividad", str(num_dias_sin_actividad),
+            help=f"Sin actividad: {dias_inactivos_fmt}" if dias_inactivos_fmt else None,
+        )
         if num_dias_sin_actividad > total_dias / 2:
             st.warning(f"Más de la mitad del mes sin actividad registrada ({num_dias_sin_actividad} de {total_dias} días).")
 
