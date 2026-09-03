@@ -394,6 +394,10 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
         "alerta_vagal": alerta_vagal,
         "alertas_activas": sum([alerta_disrupcion, alerta_eficiencia, alerta_vagal]),
         "resumen_mes": resumen_mes,
+        # Apple Health no calcula pérdida de líquidos estimada por actividad
+        # (es un algoritmo propio de Garmin) -- el dashboard muestra "no
+        # disponible" cuando esta lista viene vacía.
+        "hidratacion_por_tipo": [],
     }
 
 

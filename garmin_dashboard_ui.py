@@ -66,6 +66,28 @@ def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float 
     )
 
 
+def ranked_bar_chart(labels: list[str], values: list[float], value_title: str, color: str = BLUE, height_per_bar: int = 32):
+    """Barras horizontales de una sola serie, ordenadas de mayor a menor --
+    para comparar una magnitud entre categorías (ej. mL por actividad)."""
+    orden = sorted(range(len(labels)), key=lambda i: values[i], reverse=True)
+    labels_sorted = [labels[i] for i in orden]
+    values_sorted = [values[i] for i in orden]
+    data = pd.DataFrame({"categoria": labels_sorted, "valor": values_sorted})
+    chart = (
+        alt.Chart(data)
+        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4, size=22, color=color)
+        .encode(
+            y=alt.Y("categoria:N", title=None, sort=labels_sorted),
+            x=alt.X("valor:Q", title=value_title),
+            tooltip=[alt.Tooltip("categoria:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
+        )
+        .properties(height=max(120, height_per_bar * len(labels_sorted)))
+        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_view(strokeWidth=0)
+    )
+    return chart
+
+
 def ordinal_bar_chart(labels: list[str], values: list[float], value_title: str, height: int = 240):
     data = pd.DataFrame({"zona": labels, "valor": values})
     chart = (
@@ -425,6 +447,25 @@ def render_dashboard_body(data: dict):
                 st.metric("Promedio", f"{readiness_series.dropna().mean():.0f}/100")
             else:
                 st.info("Tu cuenta/reloj no reporta Training Readiness (requiere modelos más recientes).")
+
+        st.divider()
+        st.subheader("Pérdida de líquidos estimada por actividad")
+        st.caption(
+            "Promedio por tipo de actividad, normalizado a 60 minutos, usando tus últimas hasta 10 "
+            "sesiones de cada tipo -- así una sesión corta no se compara injusto contra una larga."
+        )
+        hidratacion_por_tipo = data.get("hidratacion_por_tipo") or []
+        if hidratacion_por_tipo:
+            labels = [h["actividad"] for h in hidratacion_por_tipo]
+            values = [h["ml_por_hora"] for h in hidratacion_por_tipo]
+            chart = ranked_bar_chart(labels, values, "mL / 60 min")
+            st.altair_chart(chart, width="stretch")
+        else:
+            st.info(
+                "No hay suficientes datos (se necesitan al menos 3 sesiones del mismo tipo con este dato). "
+                "Esta métrica es un cálculo propio de Garmin ('pérdida de líquidos estimada'); no todos "
+                "los modelos la reportan, y no existe en Apple Health."
+            )
 
     # --- Calorías ---
     with tab_calorias:

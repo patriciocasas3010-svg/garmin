@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 
-from garmin_reports import _activity_load
+from garmin_reports import _activity_load, _resumir_grupo, _seleccion_reciente, _type_label
 
 # ---------------------------------------------------------------------------
 # Series de tiempo básicas
@@ -529,6 +529,38 @@ def compute_recovery_report(client, activities: list) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Pérdida de líquidos estimada por tipo de actividad
+# ---------------------------------------------------------------------------
+
+def compute_hydration_by_activity(client, activities: list, min_sesiones: int = 3, max_por_tipo: int = 10) -> list[dict]:
+    """Pérdida de líquidos estimada (Garmin: summaryDTO.waterEstimated),
+    normalizada a 60 min, agrupada por tipo de actividad -- mismo cálculo
+    que la vista "por tipo" de garmin_reports.py hydration_by_activity(),
+    reutilizado aquí para mostrarlo también en el dashboard.
+
+    No todos los relojes calculan este dato; si no hay suficiente, regresa
+    una lista vacía (el dashboard lo muestra como "no disponible")."""
+    por_tipo = _seleccion_reciente(activities, lambda a: (a.get("activityType") or {}).get("typeKey"), max_por_tipo)
+
+    cache_ml_por_hora = {}
+    for lista in por_tipo.values():
+        for a in lista:
+            activity_id = a.get("activityId")
+            duracion_s = a.get("duration") or a.get("movingDuration")
+            if not activity_id or not duracion_s or activity_id in cache_ml_por_hora:
+                continue
+            try:
+                detalle = client.get_activity(activity_id)
+            except Exception:
+                continue
+            agua_ml = (detalle.get("summaryDTO") or {}).get("waterEstimated")
+            if agua_ml is not None:
+                cache_ml_por_hora[activity_id] = agua_ml * 3600 / duracion_s
+
+    return _resumir_grupo(por_tipo, cache_ml_por_hora, min_sesiones, _type_label)
+
+
+# ---------------------------------------------------------------------------
 # Snapshot completo del dashboard: junta todo lo que necesita
 # garmin_dashboard_ui.render_dashboard_body() en un solo diccionario.
 #
@@ -616,6 +648,7 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
     )
 
     resumen_mes = compute_monthly_score(client, days=wellness_days)
+    hidratacion_por_tipo = compute_hydration_by_activity(client, activities)
 
     return {
         "generated_at": datetime.now().isoformat(),
@@ -650,6 +683,7 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
         "alerta_vagal": alerta_vagal,
         "alertas_activas": sum([alerta_disrupcion, alerta_eficiencia, alerta_vagal]),
         "resumen_mes": resumen_mes,
+        "hidratacion_por_tipo": hidratacion_por_tipo,
     }
 
 
