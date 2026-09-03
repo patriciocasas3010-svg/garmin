@@ -28,6 +28,7 @@ echo (nunca se comparten con nadie mas, se quedan solo en esta computadora)
 echo.
 
 python connect_garmin.py
+python push_resumen.py
 streamlit run dashboard.py
 
 pause

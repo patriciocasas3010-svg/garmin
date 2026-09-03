@@ -48,8 +48,12 @@ La ventana te va a pedir:
 2. Tu contraseña (no se ve mientras la escribes, es normal).
 3. Si Garmin lo pide, un código que te llega por correo o SMS.
 
-Después de esto, tu navegador va a abrir una página con tus datos. Las
-próximas veces que abras el programa, ya no te va a pedir nada de esto.
+Después de esto, es posible que te pregunte **tu nombre** (para que tu
+nutriólogo sepa cuál resumen es el tuyo) — escríbelo y presiona Enter, solo
+te lo va a pedir esta primera vez.
+
+Enseguida tu navegador va a abrir una página con tus datos. Las próximas
+veces que abras el programa, ya no te va a pedir nada de esto.
 
 ## Paso 5: En la consulta
 

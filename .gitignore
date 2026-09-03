@@ -6,3 +6,6 @@ venv/
 .garminconnect_base64
 graficas/
 .streamlit/secrets.toml
+credenciales_hoja.json
+hoja_id.txt
+.nombre_paciente.txt

@@ -195,6 +195,99 @@ def fetch_calories_series(client, start: date, end: date) -> pd.DataFrame:
     return df.set_index("date")
 
 
+WELLNESS_DAYS_DEFAULT = 30
+
+
+def score_range(value, low_bad, low_ok, high_ok, high_bad):
+    """100 dentro de [low_ok, high_ok], baja a 0 conforme se acerca a los límites *_bad."""
+    if value is None or pd.isna(value):
+        return None
+    if low_ok <= value <= high_ok:
+        return 100.0
+    if value < low_ok:
+        if value <= low_bad:
+            return 0.0
+        return (value - low_bad) / (low_ok - low_bad) * 100
+    if value >= high_bad:
+        return 0.0
+    return (high_bad - value) / (high_bad - high_ok) * 100
+
+
+def score_ramp(value, target):
+    """0 en 0, 100 al llegar (o pasar) la meta."""
+    if value is None or pd.isna(value):
+        return None
+    return max(0.0, min(100.0, value / target * 100))
+
+
+def score_label(score: float) -> str:
+    if score >= 85:
+        return "Excelente"
+    if score >= 70:
+        return "Buena"
+    if score >= 50:
+        return "Regular"
+    return "Baja"
+
+
+def compute_monthly_score(client, days: int = WELLNESS_DAYS_DEFAULT) -> dict:
+    """Calificación del mes (0-100) y su desglose: recuperación, sueño y
+    actividad física, más el conteo de días con/sin actividad.
+
+    Es el mismo cálculo que usa el panel 'Resumen' del dashboard personal,
+    factorizado aquí para poder reutilizarlo también en push_resumen.py
+    (lo que se manda a la hoja de Google del nutriólogo).
+    """
+    end = date.today()
+    start = end - timedelta(days=days)
+
+    activities = fetch_activities(client, start, end)
+    sleep_df = fetch_sleep_series(client, start, end)
+    readiness_series = fetch_training_readiness_series(client, start, end)
+    calories_df = fetch_calories_series(client, start, end)
+    rhr_series = fetch_rhr_series(client, start, end)
+
+    recovery_score = readiness_series.dropna().mean() if readiness_series.notna().any() else None
+
+    sleep_hours_avg = sleep_df["hours"].dropna().mean() if sleep_df["hours"].notna().any() else None
+    sleep_score_garmin = sleep_df["score"].dropna().mean() if sleep_df["score"].notna().any() else None
+    sleep_score = sleep_score_garmin if sleep_score_garmin is not None else score_range(sleep_hours_avg, 4, 7, 9, 11)
+
+    active_kcal_avg = calories_df["active_kcal"].dropna().mean() if calories_df["active_kcal"].notna().any() else None
+    activity_score = score_ramp(active_kcal_avg, 400)
+
+    sub_scores = [s for s in [recovery_score, sleep_score, activity_score] if s is not None]
+    overall_score = sum(sub_scores) / len(sub_scores) if sub_scores else None
+
+    wellness_start_ts = pd.Timestamp(sleep_df.index.min())
+    wellness_end_ts = pd.Timestamp(sleep_df.index.max())
+    dias_activos = {
+        pd.Timestamp(a["startTimeLocal"][:10])
+        for a in activities
+        if a.get("startTimeLocal") and wellness_start_ts <= pd.Timestamp(a["startTimeLocal"][:10]) <= wellness_end_ts
+    }
+    total_dias = len(sleep_df)
+    dias_inactivos_ts = sorted(set(sleep_df.index) - dias_activos)
+
+    rhr_recent = rhr_series.dropna()
+    rhr_avg_7d = rhr_recent.tail(7).mean() if not rhr_recent.empty else None
+
+    return {
+        "overall_score": overall_score,
+        "recovery_score": recovery_score,
+        "sleep_score": sleep_score,
+        "sleep_score_garmin": sleep_score_garmin,
+        "sleep_hours_avg": sleep_hours_avg,
+        "activity_score": activity_score,
+        "active_kcal_avg": active_kcal_avg,
+        "total_dias": total_dias,
+        "dias_con_actividad": len(dias_activos),
+        "dias_sin_actividad": total_dias - len(dias_activos),
+        "dias_inactivos": [d.date().isoformat() for d in dias_inactivos_ts],
+        "rhr_avg_7d": rhr_avg_7d,
+    }
+
+
 def fetch_body_battery_series(client, start: date, end: date) -> pd.DataFrame:
     try:
         days_data = client.get_body_battery(start.isoformat(), end.isoformat()) or []

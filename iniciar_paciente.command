@@ -26,6 +26,7 @@ echo "(nunca se comparten con nadie más, se quedan solo en esta computadora)"
 echo ""
 
 python3 connect_garmin.py
+python3 push_resumen.py
 streamlit run dashboard.py
 
 read -r -p "Presiona Enter para cerrar esta ventana..."

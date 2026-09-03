@@ -65,43 +65,11 @@ ZONE_RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # Z1 (suave
 alt.themes.enable("none")
 
 
-def _score_range(value, low_bad, low_ok, high_ok, high_bad):
-    """100 dentro de [low_ok, high_ok], baja a 0 conforme se acerca a los límites *_bad."""
-    if value is None or pd.isna(value):
-        return None
-    if low_ok <= value <= high_ok:
-        return 100.0
-    if value < low_ok:
-        if value <= low_bad:
-            return 0.0
-        return (value - low_bad) / (low_ok - low_bad) * 100
-    if value >= high_bad:
-        return 0.0
-    return (high_bad - value) / (high_bad - high_ok) * 100
-
-
-def _score_ramp(value, target):
-    """0 en 0, 100 al llegar (o pasar) la meta."""
-    if value is None or pd.isna(value):
-        return None
-    return max(0.0, min(100.0, value / target * 100))
-
-
 _MESES_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 
 def _fmt_dia_es(d: pd.Timestamp) -> str:
     return f"{d.day} {_MESES_ABBR[d.month - 1]}"
-
-
-def _score_label(score: float) -> str:
-    if score >= 85:
-        return "Excelente"
-    if score >= 70:
-        return "Buena"
-    if score >= 50:
-        return "Regular"
-    return "Baja"
 
 
 def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float | None = None, fmt: str = ".1f", height: int = 220):
@@ -350,22 +318,13 @@ tab_resumen, tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas
 with tab_resumen:
     st.subheader(f"Calificación del mes (últimos {WELLNESS_DAYS} días)")
 
-    recovery_score = readiness_series.dropna().mean() if readiness_series.notna().any() else None
-
-    sleep_hours_avg = sleep_df["hours"].dropna().mean() if sleep_df["hours"].notna().any() else None
-    sleep_score_garmin = sleep_df["score"].dropna().mean() if sleep_df["score"].notna().any() else None
-    sleep_score = sleep_score_garmin if sleep_score_garmin is not None else _score_range(sleep_hours_avg, 4, 7, 9, 11)
-
-    active_kcal_avg = calories_df["active_kcal"].dropna().mean() if calories_df["active_kcal"].notna().any() else None
-    activity_score = _score_ramp(active_kcal_avg, 400)
-
-    sub_scores = [s for s in [recovery_score, sleep_score, activity_score] if s is not None]
-    overall_score = sum(sub_scores) / len(sub_scores) if sub_scores else None
+    resumen_mes = gm.compute_monthly_score(client, days=WELLNESS_DAYS)
+    overall_score = resumen_mes["overall_score"]
 
     if overall_score is None:
         st.info("No hay suficientes datos de recuperación, sueño o calorías en el periodo para calcular una calificación.")
     else:
-        etiqueta = _score_label(overall_score)
+        etiqueta = gm.score_label(overall_score)
         emoji = {"Excelente": "🟢", "Buena": "🟢", "Regular": "🟡", "Baja": "🔴"}[etiqueta]
         st.markdown(
             f'<div style="font-size:56px; font-weight:700; line-height:1.1;">{overall_score:.0f}'
@@ -376,6 +335,13 @@ with tab_resumen:
             "Promedio simple de tres partes iguales: recuperación, sueño y actividad física. "
             "Es una calificación propia de este dashboard, no un puntaje oficial de Garmin."
         )
+
+        recovery_score = resumen_mes["recovery_score"]
+        sleep_score = resumen_mes["sleep_score"]
+        sleep_score_garmin = resumen_mes["sleep_score_garmin"]
+        sleep_hours_avg = resumen_mes["sleep_hours_avg"]
+        activity_score = resumen_mes["activity_score"]
+        active_kcal_avg = resumen_mes["active_kcal_avg"]
 
         sc1, sc2, sc3 = st.columns(3)
         sc1.metric(
@@ -396,19 +362,10 @@ with tab_resumen:
             else "No hay calorías de actividad registradas en el periodo.",
         )
 
-        wellness_start_ts = pd.Timestamp(sleep_df.index.min())
-        wellness_end_ts = pd.Timestamp(sleep_df.index.max())
-        dias_activos = {
-            pd.Timestamp(a["startTimeLocal"][:10])
-            for a in activities
-            if a.get("startTimeLocal") and wellness_start_ts <= pd.Timestamp(a["startTimeLocal"][:10]) <= wellness_end_ts
-        }
-        total_dias = len(sleep_df)
-        num_dias_activos = len(dias_activos)
-        dias_inactivos_ts = sorted(set(sleep_df.index) - dias_activos)
-        num_dias_sin_actividad = len(dias_inactivos_ts)
-
-        dias_inactivos_fmt = ", ".join(_fmt_dia_es(d) for d in dias_inactivos_ts)
+        total_dias = resumen_mes["total_dias"]
+        num_dias_activos = resumen_mes["dias_con_actividad"]
+        num_dias_sin_actividad = resumen_mes["dias_sin_actividad"]
+        dias_inactivos_fmt = ", ".join(_fmt_dia_es(pd.Timestamp(d)) for d in resumen_mes["dias_inactivos"])
 
         st.markdown(f"**Días con actividad física** (de los últimos {total_dias} días)")
         d1, d2 = st.columns(2)
