@@ -16,15 +16,25 @@ repositorio.
   que sus datos existan en tu cuenta de Garmin Connect. Este script no se
   comunica con el reloj por Bluetooth/USB directamente: usa la cuenta en la
   nube de Garmin Connect, que es lo que soporta `python-garminconnect`.
-- Python 3.9 o superior.
+- **Python 3.10 o superior.** El `python3` que trae macOS de fábrica suele ser
+  la versión 3.9 de Apple, que es demasiado vieja para esta librería. Si
+  `python3 --version` te muestra 3.9.x o menos, instala una versión moderna
+  desde https://www.python.org/downloads/macos/ (botón amarillo "Download
+  Python 3.x.x"), abre el instalador y sigue los pasos por defecto. Luego
+  cierra y vuelve a abrir la Terminal.
 
 ## Instalación
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # en Windows: .venv\Scripts\activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+Si ya habías creado antes una carpeta `.venv` con una versión vieja de
+Python, bórrala primero (`rm -rf .venv`) y vuelve a crearla con el Python
+nuevo instalado en el paso anterior.
 
 ## Uso
 
@@ -60,3 +70,8 @@ Si el inicio de sesión es correcto, el script:
   minutos y vuelve a intentar.
 - **No aparece mi reloj**: asegúrate de haberlo sincronizado antes con la
   app Garmin Connect Mobile o Garmin Express.
+- **`ERROR: Could not find a version that satisfies the requirement
+  garminconnect...`** o **`ModuleNotFoundError: No module named 'garth'`**:
+  tu Python es demasiado viejo (probablemente el 3.9 de Apple). Instala
+  Python 3.10+ como se indica arriba, borra `.venv` (`rm -rf .venv`), y
+  repite los pasos de instalación con el Python nuevo.
