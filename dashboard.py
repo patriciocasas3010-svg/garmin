@@ -359,6 +359,24 @@ with tab_resumen:
             else "No hay calorías de actividad registradas en el periodo.",
         )
 
+        wellness_start_ts = pd.Timestamp(sleep_df.index.min())
+        wellness_end_ts = pd.Timestamp(sleep_df.index.max())
+        dias_activos = {
+            pd.Timestamp(a["startTimeLocal"][:10])
+            for a in activities
+            if a.get("startTimeLocal") and wellness_start_ts <= pd.Timestamp(a["startTimeLocal"][:10]) <= wellness_end_ts
+        }
+        total_dias = len(sleep_df)
+        num_dias_activos = len(dias_activos)
+        num_dias_sin_actividad = total_dias - num_dias_activos
+
+        st.markdown(f"**Días con actividad física** (de los últimos {total_dias} días)")
+        d1, d2 = st.columns(2)
+        d1.metric("Días con actividad", str(num_dias_activos), help=f"{num_dias_activos / total_dias * 100:.0f}% de los días")
+        d2.metric("Días sin actividad", str(num_dias_sin_actividad))
+        if num_dias_sin_actividad > total_dias / 2:
+            st.warning(f"Más de la mitad del mes sin actividad registrada ({num_dias_sin_actividad} de {total_dias} días).")
+
     st.divider()
     st.subheader("¿Cómo vengo hoy?")
     c1, c2, c3, c4, c5 = st.columns(5)

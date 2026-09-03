@@ -125,9 +125,11 @@ con 6 secciones:
 1. **📋 Resumen**: tu **calificación del mes** (0-100), un promedio simple de
    tres partes iguales — recuperación (Training Readiness), sueño (Sleep
    Score o tus horas) y actividad física (calorías quemadas por actividad
-   vs. una meta de 400 kcal/día) — con el desglose de cada parte. Debajo, una
-   foto rápida del día: ACWR, Z-score de HRV, tu FC en reposo de hoy vs. tu
-   media, tu sueño de los últimos 7 días y cuántas alertas están activas.
+   vs. una meta de 400 kcal/día) — con el desglose de cada parte, más un
+   contador de días con actividad física vs. días sin actividad en el mes.
+   Debajo, una foto rápida del día: ACWR, Z-score de HRV, tu FC en reposo de
+   hoy vs. tu media, tu sueño de los últimos 7 días y cuántas alertas están
+   activas.
 2. **⚖️ Carga y Preparación**: ACWR (carga aguda 7 días / crónica 28 días)
    cruzado con el Z-score de tu HRV nocturna (7 días vs. tu línea base de 60
    días). Últimos 90 días.
