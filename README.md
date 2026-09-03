@@ -112,42 +112,37 @@ del reporte lo indica en vez de fallar.
 
 ## Tablero Maestro de Rendimiento (dashboard avanzado)
 
-Un dashboard más avanzado, con 6 paneles y una tabla de alertas automáticas,
-pensado para entrenamiento serio:
+Un dashboard más avanzado, organizado en pestañas, pensado para entrenamiento
+serio:
 
 ```bash
 streamlit run dashboard.py
 ```
 
-Esto abre una pestaña en tu navegador (normalmente http://localhost:8501):
+Esto abre una pestaña en tu navegador (normalmente http://localhost:8501)
+con 6 secciones:
 
-1. **Alerta temprana (Carga vs. Preparación)**: ACWR (carga aguda 7 días /
-   crónica 28 días) cruzado con el Z-score de tu HRV nocturna (7 días vs. tu
-   línea base de 60 días). Últimos 90 días.
-2. **Eficiencia y economía cardiovascular**: deriva cardiaca (%) entre la
-   primera y segunda mitad de tus actividades sostenidas (>20 min) de la
-   última semana — cuántos latidos de más te cuesta sostener el mismo ritmo.
-3. **Distribución de carga (polarización 80/20)**: minutos por zona de FC
-   real (calculada sobre tu Reserva de FC / fórmula de Karvonen) en la
-   última semana, para auditar si estás entrenando demasiado en la "zona
-   gris" intermedia.
-4. **Resiliencia del sistema nervioso autónomo**: tu FC en reposo frente a
-   qué tan rápido baja tu FC en los primeros 2 minutos después de esforzarte.
-   Últimos 90 días.
-5. **Sueño, hidratación, desgaste físico y recuperación**: horas y etapas de
-   sueño, Sleep Score, hidratación diaria vs meta, Body Battery (recarga vs.
-   gasto) y Training Readiness. Últimos 30 días.
-6. **Calorías**: quemadas en reposo (BMR), por actividad y total por día,
-   más el desglose de calorías de cada actividad individual. Últimos 30 días.
+1. **📋 Resumen**: una foto rápida — ACWR, Z-score de HRV, tu FC en reposo de
+   hoy vs. tu media, tu sueño de los últimos 7 días y cuántas alertas están
+   activas ahora mismo.
+2. **⚖️ Carga y Preparación**: ACWR (carga aguda 7 días / crónica 28 días)
+   cruzado con el Z-score de tu HRV nocturna (7 días vs. tu línea base de 60
+   días). Últimos 90 días.
+3. **🎯 Eficiencia y Zonas**: deriva cardiaca (%) de tus actividades
+   sostenidas (>20 min) de la última semana, y minutos por zona de FC real
+   (Reserva de FC) para auditar la regla 80/20.
+4. **😴 Sueño y Bienestar**: FC en reposo y recuperación post-esfuerzo, sueño,
+   hidratación, Body Battery y Training Readiness.
+5. **🔥 Calorías**: quemadas en reposo (BMR), por actividad y total por día,
+   más el desglose de cada actividad individual. Últimos 30 días.
+6. **🚦 Alertas**: la tabla de indicadores unificados — Índice de Disrupción
+   Fisiológica (ACWR + HRV), Pérdida de Eficiencia Aeróbica (deriva cardiaca)
+   y Estatus de Tono Vagal (FC en reposo + recuperación) — con su acción
+   recomendada si se dispara.
 
-Al final hay una **tabla de indicadores unificados** que marca 🔴 ALERTA o
-🟢 OK para: Índice de Disrupción Fisiológica (ACWR + HRV), Pérdida de
-Eficiencia Aeróbica (deriva cardiaca) y Estatus de Tono Vagal (FC en reposo +
-recuperación), cada uno con su acción recomendada si se dispara la alerta.
-
-Usa el botón **"Actualizar datos"** dentro del dashboard para recalcular con
-tus datos más recientes (por defecto se guardan en caché por 1 hora). Para
-cerrarlo, vuelve a la Terminal y presiona `Ctrl+C`.
+Usa el botón **"🔄 Actualizar datos"** para recalcular con tus datos más
+recientes (por defecto se guardan en caché por 1 hora). Para cerrarlo, vuelve
+a la Terminal y presiona `Ctrl+C`.
 
 **Limitaciones a tener en cuenta:**
 
