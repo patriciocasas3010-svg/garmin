@@ -73,7 +73,7 @@ puedes generar reportes con tus datos reales:
 python3 garmin_reports.py
 ```
 
-Esto corre los 5 reportes y guarda las gráficas en la carpeta `graficas/`:
+Esto corre los 6 reportes y guarda las gráficas en la carpeta `graficas/`:
 
 - **Frecuencia cardiaca en reposo** (últimos 3 meses), con línea de tendencia
   y si está mejorando o empeorando → `graficas/frecuencia_reposo.png`.
@@ -88,15 +88,25 @@ Esto corre los 5 reportes y guarda las gráficas en la carpeta `graficas/`:
   horas de sueño y etapas (profundo/ligero/REM), Sleep Score, hidratación
   diaria vs meta, Body Battery (cuánto recargas vs. gastas) y Training
   Readiness → `graficas/sueno.png`.
+- **Pérdida de líquidos estimada por tipo de actividad** (últimos 180 días):
+  agrupa tus actividades por nombre (ej. "Carrera", "Fuerza", "Yoga"), toma
+  las últimas hasta 10 de cada una, y promedia cuánto líquido estima Garmin
+  que pierdes normalizado a 60 minutos de esa actividad →
+  `graficas/hidratacion_por_actividad.png`. Requiere que tu reloj calcule
+  esta métrica (revisa el desglose de una actividad en la app de Garmin,
+  bajo "Pérdida de líquidos estimada" -- no todos los modelos la dan) y
+  hace una llamada extra por actividad revisada, así que puede tardar un
+  poco más que los demás reportes.
 
 También puedes pedir solo uno:
 
 ```bash
-python3 garmin_reports.py rhr         # frecuencia cardiaca en reposo
-python3 garmin_reports.py carga       # carga de entrenamiento vs sueño
-python3 garmin_reports.py semana      # resumen semanal
-python3 garmin_reports.py records     # récords personales del año
-python3 garmin_reports.py bienestar   # sueño, hidratación, desgaste y recuperación
+python3 garmin_reports.py rhr           # frecuencia cardiaca en reposo
+python3 garmin_reports.py carga         # carga de entrenamiento vs sueño
+python3 garmin_reports.py semana        # resumen semanal
+python3 garmin_reports.py records       # récords personales del año
+python3 garmin_reports.py bienestar     # sueño, hidratación, desgaste y recuperación
+python3 garmin_reports.py hidratacion   # pérdida de líquidos estimada por actividad
 ```
 
 Las gráficas (`.png`) quedan en la carpeta `graficas/` de tu computadora;

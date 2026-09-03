@@ -10,6 +10,7 @@ Uso:
     python3 garmin_reports.py semana          # solo resumen semanal estilo Strava
     python3 garmin_reports.py records         # solo récords personales del año
     python3 garmin_reports.py bienestar       # sueño, hidratación, desgaste y recuperación
+    python3 garmin_reports.py hidratacion     # pérdida de líquidos estimada por tipo de actividad
 
 Las gráficas se guardan como archivos .png en la carpeta 'graficas/'.
 """
@@ -525,12 +526,98 @@ def wellness_report(client, days: int = 14):
         print(f"\nGráfica guardada en '{out_path}'.")
 
 
+# ---------------------------------------------------------------------------
+# 6. Pérdida de líquidos estimada por tipo de actividad
+# ---------------------------------------------------------------------------
+
+def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_por_tipo: int = 10):
+    """Promedia, por cada nombre de actividad (ej. 'Carrera', 'Fuerza', 'Yoga'),
+    cuánto líquido estima Garmin que pierdes normalizado a 60 minutos --
+    usando tus últimas hasta {max_por_tipo} sesiones de cada una.
+
+    Requiere que tu reloj calcule 'pérdida de líquidos estimada' (no todos
+    los modelos lo hacen); si no, este reporte no encuentra nada.
+    """
+    print("\n--- Pérdida de líquidos estimada por tipo de actividad ---")
+    print("(revisa el detalle de cada actividad, puede tardar un poco)")
+    end = date.today()
+    start = end - timedelta(days=days)
+    actividades = client.get_activities_by_date(start.isoformat(), end.isoformat()) or []
+
+    por_nombre = defaultdict(list)
+    for a in actividades:
+        nombre = (a.get("activityName") or "").strip()
+        if nombre:
+            por_nombre[nombre].append(a)
+
+    resultados = []
+    for nombre, lista in por_nombre.items():
+        lista.sort(key=lambda a: a.get("startTimeLocal") or "", reverse=True)
+
+        valores_por_hora = []
+        for a in lista[:max_por_tipo]:
+            activity_id = a.get("activityId")
+            duracion_s = a.get("duration") or a.get("movingDuration")
+            if not activity_id or not duracion_s:
+                continue
+            try:
+                detalle = client.get_activity(activity_id)
+            except Exception:
+                continue
+            agua_ml = (detalle.get("summaryDTO") or {}).get("waterEstimated")
+            if agua_ml is None:
+                continue
+            valores_por_hora.append(agua_ml * 3600 / duracion_s)
+
+        if len(valores_por_hora) >= min_sesiones:
+            resultados.append({
+                "actividad": nombre,
+                "n": len(valores_por_hora),
+                "ml_por_hora": statistics.mean(valores_por_hora),
+            })
+
+    if not resultados:
+        print(
+            f"No encontré suficientes actividades (mínimo {min_sesiones} del mismo nombre, con dato "
+            "de pérdida de líquidos estimada) en los últimos días. Este dato requiere que tu reloj lo "
+            "calcule -- no todos los modelos lo hacen."
+        )
+        return
+
+    resultados.sort(key=lambda r: r["ml_por_hora"], reverse=True)
+
+    for r in resultados:
+        print(f"  {r['actividad']}: {r['ml_por_hora']:.0f} mL/hora estimados (promedio de {r['n']} sesiones)")
+
+    _ensure_graficas_dir()
+    nombres = [r["actividad"] for r in resultados]
+    valores = [r["ml_por_hora"] for r in resultados]
+
+    plt.figure(figsize=(9, max(3, 0.6 * len(resultados) + 1)))
+    barras = plt.barh(nombres, valores, color="#2a78d6")
+    for barra, r in zip(barras, resultados):
+        plt.text(
+            barra.get_width() + max(valores) * 0.01, barra.get_y() + barra.get_height() / 2,
+            f"{r['ml_por_hora']:.0f} mL (n={r['n']})", va="center", fontsize=9,
+        )
+    plt.gca().invert_yaxis()
+    plt.xlabel("mL estimados por 60 min de actividad")
+    plt.title(f"Pérdida de líquidos estimada por actividad (últimos {days} días)")
+    plt.tight_layout()
+
+    out_path = f"{GRAFICAS_DIR}/hidratacion_por_actividad.png"
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+    print(f"\nGráfica guardada en '{out_path}'.")
+
+
 REPORTES = {
     "rhr": resting_heart_rate_trend,
     "carga": training_load_vs_sleep,
     "semana": weekly_summary,
     "records": personal_records,
     "bienestar": wellness_report,
+    "hidratacion": hydration_by_activity,
 }
 
 
