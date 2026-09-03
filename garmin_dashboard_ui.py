@@ -206,7 +206,7 @@ def render_dashboard_body(data: dict):
             )
             st.caption(
                 "Promedio simple de tres partes iguales: recuperación, sueño y actividad física. "
-                "Es una calificación propia de este dashboard, no un puntaje oficial de Garmin."
+                "Es una calificación propia de este dashboard, no un puntaje oficial de tu reloj o app."
             )
 
             recovery_score = resumen_mes["recovery_score"]
@@ -270,7 +270,7 @@ def render_dashboard_body(data: dict):
             st.success("Sin alertas activas esta semana. Todo dentro de rango.")
 
         st.caption(
-            "Este resumen cruza los datos de Garmin Connect de los últimos días para dar una foto rápida "
+            "Este resumen cruza tus datos de los últimos días para dar una foto rápida "
             "antes de entrar al detalle de cada pestaña."
         )
 
