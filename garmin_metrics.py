@@ -560,6 +560,25 @@ def compute_hydration_by_activity(client, activities: list, min_sesiones: int = 
     return _resumir_grupo(por_tipo, cache_ml_por_hora, min_sesiones, _type_label)
 
 
+def compute_hydration_daily_total(client, activities: list, dias: int = 30) -> dict:
+    """Total REAL (sin normalizar a 60 min) de pérdida de líquidos estimada
+    por día de calendario, sumando todas las actividades de ese día -- así
+    un día con varias actividades queda reflejado como un solo total. Ver
+    garmin_reports.py hydration_by_activity() para la misma idea aplicada
+    al reporte de terminal."""
+    from garmin_reports import _diario_desde_cache
+
+    por_dia = _diario_desde_cache(client, activities, dias, cache_ml_por_hora={})
+    if not por_dia:
+        return {"promedio_ml_dia": None, "dias_con_actividad": 0, "serie": {}}
+    valores = list(por_dia.values())
+    return {
+        "promedio_ml_dia": sum(valores) / len(valores),
+        "dias_con_actividad": len(valores),
+        "serie": por_dia,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Snapshot completo del dashboard: junta todo lo que necesita
 # garmin_dashboard_ui.render_dashboard_body() en un solo diccionario.
@@ -649,6 +668,7 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
 
     resumen_mes = compute_monthly_score(client, days=wellness_days)
     hidratacion_por_tipo = compute_hydration_by_activity(client, activities)
+    hidratacion_diaria = compute_hydration_daily_total(client, activities)
 
     return {
         "generated_at": datetime.now().isoformat(),
@@ -684,6 +704,7 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
         "alertas_activas": sum([alerta_disrupcion, alerta_eficiencia, alerta_vagal]),
         "resumen_mes": resumen_mes,
         "hidratacion_por_tipo": hidratacion_por_tipo,
+        "hidratacion_diaria": hidratacion_diaria,
     }
 
 

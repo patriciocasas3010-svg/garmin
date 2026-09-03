@@ -604,12 +604,74 @@ def _imprimir_y_graficar_hidratacion(resultados: list, titulo: str, out_path: st
     print(f"Gráfica guardada en '{out_path}'.")
 
 
-def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_por_tipo: int = 10):
+def _diario_desde_cache(client, actividades: list, dias: int, cache_ml_por_hora: dict) -> dict:
+    """Suma el agua estimada REAL (sin normalizar a 60 min -- aquí interesa
+    el total del día) de todas las actividades del mismo día de calendario,
+    en los últimos `dias` -- así un día con varias actividades queda
+    reflejado como un solo total, no repartido entre varias barras."""
+    corte = (date.today() - timedelta(days=dias)).isoformat()
+    por_dia = defaultdict(float)
+    for a in actividades:
+        start_str = a.get("startTimeLocal") or ""
+        if start_str[:10] < corte:
+            continue
+        activity_id = a.get("activityId")
+        duracion_s = a.get("duration") or a.get("movingDuration")
+        if activity_id is None:
+            continue
+        if activity_id in cache_ml_por_hora and duracion_s:
+            agua_ml = cache_ml_por_hora[activity_id] * duracion_s / 3600
+        else:
+            try:
+                detalle = client.get_activity(activity_id)
+            except Exception:
+                continue
+            agua_ml = (detalle.get("summaryDTO") or {}).get("waterEstimated")
+        if agua_ml is not None:
+            por_dia[start_str[:10]] += agua_ml
+    return dict(por_dia)
+
+
+def _imprimir_y_graficar_diario(por_dia: dict, dias: int):
+    if not por_dia:
+        print(f"\nPor día (últimos {dias} días): no encontré actividades con este dato.")
+        return
+
+    promedio = statistics.mean(por_dia.values())
+    print(
+        f"\nPor día (últimos {dias} días): en promedio pierdes {promedio:.0f} mL en días con "
+        f"actividad ({len(por_dia)} días con al menos una actividad -- si haces varias el mismo "
+        "día, ya están sumadas en ese día)."
+    )
+
+    _ensure_graficas_dir()
+    fechas = sorted(por_dia)
+    valores = [por_dia[f] for f in fechas]
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(fechas, valores, color="#2a78d6", alpha=0.85, label="Pérdida diaria estimada")
+    plt.axhline(promedio, color="gray", linestyle=":", linewidth=1, label=f"Promedio ({promedio:.0f} mL)")
+    plt.title(f"Pérdida de líquidos estimada por día (últimos {dias} días)")
+    plt.ylabel("mL")
+    plt.xticks(rotation=45, fontsize=7)
+    plt.legend()
+    plt.tight_layout()
+
+    out_path = f"{GRAFICAS_DIR}/hidratacion_por_dia.png"
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+    print(f"Gráfica guardada en '{out_path}'.")
+
+
+def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_por_tipo: int = 10, dias_diario: int = 30):
     """Promedia cuánto líquido estima Garmin que pierdes, normalizado a 60
     minutos, usando tus últimas hasta {max_por_tipo} sesiones -- una vez
     agrupando por el nombre exacto de la actividad (ej. distingue 'Carrera'
     por ciudad si Garmin las nombró distinto) y otra vez agrupando por tipo
-    de actividad (todas las corridas juntas, sin importar dónde).
+    de actividad (todas las corridas juntas, sin importar dónde). Además,
+    para los últimos {dias_diario} días, suma el total (sin normalizar) de
+    todas las actividades del mismo día y saca un promedio diario -- para
+    los días en que se hace más de una actividad, ya quedan juntas.
 
     Requiere que tu reloj calcule 'pérdida de líquidos estimada' (no todos
     los modelos lo hacen); si no, este reporte no encuentra nada.
@@ -655,6 +717,9 @@ def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_po
         resultados_tipo, f"Por tipo de actividad (últimos {days} días)",
         f"{GRAFICAS_DIR}/hidratacion_por_tipo.png", min_sesiones,
     )
+
+    por_dia = _diario_desde_cache(client, actividades, dias_diario, cache_ml_por_hora)
+    _imprimir_y_graficar_diario(por_dia, dias_diario)
 
 
 REPORTES = {

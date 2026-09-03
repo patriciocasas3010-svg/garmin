@@ -66,6 +66,36 @@ def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float 
     )
 
 
+def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, height: int = 220):
+    """Barras de una serie diaria dispersa (solo trae los días con dato,
+    ej. días con actividad), con línea de promedio punteada. A diferencia
+    de line_with_rule() no conecta los huecos con una línea, que sugeriría
+    datos entre días que en realidad no existen."""
+    data = series.dropna().reset_index()
+    data.columns = ["fecha", "valor"]
+    if data.empty:
+        return None
+
+    bars = (
+        alt.Chart(data)
+        .mark_bar(color=color, size=14)
+        .encode(
+            x=alt.X("fecha:T", title=None),
+            y=alt.Y("valor:Q", title=title),
+            tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("valor:Q", title=title, format=".0f")],
+        )
+    )
+    rule_df = pd.DataFrame({"y": [data["valor"].mean()]})
+    rule = alt.Chart(rule_df).mark_rule(strokeDash=[4, 4], color=INK_MUTED, strokeWidth=1).encode(y="y:Q")
+
+    return (
+        alt.layer(bars, rule)
+        .properties(height=height)
+        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_view(strokeWidth=0)
+    )
+
+
 def ranked_bar_chart(labels: list[str], values: list[float], value_title: str, color: str = BLUE, height_per_bar: int = 32):
     """Barras horizontales de una sola serie, ordenadas de mayor a menor --
     para comparar una magnitud entre categorías (ej. mL por actividad)."""
@@ -466,6 +496,27 @@ def render_dashboard_body(data: dict):
                 "Esta métrica es un cálculo propio de Garmin ('pérdida de líquidos estimada'); no todos "
                 "los modelos la reportan, y no existe en Apple Health."
             )
+
+        st.markdown("**Pérdida de líquidos por día**")
+        st.caption(
+            "Suma el total real (sin normalizar) de todas las actividades del mismo día -- si haces "
+            "varias el mismo día, ya quedan juntas en esa barra."
+        )
+        hidratacion_diaria = data.get("hidratacion_diaria") or {}
+        serie_diaria = hidratacion_diaria.get("serie") or {}
+        if serie_diaria:
+            serie = pd.Series(serie_diaria, name="ml")
+            serie.index = pd.to_datetime(serie.index)
+            serie = serie.sort_index()
+            chart = daily_bar_with_average(serie, "mL")
+            st.altair_chart(chart, width="stretch")
+            st.metric(
+                "Promedio en días con actividad",
+                f"{hidratacion_diaria['promedio_ml_dia']:.0f} mL/día",
+                help=f"Sobre {hidratacion_diaria['dias_con_actividad']} días con al menos una actividad.",
+            )
+        else:
+            st.info("No hay suficientes datos de días con actividad para este cálculo.")
 
     # --- Calorías ---
     with tab_calorias:
