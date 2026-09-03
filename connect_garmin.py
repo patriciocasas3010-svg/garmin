@@ -70,11 +70,10 @@ def connect():
 
 
 def show_summary(client: Garmin):
-    profile = client.get_user_profile()
     devices = client.get_devices()
 
     print("Cuenta Garmin conectada:")
-    print(f"  Usuario: {profile.get('displayName') or profile.get('userName')}")
+    print(f"  Usuario: {client.get_full_name()}")
 
     if not devices:
         print("  No se encontró ningún reloj/dispositivo vinculado a esta cuenta.")
