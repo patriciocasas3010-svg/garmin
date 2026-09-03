@@ -530,62 +530,56 @@ def wellness_report(client, days: int = 14):
 # 6. Pérdida de líquidos estimada por tipo de actividad
 # ---------------------------------------------------------------------------
 
-def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_por_tipo: int = 10):
-    """Promedia, por cada nombre de actividad (ej. 'Carrera', 'Fuerza', 'Yoga'),
-    cuánto líquido estima Garmin que pierdes normalizado a 60 minutos --
-    usando tus últimas hasta {max_por_tipo} sesiones de cada una.
+_TYPE_LABELS = {
+    "running": "Carrera", "street_running": "Carrera", "track_running": "Carrera",
+    "trail_running": "Trail running", "treadmill_running": "Entrenamiento en cinta",
+    "indoor_cycling": "Ciclismo en sala", "cycling": "Ciclismo", "road_biking": "Ciclismo",
+    "mountain_biking": "Ciclismo de montaña", "strength_training": "Fuerza",
+    "yoga": "Yoga", "cardio_training": "Cardio", "hiit": "HIIT", "elliptical": "Elíptica",
+    "walking": "Caminata", "lap_swimming": "Natación", "open_water_swimming": "Natación",
+    "swimming": "Natación", "indoor_rowing": "Remo", "rowing": "Remo", "pilates": "Pilates",
+    "stair_climbing": "Escaladora",
+}
 
-    Requiere que tu reloj calcule 'pérdida de líquidos estimada' (no todos
-    los modelos lo hacen); si no, este reporte no encuentra nada.
-    """
-    print("\n--- Pérdida de líquidos estimada por tipo de actividad ---")
-    print("(revisa el detalle de cada actividad, puede tardar un poco)")
-    end = date.today()
-    start = end - timedelta(days=days)
-    actividades = client.get_activities_by_date(start.isoformat(), end.isoformat()) or []
 
-    por_nombre = defaultdict(list)
+def _type_label(type_key: str | None) -> str:
+    if not type_key:
+        return "Otro"
+    return _TYPE_LABELS.get(type_key, type_key.replace("_", " ").capitalize())
+
+
+def _seleccion_reciente(actividades: list, key_fn, max_por_grupo: int) -> dict:
+    """Agrupa actividades con key_fn() y regresa, por grupo, las últimas
+    max_por_grupo (más recientes primero)."""
+    grupos = defaultdict(list)
     for a in actividades:
-        nombre = (a.get("activityName") or "").strip()
-        if nombre:
-            por_nombre[nombre].append(a)
-
-    resultados = []
-    for nombre, lista in por_nombre.items():
+        key = key_fn(a)
+        if key:
+            grupos[key].append(a)
+    for lista in grupos.values():
         lista.sort(key=lambda a: a.get("startTimeLocal") or "", reverse=True)
+    return {key: lista[:max_por_grupo] for key, lista in grupos.items()}
 
-        valores_por_hora = []
-        for a in lista[:max_por_tipo]:
-            activity_id = a.get("activityId")
-            duracion_s = a.get("duration") or a.get("movingDuration")
-            if not activity_id or not duracion_s:
-                continue
-            try:
-                detalle = client.get_activity(activity_id)
-            except Exception:
-                continue
-            agua_ml = (detalle.get("summaryDTO") or {}).get("waterEstimated")
-            if agua_ml is None:
-                continue
-            valores_por_hora.append(agua_ml * 3600 / duracion_s)
 
-        if len(valores_por_hora) >= min_sesiones:
-            resultados.append({
-                "actividad": nombre,
-                "n": len(valores_por_hora),
-                "ml_por_hora": statistics.mean(valores_por_hora),
-            })
+def _resumir_grupo(grupos: dict, cache_ml_por_hora: dict, min_sesiones: int, label_fn) -> list:
+    resultados = []
+    for key, lista in grupos.items():
+        valores = [cache_ml_por_hora[a["activityId"]] for a in lista if a.get("activityId") in cache_ml_por_hora]
+        if len(valores) >= min_sesiones:
+            resultados.append({"actividad": label_fn(key), "n": len(valores), "ml_por_hora": statistics.mean(valores)})
+    resultados.sort(key=lambda r: r["ml_por_hora"], reverse=True)
+    return resultados
 
+
+def _imprimir_y_graficar_hidratacion(resultados: list, titulo: str, out_path: str, min_sesiones: int):
     if not resultados:
         print(
-            f"No encontré suficientes actividades (mínimo {min_sesiones} del mismo nombre, con dato "
-            "de pérdida de líquidos estimada) en los últimos días. Este dato requiere que tu reloj lo "
-            "calcule -- no todos los modelos lo hacen."
+            f"\n{titulo}: no encontré suficientes actividades (mínimo {min_sesiones} del mismo grupo, "
+            "con dato de pérdida de líquidos estimada) en el periodo."
         )
         return
 
-    resultados.sort(key=lambda r: r["ml_por_hora"], reverse=True)
-
+    print(f"\n{titulo}:")
     for r in resultados:
         print(f"  {r['actividad']}: {r['ml_por_hora']:.0f} mL/hora estimados (promedio de {r['n']} sesiones)")
 
@@ -602,13 +596,65 @@ def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_po
         )
     plt.gca().invert_yaxis()
     plt.xlabel("mL estimados por 60 min de actividad")
-    plt.title(f"Pérdida de líquidos estimada por actividad (últimos {days} días)")
+    plt.title(titulo)
     plt.tight_layout()
 
-    out_path = f"{GRAFICAS_DIR}/hidratacion_por_actividad.png"
     plt.savefig(out_path, dpi=150)
     plt.close()
-    print(f"\nGráfica guardada en '{out_path}'.")
+    print(f"Gráfica guardada en '{out_path}'.")
+
+
+def hydration_by_activity(client, days: int = 180, min_sesiones: int = 3, max_por_tipo: int = 10):
+    """Promedia cuánto líquido estima Garmin que pierdes, normalizado a 60
+    minutos, usando tus últimas hasta {max_por_tipo} sesiones -- una vez
+    agrupando por el nombre exacto de la actividad (ej. distingue 'Carrera'
+    por ciudad si Garmin las nombró distinto) y otra vez agrupando por tipo
+    de actividad (todas las corridas juntas, sin importar dónde).
+
+    Requiere que tu reloj calcule 'pérdida de líquidos estimada' (no todos
+    los modelos lo hacen); si no, este reporte no encuentra nada.
+    """
+    print("\n--- Pérdida de líquidos estimada por actividad ---")
+    print("(revisa el detalle de cada actividad, puede tardar un poco)")
+    end = date.today()
+    start = end - timedelta(days=days)
+    actividades = client.get_activities_by_date(start.isoformat(), end.isoformat()) or []
+
+    por_nombre = _seleccion_reciente(actividades, lambda a: (a.get("activityName") or "").strip() or None, max_por_tipo)
+    por_tipo = _seleccion_reciente(actividades, lambda a: (a.get("activityType") or {}).get("typeKey"), max_por_tipo)
+
+    # Une las actividades que hace falta consultar en las dos agrupaciones,
+    # para no pedirle a Garmin el detalle de una misma actividad dos veces.
+    por_id = {}
+    for lista in list(por_nombre.values()) + list(por_tipo.values()):
+        for a in lista:
+            if a.get("activityId") is not None:
+                por_id[a["activityId"]] = a
+
+    cache_ml_por_hora = {}
+    for activity_id, a in por_id.items():
+        duracion_s = a.get("duration") or a.get("movingDuration")
+        if not duracion_s:
+            continue
+        try:
+            detalle = client.get_activity(activity_id)
+        except Exception:
+            continue
+        agua_ml = (detalle.get("summaryDTO") or {}).get("waterEstimated")
+        if agua_ml is not None:
+            cache_ml_por_hora[activity_id] = agua_ml * 3600 / duracion_s
+
+    resultados_nombre = _resumir_grupo(por_nombre, cache_ml_por_hora, min_sesiones, lambda k: k)
+    resultados_tipo = _resumir_grupo(por_tipo, cache_ml_por_hora, min_sesiones, _type_label)
+
+    _imprimir_y_graficar_hidratacion(
+        resultados_nombre, f"Por nombre de actividad (últimos {days} días)",
+        f"{GRAFICAS_DIR}/hidratacion_por_actividad.png", min_sesiones,
+    )
+    _imprimir_y_graficar_hidratacion(
+        resultados_tipo, f"Por tipo de actividad (últimos {days} días)",
+        f"{GRAFICAS_DIR}/hidratacion_por_tipo.png", min_sesiones,
+    )
 
 
 REPORTES = {
