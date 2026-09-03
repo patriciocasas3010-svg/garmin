@@ -59,29 +59,23 @@ def _fmt(v):
     return v
 
 
-def main():
-    if not os.path.exists(CREDENCIALES_PATH) or not os.path.exists(SHEET_ID_PATH):
-        print("(No se encontró configuración para enviar tu resumen al nutriólogo; se omite este paso.)")
-        return
+def sheet_config_disponible() -> bool:
+    return os.path.exists(CREDENCIALES_PATH) and os.path.exists(SHEET_ID_PATH)
 
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-    except ImportError:
-        print("(Faltan librerías para enviar tu resumen al nutriólogo; se omite este paso.)")
-        return
 
+def push_snapshot(nombre: str, runtime_data: dict) -> None:
+    """Manda un runtime_data (de garmin_metrics.build_runtime_data o
+    apple_health.build_runtime_data -- misma forma exacta) a la hoja de
+    Google del nutriólogo. Compartido por push_resumen.py (Garmin) y
+    push_resumen_apple.py (Apple Health), así que un paciente Garmin y uno
+    Apple terminan en la misma hoja, con el mismo formato."""
+    import gspread
+    from google.oauth2.service_account import Credentials
     import garmin_metrics as gm
-    from garmin_session import get_client
 
     with open(SHEET_ID_PATH, encoding="utf-8") as f:
         sheet_id = f.read().strip()
 
-    nombre = _get_nombre()
-
-    print("Calculando tu dashboard completo para tu nutriólogo (puede tardar un poco)...")
-    client = get_client()
-    runtime_data = gm.build_runtime_data(client)
     resumen = runtime_data["resumen_mes"]
 
     snapshot = gm.snapshot_to_json(runtime_data)
@@ -134,6 +128,29 @@ def main():
         ws.append_row(fila)
 
     print(f"Listo, tu dashboard se envió a tu nutriólogo ({nombre}).")
+
+
+def main():
+    if not sheet_config_disponible():
+        print("(No se encontró configuración para enviar tu resumen al nutriólogo; se omite este paso.)")
+        return
+
+    try:
+        import gspread  # noqa: F401
+        from google.oauth2.service_account import Credentials  # noqa: F401
+    except ImportError:
+        print("(Faltan librerías para enviar tu resumen al nutriólogo; se omite este paso.)")
+        return
+
+    import garmin_metrics as gm
+    from garmin_session import get_client
+
+    nombre = _get_nombre()
+
+    print("Calculando tu dashboard completo para tu nutriólogo (puede tardar un poco)...")
+    client = get_client()
+    runtime_data = gm.build_runtime_data(client)
+    push_snapshot(nombre, runtime_data)
 
 
 if __name__ == "__main__":

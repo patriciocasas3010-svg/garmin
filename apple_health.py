@@ -24,6 +24,8 @@ da de forma confiable):
   cuando el reloj no da un Sleep Score propio.
 """
 
+import glob
+import os
 import zipfile
 import xml.etree.ElementTree as ET
 from bisect import bisect_left
@@ -48,6 +50,17 @@ from garmin_reports import _activity_load
 # ---------------------------------------------------------------------------
 # Encontrar y parsear el XML dentro del .zip que exporta la app Salud
 # ---------------------------------------------------------------------------
+
+def find_export_zip(folder: str = ".") -> str | None:
+    """Busca el .zip de exportación de Salud en una carpeta. El nombre
+    cambia según el idioma del iPhone (export.zip en inglés, exportar.zip en
+    español), así que se busca por patrón en vez de un nombre fijo."""
+    candidatos = sorted(
+        p for p in glob.glob(os.path.join(folder, "*.zip"))
+        if "export" in os.path.basename(p).lower()
+    )
+    return candidatos[0] if candidatos else None
+
 
 def _find_export_xml(path: str) -> str:
     """Acepta el .zip que exporta la app Salud, una carpeta ya descomprimida,

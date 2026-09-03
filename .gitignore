@@ -9,3 +9,5 @@ graficas/
 credenciales_hoja.json
 hoja_id.txt
 .nombre_paciente.txt
+*export*.zip
+apple_health_export/

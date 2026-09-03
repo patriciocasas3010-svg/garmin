@@ -214,6 +214,29 @@ alguien abre la copia de otra persona, el programa muestra de inmediato de
 quién es la cuenta conectada ("Usuario: ...") — si no es la persona
 correcta, hay que cerrar y abrir la copia que sí es suya.
 
+### Pacientes con Apple Watch / iPhone (sin reloj Garmin)
+
+El mismo dashboard también funciona con datos de la app **Salud** del
+iPhone (incluye lo que mide un Apple Watch), sin necesidad de ninguna
+cuenta en la nube -- Apple no ofrece una forma de "iniciar sesión" para
+bajar estos datos automáticamente como sí hace Garmin, así que el paciente
+exporta un archivo una vez desde su iPhone y lo pone en la carpeta.
+
+Usa los archivos `iniciar_paciente_apple.command` (Mac) /
+`iniciar_paciente_apple.bat` (Windows) en vez de los normales, y dale al
+paciente **`GUIA_PACIENTES_APPLE.md`** en vez de `GUIA_PACIENTES.md`. El
+motor que lee esos datos es [`apple_health.py`](apple_health.py): arma
+exactamente la misma estructura que usa el dashboard de Garmin, así que un
+paciente Garmin y uno Apple terminan en la misma hoja de Google y en el
+mismo dashboard central, sin distinción. Dos métricas exclusivas de Garmin
+(Body Battery y Training Readiness) no tienen equivalente en Apple Health y
+aparecen como "no disponible" -- el resto (sueño, HRV, frecuencia cardiaca,
+calorías, zonas de entrenamiento) se calcula igual.
+
+A diferencia de Garmin, aquí no hay una sesión que se actualice sola: para
+ver datos más recientes, el paciente vuelve a exportar desde su iPhone y
+reemplaza el archivo `.zip` en la carpeta.
+
 ### Un link central donde eliges al paciente y ves su dashboard completo
 
 Si además quieres un solo link (para no depender de que cada paciente traiga
