@@ -26,7 +26,9 @@ import streamlit as st
 from google.oauth2.service_account import Credentials
 
 import garmin_metrics as gm
-from garmin_dashboard_ui import render_dashboard_body
+import inbody_ocr
+import inbody_store
+from garmin_dashboard_ui import render_dashboard_body, render_inbody_section
 
 st.set_page_config(page_title="Resumen de pacientes", layout="wide", page_icon="🩺")
 
@@ -66,12 +68,17 @@ if not _check_password():
 
 
 @st.cache_resource
-def _worksheet():
+def _gc() -> gspread.Client:
     creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
-    scope = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    # Antes era de solo lectura -- ahora también necesita poder escribir,
+    # para guardar los resultados de InBody que subes desde aquí mismo.
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    gc = gspread.authorize(creds)
-    return gc.open_by_key(st.secrets["SHEET_ID"]).sheet1
+    return gspread.authorize(creds)
+
+
+def _worksheet():
+    return _gc().open_by_key(st.secrets["SHEET_ID"]).sheet1
 
 
 @st.cache_data(ttl=300)
@@ -161,6 +168,74 @@ with st.expander("¿Cómo actualiza sus datos este paciente?"):
             "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
             "tardar hasta 5 minutos en reflejarlo sola)."
         )
+
+st.divider()
+st.subheader("🧬 Composición corporal (InBody)")
+
+with st.expander("Subir nuevo resultado de InBody"):
+    archivo = st.file_uploader(
+        "Foto o PDF del resultado", type=["jpg", "jpeg", "png", "pdf"], key=f"inbody_upload_{paciente}",
+    )
+    if archivo is not None and st.button("Leer archivo", key=f"inbody_leer_{paciente}"):
+        with st.spinner("Leyendo el archivo (OCR, puede tardar unos segundos)..."):
+            try:
+                texto = inbody_ocr.extract_text(archivo.getvalue(), archivo.name)
+                st.session_state[f"inbody_draft_{paciente}"] = inbody_ocr.parse_inbody_text(texto)
+            except FileNotFoundError:
+                st.error(
+                    "Falta Tesseract instalado en el servidor -- agrega 'tesseract-ocr', "
+                    "'tesseract-ocr-spa' y 'poppler-utils' a packages.txt y reinicia la app."
+                )
+            except Exception as e:
+                st.error(f"No se pudo leer el archivo: {e}")
+
+    draft = st.session_state.get(f"inbody_draft_{paciente}")
+    if draft is not None:
+        st.caption(
+            "La lectura automática puede tener errores, sobre todo en números (a veces se pierde "
+            "un punto decimal, por ejemplo). Revisa y corrige antes de guardar."
+        )
+        with st.form(f"inbody_form_{paciente}"):
+            col1, col2, col3 = st.columns(3)
+            fecha = col1.text_input("Fecha (DD.MM.AAAA)", value=draft.get("fecha") or "")
+            modelo = col2.text_input("Modelo", value=draft.get("modelo") or "")
+            sexo = col3.selectbox("Sexo", ["Femenino", "Masculino"], index=0 if draft.get("sexo") != "Masculino" else 1)
+
+            col4, col5 = st.columns(2)
+            altura = col4.number_input("Altura (cm)", value=float(draft.get("altura_cm") or 0), step=0.5)
+            edad = col5.number_input("Edad", value=int(draft.get("edad") or 0), step=1)
+
+            col6, col7, col8, col9 = st.columns(4)
+            peso = col6.number_input("Peso (kg)", value=float(draft.get("peso_kg") or 0), step=0.1)
+            masa_grasa = col7.number_input("Masa grasa (kg)", value=float(draft.get("masa_grasa_kg") or 0), step=0.1)
+            mme = col8.number_input("MME -- masa muscular (kg)", value=float(draft.get("mme_kg") or 0), step=0.1)
+            grasa_visceral = col9.number_input("Grasa visceral (nivel)", value=int(draft.get("grasa_visceral") or 0), step=1)
+
+            col10, col11, col12, col13 = st.columns(4)
+            agua_total = col10.number_input("Agua total (L)", value=float(draft.get("agua_total_l") or 0), step=0.1)
+            agua_intra = col11.number_input("Agua intracelular (L)", value=float(draft.get("agua_intra_l") or 0), step=0.1)
+            agua_extra = col12.number_input("Agua extracelular (L)", value=float(draft.get("agua_extra_l") or 0), step=0.1)
+            imc = col13.number_input("IMC", value=float(draft.get("imc") or 0), step=0.1)
+
+            if st.form_submit_button("Guardar en el historial", type="primary"):
+                campos_final = {
+                    "fecha": fecha, "modelo": modelo, "sexo": sexo,
+                    "altura_cm": altura or None, "edad": int(edad) or None,
+                    "peso_kg": peso or None, "masa_grasa_kg": masa_grasa or None,
+                    "mme_kg": mme or None, "grasa_visceral": int(grasa_visceral) or None,
+                    "agua_total_l": agua_total or None, "agua_intra_l": agua_intra or None,
+                    "agua_extra_l": agua_extra or None, "imc": imc or None,
+                    "pgc_pct": draft.get("pgc_pct"),
+                }
+                inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                st.session_state.pop(f"inbody_draft_{paciente}", None)
+                st.success("Guardado -- se agregó al historial de este paciente.")
+                st.rerun()
+
+historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+render_inbody_section(historial_inbody)
+
+st.divider()
 
 if not datos_json:
     st.warning(

@@ -204,6 +204,75 @@ def style_estado_table(df: pd.DataFrame):
 
 
 # ---------------------------------------------------------------------------
+# Composición corporal (InBody) -- independiente de Garmin/Apple, se llama
+# aparte desde dashboard_pacientes.py cuando hay historial guardado.
+# ---------------------------------------------------------------------------
+
+def render_inbody_section(historial: pd.DataFrame):
+    """historial: DataFrame con las columnas de inbody_store.ENCABEZADOS,
+    ya filtrado a un solo paciente, más reciente al final."""
+    if historial.empty:
+        st.info(
+            "Todavía no hay ningún resultado de InBody guardado para este paciente. "
+            "Sube uno con el botón de arriba."
+        )
+        return
+
+    historial = historial.copy()
+    # dayfirst=True porque el formato es DD.MM.AAAA (o DD.MM.AA) -- sin un
+    # format= fijo, para aceptar tanto años de 2 como de 4 dígitos.
+    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
+    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
+    if historial.empty:
+        st.info("No se pudieron leer las fechas de este historial.")
+        return
+    ultimo = historial.iloc[-1]
+
+    st.caption(
+        f"Último InBody: {ultimo.get('Fecha', '')} · {ultimo.get('Modelo', '')} · "
+        f"{ultimo.get('Altura_cm', '—')} cm · {ultimo.get('Edad', '—')} años · {ultimo.get('Sexo', '—')}"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Peso", f"{ultimo['Peso_kg']:.1f} kg" if pd.notna(ultimo.get("Peso_kg")) else "—")
+    c2.metric("Masa grasa", f"{ultimo['MasaGrasa_kg']:.1f} kg" if pd.notna(ultimo.get("MasaGrasa_kg")) else "—")
+    c3.metric("Masa muscular (MME)", f"{ultimo['MME_kg']:.1f} kg" if pd.notna(ultimo.get("MME_kg")) else "—")
+    c4.metric(
+        "Grasa visceral", f"Nivel {ultimo['GrasaVisceral']:.0f}" if pd.notna(ultimo.get("GrasaVisceral")) else "—",
+        help="Escala InBody: 1-9 normal, 10-14 alto, 15+ muy alto.",
+    )
+
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Agua corporal total", f"{ultimo['AguaTotal_L']:.1f} L" if pd.notna(ultimo.get("AguaTotal_L")) else "—")
+    c6.metric("Agua intracelular", f"{ultimo['AguaIntra_L']:.1f} L" if pd.notna(ultimo.get("AguaIntra_L")) else "—")
+    c7.metric("Agua extracelular", f"{ultimo['AguaExtra_L']:.1f} L" if pd.notna(ultimo.get("AguaExtra_L")) else "—")
+    c8.metric("IMC", f"{ultimo['IMC']:.1f}" if pd.notna(ultimo.get("IMC")) else "—")
+
+    if len(historial) < 2:
+        st.caption("Sube más resultados a lo largo del tiempo para ver la evolución.")
+        return
+
+    st.divider()
+    st.markdown("**Evolución**")
+    serie_peso = pd.Series(historial["Peso_kg"].values, index=historial["_fecha"], name="Peso")
+    serie_grasa = pd.Series(historial["MasaGrasa_kg"].values, index=historial["_fecha"], name="Grasa")
+    serie_mme = pd.Series(historial["MME_kg"].values, index=historial["_fecha"], name="MME")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        chart = line_with_rule(serie_peso, "Peso (kg)", BLUE)
+        if chart is not None:
+            st.altair_chart(chart, width="stretch")
+    with col_b:
+        chart = line_with_rule(serie_mme, "Masa muscular -- MME (kg)", VIOLET)
+        if chart is not None:
+            st.altair_chart(chart, width="stretch")
+    chart = line_with_rule(serie_grasa, "Masa grasa (kg)", ORANGE)
+    if chart is not None:
+        st.altair_chart(chart, width="stretch")
+
+
+# ---------------------------------------------------------------------------
 # Cuerpo del dashboard (pestañas) -- toma un dict ya armado por
 # garmin_metrics.build_runtime_data() o snapshot_from_json()
 # ---------------------------------------------------------------------------
