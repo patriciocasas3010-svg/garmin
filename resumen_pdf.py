@@ -20,7 +20,9 @@ _MARGIN = 18
 _CONTENT_W = _PAGE_W - 2 * _MARGIN
 
 
-def _fmt(value, suffix: str = "", decimals: int = 1, none_text: str = "—") -> str:
+def _fmt(value, suffix: str = "", decimals: int = 1, none_text: str = "N/D") -> str:
+    # none_text NO puede ser un guion largo "—" -- la fuente base del PDF
+    # (Helvetica/latin-1) no lo puede codificar y tira FPDFUnicodeEncodingException.
     if value is None:
         return none_text
     try:
