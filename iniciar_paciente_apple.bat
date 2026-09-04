@@ -5,10 +5,6 @@ REM falta instalar Python a mano, este script lo resuelve solo.
 
 cd /d "%~dp0"
 
-set "zip_encontrado="
-for %%f in (*export*.zip) do set "zip_encontrado=%%f"
-if not defined zip_encontrado goto :sin_zip
-
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 
 where uv >nul 2>nul
@@ -33,6 +29,13 @@ if not exist .venv (
 call .venv\Scripts\activate.bat
 uv pip install -q -r requirements.txt
 if errorlevel 1 goto :falla_pip
+
+python pedir_nombre.py
+if errorlevel 1 goto :falla_nombre
+
+set "zip_encontrado="
+for %%f in (*export*.zip) do set "zip_encontrado=%%f"
+if not defined zip_encontrado goto :sin_zip
 
 echo.
 echo Leyendo tu archivo de Salud y preparando tu dashboard...
@@ -70,5 +73,10 @@ exit /b 1
 echo No se pudieron instalar los componentes necesarios.
 echo Revisa tu conexion a internet e intentalo de nuevo, o avisale a tu
 echo nutriologo con una foto de esta ventana.
+pause
+exit /b 1
+
+:falla_nombre
+echo No se pudo guardar tu nombre. Revisa el mensaje de arriba.
 pause
 exit /b 1

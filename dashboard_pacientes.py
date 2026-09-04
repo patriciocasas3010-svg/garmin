@@ -39,7 +39,7 @@ from garmin_dashboard_ui import (
     render_dashboard_body,
     render_inbody_section,
 )
-from push_resumen import write_snapshot_to_worksheet
+from push_resumen import crear_paciente_vacio, write_snapshot_to_worksheet
 from theme import apply_theme, render_header
 
 st.set_page_config(page_title="Resumen de pacientes", layout="wide", page_icon="🩺")
@@ -115,21 +115,40 @@ except Exception as e:
 
 if st.session_state["paciente_actual"] is None:
     render_header("Resumen de pacientes")
-    st.caption("Selecciona tu nombre para ver tu Tablero Maestro de Rendimiento.")
+    st.caption("Selecciona un paciente para ver su Tablero Maestro de Rendimiento.")
 
-    if df.empty or "Nombre" not in df.columns:
+    nombres = []
+    if not df.empty and "Nombre" in df.columns:
+        nombres = sorted(df["Nombre"].dropna().unique())
+
+    if nombres:
+        nombre = st.selectbox("Paciente", nombres, index=None, placeholder="Selecciona un paciente...")
+        if st.button("Ver dashboard", type="primary", disabled=not nombre):
+            st.session_state["paciente_actual"] = nombre
+            st.rerun()
+    else:
         st.info(
-            "Todavía no hay resúmenes enviados por ningún paciente. "
-            "Se llena solo cuando un paciente abre su dashboard local por primera vez."
+            "Todavía no hay ningún paciente. Se llena solo cuando alguien abre su dashboard local "
+            "por primera vez, o puedes crear uno nuevo abajo para empezar a subirle InBody/mediciones ya."
         )
-        st.stop()
 
-    nombres = sorted(df["Nombre"].dropna().unique())
-    nombre = st.selectbox("Tu nombre", nombres, index=None, placeholder="Selecciona tu nombre...")
-
-    if st.button("Ver mi dashboard", type="primary", disabled=not nombre):
-        st.session_state["paciente_actual"] = nombre
-        st.rerun()
+    with st.expander("➕ Agregar paciente nuevo (sin Garmin/Apple/Oura todavía)"):
+        st.caption(
+            "Úsalo cuando quieras empezar a subirle InBody o mediciones antropométricas a un "
+            "paciente antes de (o sin que nunca) conecte un reloj, anillo o iPhone. En cuanto ese "
+            "paciente sí mande datos de un wearable, se juntan solos en el mismo perfil -- no hace "
+            "falta crearlo dos veces."
+        )
+        nombre_nuevo = st.text_input("Nombre del paciente nuevo", key="nombre_nuevo_paciente")
+        if st.button("Crear paciente", disabled=not nombre_nuevo.strip()):
+            nombre_nuevo = nombre_nuevo.strip()
+            if nombre_nuevo in nombres:
+                st.error(f'Ya existe un paciente con el nombre "{nombre_nuevo}".')
+            else:
+                crear_paciente_vacio(_worksheet(), nombre_nuevo)
+                st.cache_data.clear()
+                st.session_state["paciente_actual"] = nombre_nuevo
+                st.rerun()
 
     st.stop()
 

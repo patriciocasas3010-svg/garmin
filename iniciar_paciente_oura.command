@@ -34,8 +34,10 @@ fi
 source .venv/bin/activate
 uv pip install -q -r requirements.txt || falla "No se pudieron instalar los componentes necesarios. Revisa tu conexión a internet e inténtalo de nuevo."
 
+python pedir_nombre.py || falla "No se pudo guardar tu nombre. Revisa el mensaje de arriba."
+
 echo ""
-echo "Si es tu primera vez, te va a pedir que pegues tu Personal Access Token de Oura."
+echo "Ahora, si es tu primera vez, te va a pedir que pegues tu Personal Access Token de Oura."
 echo "(nunca se comparte con nadie más, se queda solo en esta computadora)"
 echo ""
 

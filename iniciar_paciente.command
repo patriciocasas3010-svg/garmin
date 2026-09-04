@@ -34,8 +34,10 @@ fi
 source .venv/bin/activate
 uv pip install -q -r requirements.txt || falla "No se pudieron instalar los componentes necesarios. Revisa tu conexión a internet e inténtalo de nuevo."
 
+python pedir_nombre.py || falla "No se pudo guardar tu nombre. Revisa el mensaje de arriba."
+
 echo ""
-echo "Si es tu primera vez, te va a pedir tu correo y contraseña de Garmin Connect."
+echo "Ahora, si es tu primera vez, te va a pedir tu correo y contraseña de Garmin Connect."
 echo "(nunca se comparten con nadie más, se quedan solo en esta computadora)"
 echo ""
 

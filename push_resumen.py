@@ -63,6 +63,45 @@ def sheet_config_disponible() -> bool:
     return os.path.exists(CREDENCIALES_PATH) and os.path.exists(SHEET_ID_PATH)
 
 
+def _registros_con_encabezados(ws) -> list[list]:
+    """Todas las filas de la hoja, asegurando que la primera sea
+    ENCABEZADOS (la crea o la actualiza si falta, sin tocar los datos ya
+    guardados de cada paciente)."""
+    registros = ws.get_all_values()
+    if not registros:
+        ws.append_row(ENCABEZADOS)
+        return [ENCABEZADOS]
+    if registros[0] != ENCABEZADOS:
+        # Hoja creada con una versión anterior de este script, a la que le
+        # falta alguna columna nueva ("Datos", "Fuente", ...).
+        ws.update(f"A1:{chr(ord('A') + len(ENCABEZADOS) - 1)}1", [ENCABEZADOS])
+        registros[0] = ENCABEZADOS
+    return registros
+
+
+def _fila_de(registros: list[list], nombre: str) -> int | None:
+    """Número de fila (1-indexado, para la API de Sheets) de este paciente, o None."""
+    for i, row in enumerate(registros):
+        if row and row[0] == nombre:
+            return i + 1
+    return None
+
+
+def crear_paciente_vacio(ws, nombre: str) -> None:
+    """Crea una fila para un paciente que todavía no tiene ningún dato de
+    wearable (Garmin/Apple/Oura) -- para poder empezar a subirle InBody o
+    mediciones antropométricas desde el dashboard central desde ya, sin
+    esperar a que conecte su reloj/anillo/iPhone. En cuanto el paciente sí
+    mande su dashboard, write_snapshot_to_worksheet() rellena esta misma
+    fila con sus datos reales (la busca por nombre, no crea una aparte).
+    No hace nada si el paciente ya existe."""
+    registros = _registros_con_encabezados(ws)
+    if _fila_de(registros, nombre):
+        return
+    fila = [nombre, date.today().isoformat()] + [""] * (len(ENCABEZADOS) - 2)
+    ws.append_row(fila)
+
+
 def write_snapshot_to_worksheet(ws, nombre: str, runtime_data: dict, fuente: str = "Garmin") -> None:
     """Escribe un runtime_data (de garmin_metrics.build_runtime_data,
     apple_health.build_runtime_data u oura_metrics.build_runtime_data --
@@ -99,22 +138,8 @@ def write_snapshot_to_worksheet(ws, nombre: str, runtime_data: dict, fuente: str
         fuente,
     ]
 
-    registros = ws.get_all_values()
-    if not registros:
-        ws.append_row(ENCABEZADOS)
-        registros = [ENCABEZADOS]
-    elif registros[0] != ENCABEZADOS:
-        # Hoja creada con una versión anterior de este script, a la que le
-        # falta alguna columna nueva ("Datos", "Fuente", ...) -- se agrega
-        # sin tocar los datos ya guardados de cada paciente.
-        ws.update(f"A1:{chr(ord('A') + len(ENCABEZADOS) - 1)}1", [ENCABEZADOS])
-        registros[0] = ENCABEZADOS
-
-    fila_index = None
-    for i, row in enumerate(registros):
-        if row and row[0] == nombre:
-            fila_index = i + 1  # 1-indexado para la hoja
-            break
+    registros = _registros_con_encabezados(ws)
+    fila_index = _fila_de(registros, nombre)
 
     ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
     if fila_index:

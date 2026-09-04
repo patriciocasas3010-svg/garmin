@@ -30,8 +30,11 @@ call .venv\Scripts\activate.bat
 uv pip install -q -r requirements.txt
 if errorlevel 1 goto :falla_pip
 
+python pedir_nombre.py
+if errorlevel 1 goto :falla_nombre
+
 echo.
-echo Si es tu primera vez, te va a pedir tu correo y contrasena de Garmin Connect.
+echo Ahora, si es tu primera vez, te va a pedir tu correo y contrasena de Garmin Connect.
 echo (nunca se comparten con nadie mas, se quedan solo en esta computadora)
 echo.
 
@@ -66,5 +69,10 @@ exit /b 1
 
 :falla_login
 echo No se pudo iniciar sesion en Garmin. Revisa el mensaje de arriba.
+pause
+exit /b 1
+
+:falla_nombre
+echo No se pudo guardar tu nombre. Revisa el mensaje de arriba.
 pause
 exit /b 1

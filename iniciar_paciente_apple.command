@@ -14,15 +14,6 @@ falla() {
 
 cd "$(dirname "$0")" || falla "No se pudo entrar a la carpeta del programa."
 
-zip_encontrado=$(ls *.zip 2>/dev/null | grep -i export | head -1)
-if [ -z "$zip_encontrado" ]; then
-    falla "No encontré tu archivo de exportación de Salud en esta carpeta.
-
-En tu iPhone: Ajustes -> tu app Salud -> foto de perfil (arriba a la derecha) -> 'Exportar todos los datos de salud'.
-Cuando termine, manda ese .zip a esta computadora (AirDrop, correo) y ponlo dentro de esta misma carpeta -- no hace falta descomprimirlo.
-Luego vuelve a hacer doble clic en este archivo."
-fi
-
 export PATH="$HOME/.local/bin:$PATH"
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -42,6 +33,17 @@ fi
 
 source .venv/bin/activate
 uv pip install -q -r requirements.txt || falla "No se pudieron instalar los componentes necesarios. Revisa tu conexión a internet e inténtalo de nuevo."
+
+python pedir_nombre.py || falla "No se pudo guardar tu nombre. Revisa el mensaje de arriba."
+
+zip_encontrado=$(ls *.zip 2>/dev/null | grep -i export | head -1)
+if [ -z "$zip_encontrado" ]; then
+    falla "No encontré tu archivo de exportación de Salud en esta carpeta.
+
+En tu iPhone: Ajustes -> tu app Salud -> foto de perfil (arriba a la derecha) -> 'Exportar todos los datos de salud'.
+Cuando termine, manda ese .zip a esta computadora (AirDrop, correo) y ponlo dentro de esta misma carpeta -- no hace falta descomprimirlo.
+Luego vuelve a hacer doble clic en este archivo."
+fi
 
 echo ""
 echo "Leyendo tu archivo de Salud y preparando tu dashboard..."

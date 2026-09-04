@@ -30,8 +30,11 @@ call .venv\Scripts\activate.bat
 uv pip install -q -r requirements.txt
 if errorlevel 1 goto :falla_pip
 
+python pedir_nombre.py
+if errorlevel 1 goto :falla_nombre
+
 echo.
-echo Si es tu primera vez, te va a pedir que pegues tu Personal Access Token de Oura.
+echo Ahora, si es tu primera vez, te va a pedir que pegues tu Personal Access Token de Oura.
 echo (nunca se comparte con nadie mas, se queda solo en esta computadora)
 echo.
 
@@ -65,5 +68,10 @@ exit /b 1
 
 :falla_token
 echo No se pudo guardar tu token de Oura. Revisa el mensaje de arriba.
+pause
+exit /b 1
+
+:falla_nombre
+echo No se pudo guardar tu nombre. Revisa el mensaje de arriba.
 pause
 exit /b 1
