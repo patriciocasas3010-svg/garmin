@@ -174,6 +174,14 @@ with st.expander("¿Cómo actualiza sus datos este paciente?"):
             "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
             "tardar hasta 5 minutos en reflejarlo sola)."
         )
+    elif fuente == "Oura":
+        st.markdown(
+            "Su anillo sincroniza solo con la app de Oura en su teléfono (por Bluetooth, cuando "
+            "estén cerca) -- solo tiene que volver a abrir `iniciar_paciente_oura.command`/`.bat` "
+            "en su computadora (no necesita hacer nada más, su token de Oura ya está guardado). "
+            "Después de eso, dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta "
+            "página puede tardar hasta 5 minutos en reflejarlo sola)."
+        )
     else:
         st.markdown(
             "Solo tiene que volver a abrir `iniciar_paciente.command`/`.bat` en su computadora "

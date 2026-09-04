@@ -347,9 +347,160 @@ def build_guia_apple_pdf() -> bytes:
     return _render(pdf, _CONTENIDO_APPLE)
 
 
+# ---------------------------------------------------------------------------
+# Guía Oura
+# ---------------------------------------------------------------------------
+
+_CONTENIDO_OURA = [
+    ("p",
+     "Esto te permite ver tu actividad, sueño y recuperación de tu anillo "
+     "Oura en la consulta con tu nutriólogo. Se hace **una sola vez** por "
+     "adelantado (no en la consulta, para no perder tiempo ahí) y toma "
+     "unos 10 minutos."),
+    ("note",
+     "**No metes tu correo ni tu contraseña de Oura en ningún lado.** En "
+     "vez de eso generas un \"token\" (una llave de acceso) desde tu "
+     "propia cuenta de Oura, que solo permite leer tus datos — nunca tu "
+     "contraseña se comparte con tu nutriólogo ni con nadie."),
+
+    ("h2", "Paso 1: Genera tu Personal Access Token"),
+    ("ol", [
+        "Entra a **cloud.ouraring.com/personal-access-tokens** desde el "
+        "navegador de tu computadora e inicia sesión con tu cuenta de "
+        "Oura (la misma que usas en la app del teléfono).",
+        "Dale clic a **\"Create New Personal Access Token\"**.",
+        "Ponle cualquier nombre (por ejemplo \"Nutriólogo\") y confirma.",
+        "Te va a mostrar un código largo de letras y números — "
+        "**cópialo**. Solo se alcanza a ver esa vez; si lo pierdes, "
+        "puedes generar uno nuevo repitiendo este paso.",
+    ]),
+
+    ("h2", "Paso 2: Consigue la carpeta del programa"),
+    ("p",
+     "Tu nutriólogo te va a dar una carpeta (o un archivo .zip). Si es un "
+     ".zip, descomprímelo (doble clic en Mac, clic derecho -> \"Extraer "
+     "todo\" en Windows) y pon la carpeta resultante en tu Escritorio."),
+    ("p",
+     "**¿Van a usar la misma computadora dos personas de la familia, cada "
+     "quien con su propio anillo Oura?** Cada persona necesita su "
+     "**propia copia** de esta carpeta (por ejemplo, cambia el nombre de "
+     "cada copia a \"oura - Juan\", \"oura - María\"). No compartan una "
+     "sola copia entre dos cuentas de Oura distintas."),
+
+    ("h2", "Paso 3: Abre el programa con doble clic"),
+    ("p", "Entra a la carpeta y haz doble clic en:"),
+    ("files", [("Mac", "iniciar_paciente_oura.command"), ("Windows", "iniciar_paciente_oura.bat")]),
+    ("p",
+     "Se va a abrir una ventana de texto (Terminal). **No necesitas "
+     "instalar nada por tu cuenta**: la primera vez que la abres, el "
+     "programa prepara todo solo (necesita internet para eso), lo cual "
+     "tarda 1-2 minutos; después es mucho más rápido. Solo espera sin "
+     "cerrar la ventana."),
+
+    ("h3", "Si Mac no te deja abrirlo (\"no se puede abrir porque es de un desarrollador no identificado\")"),
+    ("p",
+     "Haz clic derecho (o Ctrl+clic) sobre **iniciar_paciente_oura.command** "
+     "-> \"Abrir\" -> confirma \"Abrir\" en la ventana de advertencia. Solo "
+     "hace falta la primera vez."),
+
+    ("h3", "Si Mac dice que el archivo \"está dañado\" y que lo muevas a la basura"),
+    ("p",
+     "No lo muevas a la basura, no está dañado de verdad — esto pasa "
+     "cuando el .zip viajó por WhatsApp (a veces lo recomprime y eso "
+     "confunde a macOS). Se arregla así:"),
+    ("ol", [
+        "Dale \"Cancelar\" a ese aviso.",
+        "Abre la app **Terminal** (Spotlight con Cmd+Espacio, escribe \"Terminal\").",
+        "Escribe **xattr -cr ** (con un espacio al final, sin Enter todavía).",
+        "Arrastra la carpeta del programa desde el Finder hacia la ventana de Terminal — se pega sola la ruta.",
+        "Presiona Enter.",
+        "Vuelve a intentar abrir **iniciar_paciente_oura.command** como de costumbre.",
+    ]),
+    ("p",
+     "Si te vuelve a pasar seguido, pide que te compartan la carpeta por "
+     "Google Drive o correo en vez de WhatsApp — así no debería volver a "
+     "pasar."),
+
+    ("h3", "Si Windows te avisa \"Windows protegió su PC\""),
+    ("p",
+     "Es normal la primera vez que abres un programa nuevo — no significa "
+     "que esté dañado ni que tenga virus, solo que Windows todavía no lo "
+     "reconoce."),
+    ("ol", [
+        "En esa ventana azul, busca el texto pequeño que dice **\"Más información\"** y dale clic.",
+        "Va a aparecer un botón nuevo, **\"Ejecutar de todas formas\"** — dale clic ahí.",
+        "El programa va a abrir normal. Esto solo hace falta la primera vez.",
+    ]),
+    ("warn",
+     "Si en vez de eso tu antivirus (Windows Defender u otro) borra el "
+     "archivo o dice que es una amenaza, avísale a tu nutriólogo con una "
+     "foto de ese mensaje — puede que tengas que restaurarlo desde la "
+     "\"Cuarentena\" del antivirus o pedir la carpeta de nuevo."),
+
+    ("h2", "Paso 4: Pega tu token (solo la primera vez)"),
+    ("p",
+     "La ventana te va a pedir que **pegues el token** que copiaste en el "
+     "Paso 1 (no se ve mientras lo pegas, es normal) y presiones Enter."),
+    ("p",
+     "Después de esto, es posible que te pregunte **tu nombre** (para que "
+     "tu nutriólogo sepa cuál dashboard es el tuyo) — escríbelo y presiona "
+     "Enter, solo te lo va a pedir esta primera vez."),
+    ("p",
+     "Enseguida tu navegador va a abrir una página con tus datos. Las "
+     "próximas veces que abras el programa, ya no te va a pedir nada de "
+     "esto."),
+
+    ("h2", "Paso 5: En la consulta (o antes, para llegar con datos frescos)"),
+    ("p",
+     "Tu anillo sincroniza automáticamente con la app de Oura en tu "
+     "teléfono por Bluetooth cuando están cerca, y la app sube esos datos "
+     "a tu cuenta de Oura en cuanto tiene internet. Para llegar con tus "
+     "datos lo más actualizados posible a la consulta:"),
+    ("ol", [
+        "Trae puesto el anillo normalmente los días antes (entre más días "
+        "de registro, mejor lectura de tu recuperación y tendencias).",
+        "Abre la app de Oura en tu teléfono un momento antes de la "
+        "consulta (con internet, wifi o datos) para forzar que sincronice "
+        "lo más reciente.",
+        "Al llegar, haz doble clic en **iniciar_paciente_oura.command** / "
+        "**iniciar_paciente_oura.bat** de nuevo — como ya guardaste tu "
+        "token antes, va a abrir la página con tus datos actualizados "
+        "directamente, sin pedirte nada.",
+    ]),
+    ("p",
+     "Para cerrar el programa cuando termine la consulta, ve a la ventana "
+     "de Terminal que se abrió y presiona **Ctrl + C**."),
+
+    ("h2", "¿Qué se ve distinto a un reloj Garmin?"),
+    ("p",
+     "Tu dashboard se ve prácticamente igual (mismas pestañas), pero "
+     "algunas cosas que Oura no reporta (o no de forma confiable) van a "
+     "aparecer como \"no disponible\": **Desgaste físico (Body Battery)**, "
+     "**eficiencia de carrera y zonas de FC de la semana** (Oura no da la "
+     "frecuencia cardiaca segundo a segundo de cada entrenamiento), "
+     "**hidratación** (Oura no registra cuánto tomas de agua) y **nivel de "
+     "estrés en número** (Oura solo lo reporta como categoría). Todo lo "
+     "demás — sueño, HRV, calorías, preparación física, entrenamientos "
+     "individuales — sí se calcula."),
+
+    ("h2", "¿Problemas?"),
+    ("p",
+     "Avísale a tu nutriólogo qué mensaje de error te salió (una foto de "
+     "la pantalla ayuda mucho) para que te pueda ayudar a resolverlo."),
+]
+
+
+def build_guia_oura_pdf() -> bytes:
+    pdf = ps.new_branded_pdf()
+    ps.draw_header(pdf, "Conecta tu anillo Oura", "Guía para tus consultas")
+    return _render(pdf, _CONTENIDO_OURA)
+
+
 if __name__ == "__main__":
     with open("GUIA_PACIENTES.pdf", "wb") as f:
         f.write(build_guia_garmin_pdf())
     with open("GUIA_PACIENTES_APPLE.pdf", "wb") as f:
         f.write(build_guia_apple_pdf())
-    print("Listo: GUIA_PACIENTES.pdf y GUIA_PACIENTES_APPLE.pdf")
+    with open("GUIA_PACIENTES_OURA.pdf", "wb") as f:
+        f.write(build_guia_oura_pdf())
+    print("Listo: GUIA_PACIENTES.pdf, GUIA_PACIENTES_APPLE.pdf y GUIA_PACIENTES_OURA.pdf")

@@ -4,6 +4,7 @@ __pycache__/
 venv/
 .garminconnect
 .garminconnect_base64
+.oura_token
 graficas/
 .streamlit/secrets.toml
 credenciales_hoja.json
