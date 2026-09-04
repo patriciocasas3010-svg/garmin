@@ -41,8 +41,12 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
         texto_completo = []
         for img in imagenes:
             out_base = tmp / (img.stem + "_ocr")
+            # --psm 6 ("un solo bloque uniforme de texto") lee muchísimo
+            # mejor las tablas densas de InBody que el modo automático por
+            # default -- sobre todo evita que se pierdan puntos decimales
+            # y que las columnas se mezclen entre sí.
             subprocess.run(
-                ["tesseract", str(img), str(out_base), "-l", "spa"],
+                ["tesseract", str(img), str(out_base), "-l", "spa", "--psm", "6"],
                 check=True, capture_output=True,
             )
             texto_completo.append(out_base.with_suffix(".txt").read_text(encoding="utf-8"))
@@ -63,7 +67,23 @@ def _a_float(s: str | None) -> float | None:
         return None
 
 
-def _valor_de_fila(lineas: list[str], etiqueta_patron: str, primero: bool = False) -> float | None:
+def _elige(nums: list[str], primero: bool, preferir_decimal: bool) -> str:
+    """Si preferir_decimal=True y hay al menos un número con punto/coma
+    entre los candidatos, se ignoran los que no lo tienen -- útil quando
+    varios números de columnas vecinas se mezclaron en la misma línea y el
+    correcto es justo el único que trae decimales (el resto son enteros
+    sueltos de otra fila)."""
+    candidatos = nums
+    if preferir_decimal:
+        decimales = [n for n in nums if "." in n or "," in n]
+        if decimales:
+            candidatos = decimales
+    return candidatos[0] if primero else candidatos[-1]
+
+
+def _valor_de_fila(
+    lineas: list[str], etiqueta_patron: str, primero: bool = False, preferir_decimal: bool = False,
+) -> float | None:
     """Busca la primera línea que haga match con etiqueta_patron.
 
     Las filas de este reporte vienen de dos formas distintas según cómo
@@ -72,7 +92,8 @@ def _valor_de_fila(lineas: list[str], etiqueta_patron: str, primero: bool = Fals
       - "MME (kg) 100 110 ... 170"                (línea siguiente:)
         "Masa de Musculo Esqueletico ... 21.6"    (el valor real)
     Si la línea de la etiqueta ya trae varios números seguidos (la regla
-    de la gráfica de barras), el valor real está en la siguiente línea.
+    de la gráfica de barras), el valor real está en la siguiente línea (o,
+    si esa también sale ilegible, dos líneas más abajo).
     """
     for i, linea in enumerate(lineas):
         if re.search(etiqueta_patron, linea, re.IGNORECASE):
@@ -80,14 +101,37 @@ def _valor_de_fila(lineas: list[str], etiqueta_patron: str, primero: bool = Fals
             # 0 números (la etiqueta y el valor cayeron en líneas
             # distintas) o >=4 números (esta línea es la regla de una
             # gráfica de barras) -- en ambos casos, el valor real está en
-            # la siguiente línea.
-            if (not nums or len(nums) >= 4) and i + 1 < len(lineas):
-                nums_sig = _numeros(lineas[i + 1])
-                if nums_sig:
-                    return _a_float(nums_sig[0] if primero else nums_sig[-1])
+            # una de las siguientes líneas.
+            if not nums or len(nums) >= 4:
+                for j in (i + 1, i + 2):
+                    if j < len(lineas):
+                        nums_sig = _numeros(lineas[j])
+                        if nums_sig:
+                            return _a_float(_elige(nums_sig, primero, preferir_decimal))
+                continue
             if nums:
-                return _a_float(nums[0] if primero else nums[-1])
+                return _a_float(_elige(nums, primero, preferir_decimal))
     return None
+
+
+_HEADER_RE = re.compile(
+    r"(\d{4,6}-\d+|\d{7,12})\s+"        # ID de perfil (con o sin guion, según el modelo)
+    r"(\d{2,3})\s*cm\s+"                # altura
+    r"(\d{1,3})\s+"                     # edad
+    r"(Femenino|Masculino)[^0-9\n]{0,15}"  # sexo (a veces sigue un "|" u otro símbolo suelto del OCR)
+    r"(\d{2}\.\d{2}\.\d{4}|\d{4}\.\d{2}\.\d{2})",  # fecha, DD.MM.AAAA o AAAA.MM.DD según el modelo
+    re.IGNORECASE,
+)
+
+
+def _normaliza_fecha(fecha_cruda: str) -> str:
+    """Algunos modelos de InBody imprimen la fecha AAAA.MM.DD en vez de
+    DD.MM.AAAA -- se detecta por cuál de los tres grupos trae 4 dígitos, y
+    se normaliza siempre a DD.MM.AAAA (el formato que usa el resto de la app)."""
+    partes = fecha_cruda.rstrip(".").split(".")
+    if len(partes[0]) == 4:
+        return f"{partes[2]}.{partes[1]}.{partes[0]}"
+    return fecha_cruda
 
 
 def parse_inbody_text(texto: str) -> dict:
@@ -96,41 +140,90 @@ def parse_inbody_text(texto: str) -> dict:
     formulario de revisión, nunca se inventa un valor."""
     lineas = texto.splitlines()
 
-    perfil_id = re.search(r"\b(\d{5,6}-\d+)\b", texto)
-    altura = _valor_de_fila(lineas, r"\d{2,3}\s*cm")
-    edad = _valor_de_fila(lineas, r"^Edad\b")
-    sexo_m = re.search(r"\b(Femenino|Masculino)\b", texto, re.IGNORECASE)
-    fecha_m = re.search(r"(\d{2}\.\d{2}\.\d{4})", texto)
+    # La fila de ID/Altura/Edad/Sexo/Fecha suele salir del OCR como una
+    # sola línea muy limpia y en un orden fijo -- se intenta como grupo
+    # primero porque es mucho más confiable que buscar cada campo por su
+    # cuenta (que puede agarrar el número equivocado si el OCR separa las
+    # columnas de forma rara). Si no hace match (otro modelo/diseño de
+    # reporte), se cae al método campo por campo de antes.
+    header_m = _HEADER_RE.search(texto)
+    if header_m:
+        perfil_id_val = header_m.group(1)
+        altura = _a_float(header_m.group(2))
+        edad_val = int(header_m.group(3))
+        sexo_val = header_m.group(4).capitalize()
+        fecha_val = _normaliza_fecha(header_m.group(5))
+    else:
+        perfil_id = re.search(r"\b(\d{4,6}-\d+|\d{7,12})\b", texto)
+        perfil_id_val = perfil_id.group(1) if perfil_id else None
+        altura = _valor_de_fila(lineas, r"\d{2,3}\s*cm")
+        edad_bruta = _valor_de_fila(lineas, r"^Edad\b")
+        edad_val = int(edad_bruta) if edad_bruta is not None else None
+        sexo_m = re.search(r"\b(Femenino|Masculino)\b", texto, re.IGNORECASE)
+        sexo_val = sexo_m.group(1).capitalize() if sexo_m else None
+        fecha_m = re.search(r"(\d{2}\.\d{2}\.\d{4})", texto)
+        fecha_val = fecha_m.group(1) if fecha_m else None
+
     modelo_m = re.search(r"\[?(InBody\s?\d{2,4})\]?", texto, re.IGNORECASE)
 
-    peso = _valor_de_fila(lineas, r"^Peso\s*\(kg\)")
-    mme = _valor_de_fila(lineas, r"\bMME\s*\(kg\)")
-    grasa_visceral = _valor_de_fila(lineas, r"Nivel\s*de\s*Grasa\s*Visceral", primero=True)
-    agua_total = _valor_de_fila(lineas, r"Agua\s*Corporal\b(?!.*Total)")
+    # "(kg)" a veces sale mal leído (p. ej. "(9)" o "(ka)") -- se busca solo
+    # la etiqueta al inicio de línea, sin exigir la unidad literal.
+    peso = _valor_de_fila(lineas, r"^Peso\b")
+    mme = _valor_de_fila(lineas, r"\bMME\b")
+    # Nivel de Grasa Visceral es un entero (no trae decimales) que a veces
+    # cae en una línea contaminada con números de la columna vecina -- se
+    # busca puntual justo entre "Visceral" y el "(" del rango de referencia
+    # ("Nivel de Grasa Visceral 14 ( 1-9 )"), en vez del método genérico.
+    grasa_visceral_m = re.search(r"Grasa\s*Visceral\D*?(\d{1,3})\s*\(", texto, re.IGNORECASE)
+    grasa_visceral = (
+        _a_float(grasa_visceral_m.group(1)) if grasa_visceral_m
+        else _valor_de_fila(lineas, r"Nivel\s*de\s*Grasa\s*Visceral", primero=True)
+    )
+    # preferir_decimal=True: esta fila casi siempre sale con un número
+    # entero de sobra pegado (columna vecina) -- si hay un solo candidato
+    # con punto decimal entre los números de la línea, es el correcto.
+    agua_total = _valor_de_fila(lineas, r"Agua\s*Corporal\b(?!.*Total)", preferir_decimal=True)
     agua_intra = _valor_de_fila(lineas, r"Agua\s*Intracelular", primero=True)
-    agua_extra = _valor_de_fila(lineas, r"Agua\s*Extracelular", primero=True)
+    # Igual que Grasa Visceral: esta fila también suele salir contaminada
+    # con la columna vecina (Pierna Izquierda %) -- se busca puntual el
+    # número justo antes de la "L" de litros ("Agua Extracelular 19.0L").
+    agua_extra_m = re.search(r"Extracelular\D*?(\d{1,3}(?:[.,]\d+)?)\s*L", texto, re.IGNORECASE)
+    agua_extra = (
+        _a_float(agua_extra_m.group(1)) if agua_extra_m
+        else _valor_de_fila(lineas, r"Agua\s*Extracelular", primero=True)
+    )
     imc = _valor_de_fila(lineas, r"^IMC\b")
-    pgc = _valor_de_fila(lineas, r"^PGC\b")
+    # primero=True: cuando la línea del valor viene contaminada con la
+    # sección de al lado (Grasa Segmental), el valor de PGC queda primero,
+    # no al final.
+    pgc = _valor_de_fila(lineas, r"^PGC\b", primero=True)
 
     # La etiqueta de "Masa Grasa Corporal (kg)" en la gráfica de barras es
     # justo la fila que casi siempre se lee peor con OCR -- en vez de
     # buscar la etiqueta (que puede salir irreconocible), se busca la fila
     # de la regla de esa gráfica en particular, que es fija en este modelo.
+    # \s* (no \s+) porque a veces el OCR pega dos números de la regla sin
+    # espacio entre ellos (p. ej. "220280" en vez de "220 280"); y se
+    # revisan dos líneas después de la regla, no solo una, por si la
+    # inmediata siguiente sale ilegible (basura sin ningún número).
     masa_grasa = None
     for i, linea in enumerate(lineas):
-        if re.search(r"60\s+80\s+100\s+160\s+220\s+280", linea) and i + 1 < len(lineas):
-            nums_sig = _numeros(lineas[i + 1])
-            if nums_sig:
-                masa_grasa = _a_float(nums_sig[-1])
+        if re.search(r"60\s*80\s*100\s*160\s*220\s*280", linea):
+            for j in (i + 1, i + 2):
+                if j < len(lineas):
+                    nums_sig = _numeros(lineas[j])
+                    if nums_sig:
+                        masa_grasa = _a_float(nums_sig[-1])
+                        break
             break
 
     return {
-        "id": perfil_id.group(1) if perfil_id else None,
+        "id": perfil_id_val,
         "modelo": modelo_m.group(1) if modelo_m else None,
         "altura_cm": altura,
-        "edad": int(edad) if edad is not None else None,
-        "sexo": sexo_m.group(1).capitalize() if sexo_m else None,
-        "fecha": fecha_m.group(1) if fecha_m else None,
+        "edad": edad_val,
+        "sexo": sexo_val,
+        "fecha": fecha_val,
         "peso_kg": peso,
         "masa_grasa_kg": masa_grasa,
         "mme_kg": mme,
