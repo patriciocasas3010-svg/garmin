@@ -33,6 +33,7 @@ import inbody_store
 from garmin_dashboard_ui import (
     inbody_ultimo_registro,
     render_antropometria_section,
+    render_composicion_avanzada,
     render_dashboard_body,
     render_inbody_section,
 )
@@ -250,6 +251,7 @@ def _render_composicion_corporal():
                     st.rerun()
 
     render_inbody_section(historial_inbody)
+    render_composicion_avanzada(historial_inbody)
 
     st.divider()
     st.subheader("📏 Mediciones antropométricas")

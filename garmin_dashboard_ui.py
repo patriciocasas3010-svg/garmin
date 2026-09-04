@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import garmin_metrics as gm
+import metabolic_calc as mc
 from resumen_pdf import build_resumen_pdf
 
 # ---------------------------------------------------------------------------
@@ -213,21 +214,27 @@ def style_estado_table(df: pd.DataFrame):
 # aparte desde dashboard_pacientes.py cuando hay historial guardado.
 # ---------------------------------------------------------------------------
 
+def inbody_historial_valido(historial: pd.DataFrame) -> pd.DataFrame:
+    """Historial de InBody con fechas legibles, ordenado ascendente
+    (columna auxiliar "_fecha") -- filas con fecha ilegible se descartan.
+    dayfirst=True porque el formato es DD.MM.AAAA (o DD.MM.AA) -- sin un
+    format= fijo, para aceptar tanto años de 2 como de 4 dígitos."""
+    if historial.empty:
+        return historial
+    historial = historial.copy()
+    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
+    return historial.dropna(subset=["_fecha"]).sort_values("_fecha")
+
+
 def inbody_ultimo_registro(historial: pd.DataFrame) -> pd.Series | None:
     """Regresa la fila más reciente (por fecha real, no por orden en la
     hoja) de un historial de InBody, o None si está vacío / sin fechas
     legibles. Se usa tanto para dibujar la sección de InBody como para las
     3 métricas de composición corporal en el Resumen."""
-    if historial.empty:
+    valido = inbody_historial_valido(historial)
+    if valido.empty:
         return None
-    historial = historial.copy()
-    # dayfirst=True porque el formato es DD.MM.AAAA (o DD.MM.AA) -- sin un
-    # format= fijo, para aceptar tanto años de 2 como de 4 dígitos.
-    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
-    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
-    if historial.empty:
-        return None
-    return historial.iloc[-1]
+    return valido.iloc[-1]
 
 
 def render_inbody_section(historial: pd.DataFrame):
@@ -240,13 +247,11 @@ def render_inbody_section(historial: pd.DataFrame):
         )
         return
 
-    ultimo = inbody_ultimo_registro(historial)
-    if ultimo is None:
+    historial = inbody_historial_valido(historial)
+    if historial.empty:
         st.info("No se pudieron leer las fechas de este historial.")
         return
-    historial = historial.copy()
-    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
-    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
+    ultimo = historial.iloc[-1]
 
     st.caption(
         f"Último InBody: {ultimo.get('Fecha', '')} · {ultimo.get('Modelo', '')} · "
@@ -290,6 +295,94 @@ def render_inbody_section(historial: pd.DataFrame):
     chart = line_with_rule(serie_grasa, "Masa grasa (kg)", ORANGE)
     if chart is not None:
         st.altair_chart(chart, width="stretch")
+
+
+def render_composicion_avanzada(historial: pd.DataFrame):
+    """TDEE real, ritmo de pérdida de grasa y retención de masa magra
+    entre dos mediciones de InBody elegidas, más la proyección de peso a
+    un % de grasa objetivo -- ver metabolic_calc.py. Necesita al menos 2
+    mediciones con Peso y Masa grasa; si no, no se dibuja nada (el aviso
+    de "sube más resultados" ya lo da render_inbody_section)."""
+    historial = inbody_historial_valido(historial)
+    if len(historial) < 2:
+        return
+
+    st.divider()
+    st.subheader("📈 TDEE real y proyección de peso")
+
+    def _fmt(i):
+        return historial.iloc[i]["Fecha"]
+
+    opciones = list(range(len(historial)))
+    col1, col2 = st.columns(2)
+    idx_inicial = col1.selectbox("Desde", opciones, index=0, format_func=_fmt, key="tdee_desde")
+    idx_final = col2.selectbox("Hasta", opciones, index=len(historial) - 1, format_func=_fmt, key="tdee_hasta")
+
+    fila_inicial = historial.iloc[idx_inicial]
+    fila_final = historial.iloc[idx_final]
+    dias = (fila_final["_fecha"] - fila_inicial["_fecha"]).days
+
+    if dias <= 0:
+        st.warning('La fecha "Hasta" debe ser posterior a "Desde".')
+        return
+
+    peso_i, peso_f = fila_inicial.get("Peso_kg"), fila_final.get("Peso_kg")
+    grasa_i, grasa_f = fila_inicial.get("MasaGrasa_kg"), fila_final.get("MasaGrasa_kg")
+    if pd.isna(peso_i) or pd.isna(peso_f) or pd.isna(grasa_i) or pd.isna(grasa_f):
+        st.info("Estas dos mediciones no tienen Peso y Masa grasa completos -- no se puede calcular.")
+        return
+
+    kcal_input = st.number_input(
+        "Calorías promedio consumidas por día en este periodo (opcional, para el TDEE real)",
+        min_value=0.0, step=50.0, value=0.0, key="tdee_kcal",
+        help="Si lo dejas en 0, se omite el TDEE real y solo se muestra la pérdida de grasa y "
+        "retención de masa magra (esas no lo necesitan).",
+    )
+    kcal = kcal_input if kcal_input > 0 else None
+
+    resultado = mc.comparar_periodo(dias, peso_i, peso_f, grasa_i, grasa_f, kcal_promedio_consumidas=kcal)
+
+    st.caption(f"{fila_inicial['Fecha']} → {fila_final['Fecha']} · {dias} días")
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Cambio de peso", f"{resultado['delta_peso_kg']:+.1f} kg")
+    r2.metric("Cambio de grasa", f"{resultado['delta_grasa_kg']:+.1f} kg")
+    r3.metric("Cambio de masa magra", f"{resultado['delta_magra_kg']:+.1f} kg")
+
+    r4, r5 = st.columns(2)
+    r4.metric("Ritmo de pérdida de grasa", f"{resultado['tasa_perdida_grasa_kg_semana']:+.2f} kg/semana")
+    r5.metric(
+        "Masa magra retenida", f"{resultado['retencion_masa_magra_pct']:.0f}%",
+        help="% del peso perdido que NO fue masa libre de grasa (músculo/agua) -- entre más alto, mejor.",
+    )
+
+    if resultado["tdee_real"] is not None:
+        r6, r7 = st.columns(2)
+        r6.metric("TDEE real estimado", f"{resultado['tdee_real']:.0f} kcal/día")
+        deficit = resultado["deficit_diario_real"]
+        r7.metric(
+            "Déficit/superávit diario real",
+            f"{abs(deficit):.0f} kcal/día {'déficit' if deficit >= 0 else 'superávit'}",
+        )
+        st.caption(
+            "TDEE real = lo que tu cuerpo quemó de verdad en este periodo, calculado a partir del "
+            "cambio real en grasa y masa magra -- no una fórmula genérica por edad/peso/altura."
+        )
+
+    st.divider()
+    st.markdown("**Proyección de peso objetivo**")
+    ultimo = historial.iloc[-1]
+    peso_actual, grasa_actual = ultimo.get("Peso_kg"), ultimo.get("MasaGrasa_kg")
+    if pd.isna(peso_actual) or pd.isna(grasa_actual):
+        st.info("Tu InBody más reciente no tiene Peso y Masa grasa completos -- no se puede proyectar.")
+        return
+    proyecciones = mc.proyeccion_peso_objetivo(peso_actual, grasa_actual)
+    cols = st.columns(len(proyecciones))
+    for col, (pct, peso_obj) in zip(cols, proyecciones.items()):
+        col.metric(f"Peso a {pct * 100:.0f}% grasa", f"{peso_obj:.1f} kg")
+    st.caption(
+        "Asumiendo que conservas toda tu masa libre de grasa actual (peso - grasa) -- es una "
+        "proyección, no una predicción exacta."
+    )
 
 
 # ---------------------------------------------------------------------------
