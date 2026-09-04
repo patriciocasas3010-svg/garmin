@@ -273,6 +273,96 @@ def render_inbody_section(historial: pd.DataFrame):
 
 
 # ---------------------------------------------------------------------------
+# Mediciones antropométricas (pliegues, circunferencias, % grasa Faulkner)
+# -- independiente de InBody, se llama aparte desde dashboard_pacientes.py.
+# ---------------------------------------------------------------------------
+
+_PLIEGUES = [
+    ("Pliegue_Supraespinal_mm", "Supraespinal"),
+    ("Pliegue_MusloFrontal_mm", "Muslo frontal"),
+    ("Pliegue_PantorrillaMedial_mm", "Pantorrilla medial"),
+    ("Pliegue_Abdominal_mm", "Abdominal"),
+    ("Pliegue_Tricipital_mm", "Tríceps"),
+    ("Pliegue_Subescapular_mm", "Subescapular"),
+    ("Pliegue_Suprailiaco_mm", "Suprailíaco"),
+    ("Pliegue_Bicipital_mm", "Bíceps"),
+]
+
+_CIRCUNFERENCIAS = [
+    ("Circ_Cintura_cm", "Cintura"),
+    ("Circ_Cadera_cm", "Cadera"),
+    ("Circ_MusloMedio_cm", "Muslo medio"),
+    ("Circ_Muslo_cm", "Muslo"),
+    ("Circ_BrazoContraido_cm", "Brazo contraído"),
+    ("Circ_BrazoRelajado_cm", "Brazo relajado"),
+    ("Circ_Pantorrilla_cm", "Pantorrilla"),
+]
+
+
+def _fila_metricas(fila: pd.Series, campos: list[tuple[str, str]], unidad: str, por_fila: int = 4):
+    for i in range(0, len(campos), por_fila):
+        cols = st.columns(por_fila)
+        for col, (clave, etiqueta) in zip(cols, campos[i:i + por_fila]):
+            valor = fila.get(clave)
+            col.metric(etiqueta, f"{valor:.1f} {unidad}" if pd.notna(valor) else "—")
+
+
+def render_antropometria_section(historial: pd.DataFrame):
+    """historial: DataFrame con las columnas de antropometria_store.ENCABEZADOS,
+    ya filtrado a un solo paciente."""
+    if historial.empty:
+        st.info(
+            "Todavía no hay ninguna medición antropométrica guardada para este paciente. "
+            "Sube un reporte con el botón de arriba."
+        )
+        return
+
+    historial = historial.copy()
+    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
+    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
+    if historial.empty:
+        st.info("No se pudieron leer las fechas de este historial.")
+        return
+    ultimo = historial.iloc[-1]
+
+    st.caption(f"Última medición: {ultimo.get('Fecha', '')}")
+
+    c1, c2 = st.columns(2)
+    c1.metric("Grasa (Faulkner)", f"{ultimo['GrasaFaulkner_pct']:.1f} %" if pd.notna(ultimo.get("GrasaFaulkner_pct")) else "—")
+    c2.metric("Grasa calculado", f"{ultimo['GrasaCalculado_kg']:.1f} kg" if pd.notna(ultimo.get("GrasaCalculado_kg")) else "—")
+
+    st.markdown("**Pliegues cutáneos**")
+    _fila_metricas(ultimo, _PLIEGUES, "mm")
+
+    st.markdown("**Circunferencias**")
+    _fila_metricas(ultimo, _CIRCUNFERENCIAS, "cm")
+
+    if len(historial) < 2:
+        st.caption("Sube más mediciones a lo largo del tiempo para ver la evolución.")
+        return
+
+    st.divider()
+    st.markdown("**Evolución**")
+    serie_grasa = pd.Series(historial["GrasaFaulkner_pct"].values, index=historial["_fecha"], name="Grasa")
+    serie_cintura = pd.Series(historial["Circ_Cintura_cm"].values, index=historial["_fecha"], name="Cintura")
+    serie_cadera = pd.Series(historial["Circ_Cadera_cm"].values, index=historial["_fecha"], name="Cadera")
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        chart = line_with_rule(serie_grasa, "Grasa -- Faulkner (%)", ORANGE)
+        if chart is not None:
+            st.altair_chart(chart, width="stretch")
+    with col_b:
+        chart = line_with_rule(serie_cintura, "Cintura (cm)", BLUE)
+        if chart is not None:
+            st.altair_chart(chart, width="stretch")
+    with col_c:
+        chart = line_with_rule(serie_cadera, "Cadera (cm)", VIOLET)
+        if chart is not None:
+            st.altair_chart(chart, width="stretch")
+
+
+# ---------------------------------------------------------------------------
 # Cuerpo del dashboard (pestañas) -- toma un dict ya armado por
 # garmin_metrics.build_runtime_data() o snapshot_from_json()
 # ---------------------------------------------------------------------------

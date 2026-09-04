@@ -25,10 +25,12 @@ import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
+import antropometria_parser
+import antropometria_store
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
-from garmin_dashboard_ui import render_dashboard_body, render_inbody_section
+from garmin_dashboard_ui import render_antropometria_section, render_dashboard_body, render_inbody_section
 
 st.set_page_config(page_title="Resumen de pacientes", layout="wide", page_icon="🩺")
 
@@ -234,6 +236,77 @@ with st.expander("Subir nuevo resultado de InBody"):
 
 historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 render_inbody_section(historial_inbody)
+
+st.divider()
+st.subheader("📏 Mediciones antropométricas")
+
+with st.expander("Subir nuevo reporte de mediciones (ej. Avena)"):
+    archivo_antro = st.file_uploader(
+        "PDF del reporte", type=["pdf"], key=f"antro_upload_{paciente}",
+    )
+    if archivo_antro is not None and st.button("Leer archivo", key=f"antro_leer_{paciente}"):
+        with st.spinner("Leyendo el PDF..."):
+            try:
+                texto = antropometria_parser.extract_text(archivo_antro.getvalue())
+                st.session_state[f"antro_draft_{paciente}"] = antropometria_parser.parse_antropometria_text(texto)
+            except Exception as e:
+                st.error(f"No se pudo leer el archivo: {e}")
+
+    draft_antro = st.session_state.get(f"antro_draft_{paciente}")
+    if draft_antro is not None:
+        st.caption(
+            "Este PDF trae texto real (no es una foto), así que la lectura es más confiable que la "
+            "de InBody -- aun así, revisa los valores antes de guardar."
+        )
+        with st.form(f"antro_form_{paciente}"):
+            fecha_antro = st.text_input("Fecha", value=draft_antro.get("fecha") or "")
+
+            st.markdown("**Grasa**")
+            col1, col2 = st.columns(2)
+            grasa_faulkner = col1.number_input("Grasa -- Faulkner (%)", value=float(draft_antro.get("grasa_faulkner_pct") or 0), step=0.1)
+            grasa_calculado = col2.number_input("Grasa calculado (kg)", value=float(draft_antro.get("grasa_calculado_kg") or 0), step=0.1)
+
+            st.markdown("**Pliegues cutáneos (mm)**")
+            pliegues_claves = [
+                ("pliegue_supraespinal_mm", "Supraespinal"), ("pliegue_muslo_frontal_mm", "Muslo frontal"),
+                ("pliegue_pantorrilla_medial_mm", "Pantorrilla medial"), ("pliegue_abdominal_mm", "Abdominal"),
+                ("pliegue_tricipital_mm", "Tríceps"), ("pliegue_subescapular_mm", "Subescapular"),
+                ("pliegue_suprailiaco_mm", "Suprailíaco"), ("pliegue_bicipital_mm", "Bíceps"),
+            ]
+            pliegues_valores = {}
+            for i in range(0, len(pliegues_claves), 4):
+                cols = st.columns(4)
+                for col, (clave, etiqueta) in zip(cols, pliegues_claves[i:i + 4]):
+                    pliegues_valores[clave] = col.number_input(etiqueta, value=float(draft_antro.get(clave) or 0), step=0.5, key=f"antro_{clave}_{paciente}")
+
+            st.markdown("**Circunferencias (cm)**")
+            circ_claves = [
+                ("circ_cintura_cm", "Cintura"), ("circ_cadera_cm", "Cadera"),
+                ("circ_muslo_medio_cm", "Muslo medio"), ("circ_muslo_cm", "Muslo"),
+                ("circ_brazo_contraido_cm", "Brazo contraído"), ("circ_brazo_relajado_cm", "Brazo relajado"),
+                ("circ_pantorrilla_cm", "Pantorrilla"),
+            ]
+            circ_valores = {}
+            for i in range(0, len(circ_claves), 4):
+                cols = st.columns(4)
+                for col, (clave, etiqueta) in zip(cols, circ_claves[i:i + 4]):
+                    circ_valores[clave] = col.number_input(etiqueta, value=float(draft_antro.get(clave) or 0), step=0.5, key=f"antro_{clave}_{paciente}")
+
+            if st.form_submit_button("Guardar en el historial", type="primary"):
+                campos_final = {
+                    "fecha": fecha_antro,
+                    "grasa_faulkner_pct": grasa_faulkner or None,
+                    "grasa_calculado_kg": grasa_calculado or None,
+                    **{k: (v or None) for k, v in pliegues_valores.items()},
+                    **{k: (v or None) for k, v in circ_valores.items()},
+                }
+                antropometria_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                st.session_state.pop(f"antro_draft_{paciente}", None)
+                st.success("Guardado -- se agregó al historial de este paciente.")
+                st.rerun()
+
+historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+render_antropometria_section(historial_antro)
 
 st.divider()
 
