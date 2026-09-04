@@ -21,6 +21,7 @@ _INK_SOFT = (138, 128, 100)
 _LINE = (231, 226, 211)
 _CREAM = (250, 248, 244)
 _OLIVE_RGB = (58, 107, 40)
+_TERRACOTTA_RGB = (201, 103, 63)
 
 _PAGE_W = 210
 _MARGIN = 18
@@ -94,6 +95,10 @@ def build_resumen_pdf(
     promedio_ml_dia,
     alertas_activas: int,
     inbody_resumen=None,
+    inbody_penultimo=None,
+    edad_fisica=None,
+    nivel_estres=None,
+    gasto_total_avg=None,
 ) -> bytes:
     pdf = _new_pdf()
 
@@ -142,12 +147,65 @@ def build_resumen_pdf(
             pdf.cell(col_w, 8, value)
         pdf.set_xy(_MARGIN, y0 + 16)
 
+    def _stat_row_con_delta(items: list[tuple[str, str, str | None, bool]]):
+        """items: (etiqueta, valor, texto_delta_o_None, delta_es_bueno)."""
+        col_w = _CONTENT_W / len(items)
+        y0 = pdf.get_y()
+        pdf.set_font("Mono", "", 8)
+        pdf.set_char_spacing(0.25)
+        pdf.set_text_color(*_INK_SOFT)
+        for i, (label, _, _, _) in enumerate(items):
+            pdf.set_xy(_MARGIN + i * col_w, y0)
+            pdf.cell(col_w, 5, label.upper())
+        pdf.set_char_spacing(0)
+        pdf.set_font("MonoSemiBold", "", 15)
+        pdf.set_text_color(*_INK)
+        for i, (_, value, _, _) in enumerate(items):
+            pdf.set_xy(_MARGIN + i * col_w, y0 + 5.5)
+            pdf.cell(col_w, 8, value)
+        pdf.set_font("Karla", "", 8)
+        hay_delta = any(delta for _, _, delta, _ in items)
+        for i, (_, _, delta, delta_bueno) in enumerate(items):
+            if not delta:
+                continue
+            pdf.set_text_color(*(_OLIVE_RGB if delta_bueno else _TERRACOTTA_RGB))
+            pdf.set_xy(_MARGIN + i * col_w, y0 + 13.5)
+            pdf.cell(col_w, 5, delta)
+        pdf.set_xy(_MARGIN, y0 + (20 if hay_delta else 16))
+
     if inbody_resumen is not None:
         _section_title("Composición corporal (InBody)")
+        grasa_val = inbody_resumen.get("MasaGrasa_kg")
+        mme_val = inbody_resumen.get("MME_kg")
+        grasa_prev = mme_prev = None
+        if inbody_penultimo is not None:
+            grasa_prev = inbody_penultimo.get("MasaGrasa_kg")
+            mme_prev = inbody_penultimo.get("MME_kg")
+
+        delta_grasa = delta_mme = None
+        grasa_bajo = mme_subio = True
+        if grasa_val is not None and grasa_prev is not None:
+            delta_grasa = f"{grasa_val - grasa_prev:+.1f} kg vs. cita anterior"
+            grasa_bajo = grasa_val < grasa_prev
+        if mme_val is not None and mme_prev is not None:
+            delta_mme = f"{mme_val - mme_prev:+.1f} kg vs. cita anterior"
+            mme_subio = mme_val >= mme_prev
+
+        _stat_row_con_delta([
+            ("Peso", _fmt(inbody_resumen.get("Peso_kg"), " kg"), None, True),
+            ("Grasa corporal", _fmt(grasa_val, " kg"), delta_grasa, grasa_bajo),
+            ("Masa muscular", _fmt(mme_val, " kg"), delta_mme, mme_subio),
+        ])
         _stat_row([
-            ("Peso", _fmt(inbody_resumen.get("Peso_kg"), " kg")),
-            ("Grasa corporal", _fmt(inbody_resumen.get("MasaGrasa_kg"), " kg")),
-            ("Masa muscular", _fmt(inbody_resumen.get("MME_kg"), " kg")),
+            ("Hidratación (agua total)", _fmt(inbody_resumen.get("AguaTotal_L"), " L")),
+        ])
+
+    if edad_fisica is not None or nivel_estres is not None or gasto_total_avg is not None:
+        _section_title("Bienestar general")
+        _stat_row([
+            ("Edad física", _fmt(edad_fisica, " años", 0)),
+            ("Gasto energético (30d)", _fmt(gasto_total_avg, " kcal/día", 0)),
+            ("Nivel de estrés", _fmt(nivel_estres, "/100", 0)),
         ])
 
     _section_title("¿Cómo vengo hoy?")

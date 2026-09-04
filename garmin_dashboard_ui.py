@@ -731,7 +731,8 @@ def render_dashboard_body(
             ultimo_acwr=ultimo_acwr, ultimo_hrv_z=ultimo_hrv_z,
             rhr_today=rhr_today, rhr_baseline=rhr_baseline, sueno_7d=sueno_7d,
             promedio_ml_dia=promedio_ml_dia, alertas_activas=alertas_activas,
-            inbody_resumen=inbody_resumen,
+            inbody_resumen=inbody_resumen, inbody_penultimo=inbody_penultimo,
+            edad_fisica=edad_fisica, nivel_estres=nivel_estres, gasto_total_avg=gasto_total_avg,
         )
         st.download_button(
             "🖨️ Descargar resumen (PDF)", data=pdf_bytes,
