@@ -518,6 +518,7 @@ def render_antropometria_section(historial: pd.DataFrame):
 def render_dashboard_body(
     data: dict, composicion_corporal_renderer=None,
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
+    analisis_ia_renderer=None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -529,7 +530,13 @@ def render_dashboard_body(
     cambio de grasa/músculo vs. la medición anterior, si hay al menos 2)
     aparecen arriba de todo en Resumen.
 
-    paciente_nombre: solo para el encabezado del PDF descargable."""
+    paciente_nombre: solo para el encabezado del PDF descargable.
+
+    analisis_ia_renderer: función que recibe este mismo `data` y dibuja el
+    análisis/recomendaciones generados con IA (definida en
+    dashboard_pacientes.py, que es quien tiene acceso a InBody/Antropometría
+    y al Secret de la API de Claude) -- si se pasa, se agrega al final de
+    la pestaña Resumen."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -739,6 +746,9 @@ def render_dashboard_body(
             file_name=f"resumen_{(paciente_nombre or 'paciente').replace(' ', '_')}.pdf",
             mime="application/pdf",
         )
+
+        if analisis_ia_renderer is not None:
+            analisis_ia_renderer(data)
 
     # --- Carga y Preparación ---
     with tab_carga:

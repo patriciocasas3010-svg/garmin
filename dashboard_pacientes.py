@@ -27,6 +27,7 @@ import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
+import ai_analisis
 import antropometria_parser
 import antropometria_store
 import apple_health
@@ -377,6 +378,32 @@ def _render_composicion_corporal(data: dict | None):
     render_antropometria_section(historial_antro)
 
 
+def _render_analisis_ia(data: dict):
+    """Lectura rápida + recomendaciones generadas con la API de Claude,
+    cruzando InBody, Antropometría y los datos del wearable de este
+    paciente -- se agrega al final de la pestaña Resumen. No se genera
+    solo (cuesta dinero y tarda unos segundos): hay que darle al botón."""
+    st.divider()
+    st.subheader("🧠 Análisis y recomendaciones (IA)")
+    st.caption(
+        "Lectura rápida generada cruzando InBody, mediciones antropométricas y los datos del "
+        "wearable de este paciente -- revísala antes de compartirla, es un apoyo a tu criterio "
+        "clínico, no un diagnóstico."
+    )
+    cache_key = f"analisis_ia_{paciente}"
+    if st.button("Generar análisis", key=f"generar_ia_{paciente}"):
+        with st.spinner("Cruzando los datos del paciente..."):
+            try:
+                st.session_state[cache_key] = ai_analisis.generar_analisis(
+                    paciente, data, historial_inbody, historial_antro,
+                )
+            except Exception as e:
+                st.error(f"No se pudo generar el análisis: {e}")
+    texto = st.session_state.get(cache_key)
+    if texto:
+        st.markdown(texto)
+
+
 st.divider()
 
 if not datos_json:
@@ -398,4 +425,5 @@ except Exception as e:
 render_dashboard_body(
     data, composicion_corporal_renderer=_render_composicion_corporal,
     inbody_historial=historial_inbody, paciente_nombre=paciente,
+    analisis_ia_renderer=_render_analisis_ia,
 )
