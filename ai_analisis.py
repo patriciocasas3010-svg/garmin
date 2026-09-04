@@ -138,11 +138,32 @@ sugerir dirección general (ej. "prioriza proteína en el desayuno") pero no un 
 - Tono cercano y profesional, nunca alarmista."""
 
 
+def _armar_contexto(paciente_nombre: str, data: dict, inbody_historial, antro_historial) -> str:
+    return (
+        f"Paciente: {paciente_nombre}\n\n"
+        f"--- InBody ---\n{_resumen_inbody(inbody_historial)}\n\n"
+        f"--- Mediciones antropométricas ---\n{_resumen_antropometria(antro_historial)}\n\n"
+        f"--- Wearable (últimos {data.get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}"
+    )
+
+
+def armar_mensaje_para_pegar(paciente_nombre: str, data: dict, inbody_historial, antro_historial) -> str:
+    """Mismo contenido que se le manda a la API, pero como un solo texto
+    listo para pegar directo en una conversación normal de Claude (la app
+    de chat, sin costo por API) -- para cuando no se quiere configurar el
+    Secret ANTHROPIC_API_KEY. Trae las instrucciones incluidas, no hay que
+    escribir nada más."""
+    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial)
+    return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}"
+
+
 def generar_analisis(paciente_nombre: str, data: dict, inbody_historial, antro_historial) -> str:
     """Arma el contexto del paciente y le pide a Claude una lectura rápida +
-    recomendaciones. Lanza una excepción con un mensaje claro si falta la
-    API key o si la llamada falla -- quien lo llama decide cómo mostrarlo
-    (ver dashboard_pacientes.py)."""
+    recomendaciones vía la API (tiene costo, requiere el Secret
+    ANTHROPIC_API_KEY) -- para la alternativa gratis, ver
+    armar_mensaje_para_pegar(). Lanza una excepción con un mensaje claro si
+    falta la API key o si la llamada falla -- quien lo llama decide cómo
+    mostrarlo (ver dashboard_pacientes.py)."""
     import streamlit as st
     import anthropic
 
@@ -153,12 +174,7 @@ def generar_analisis(paciente_nombre: str, data: dict, inbody_historial, antro_h
             "para poder generar el análisis con IA."
         )
 
-    contexto = (
-        f"Paciente: {paciente_nombre}\n\n"
-        f"--- InBody ---\n{_resumen_inbody(inbody_historial)}\n\n"
-        f"--- Mediciones antropométricas ---\n{_resumen_antropometria(antro_historial)}\n\n"
-        f"--- Wearable (últimos {data.get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}"
-    )
+    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial)
 
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(

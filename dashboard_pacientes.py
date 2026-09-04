@@ -379,29 +379,47 @@ def _render_composicion_corporal(data: dict | None):
 
 
 def _render_analisis_ia(data: dict):
-    """Lectura rápida + recomendaciones generadas con la API de Claude,
-    cruzando InBody, Antropometría y los datos del wearable de este
-    paciente -- se agrega al final de la pestaña Resumen. No se genera
-    solo (cuesta dinero y tarda unos segundos): hay que darle al botón."""
+    """Lectura rápida + recomendaciones cruzando InBody, Antropometría y
+    los datos del wearable de este paciente -- se agrega al final de la
+    pestaña Resumen. Dos formas de conseguirlo:
+      - Gratis: descargar un .txt ya armado y pegarlo en una conversación
+        normal de Claude (sin costo de API, sin configurar nada).
+      - Automático: el botón "Generar análisis" de aquí mismo, que sí usa
+        la API (tiene un costo mínimo) y requiere el Secret
+        ANTHROPIC_API_KEY -- si no está configurado, no truena, solo no
+        hace nada útil hasta que se configure."""
     st.divider()
-    st.subheader("🧠 Análisis y recomendaciones (IA)")
+    st.subheader("🧠 Análisis y recomendaciones")
     st.caption(
-        "Lectura rápida generada cruzando InBody, mediciones antropométricas y los datos del "
-        "wearable de este paciente -- revísala antes de compartirla, es un apoyo a tu criterio "
-        "clínico, no un diagnóstico."
+        "Lectura rápida cruzando InBody, mediciones antropométricas y los datos del wearable de "
+        "este paciente -- revísala antes de compartirla, es un apoyo a tu criterio clínico, no un "
+        "diagnóstico."
     )
-    cache_key = f"analisis_ia_{paciente}"
-    if st.button("Generar análisis", key=f"generar_ia_{paciente}"):
-        with st.spinner("Cruzando los datos del paciente..."):
-            try:
-                st.session_state[cache_key] = ai_analisis.generar_analisis(
-                    paciente, data, historial_inbody, historial_antro,
-                )
-            except Exception as e:
-                st.error(f"No se pudo generar el análisis: {e}")
-    texto = st.session_state.get(cache_key)
-    if texto:
-        st.markdown(texto)
+
+    mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(paciente, data, historial_inbody, historial_antro)
+    st.download_button(
+        "📄 Descargar para pegar en Claude (gratis)",
+        data=mensaje_para_pegar,
+        file_name=f"analisis_{paciente.replace(' ', '_')}.txt",
+        mime="text/plain",
+        key=f"descargar_contexto_{paciente}",
+        help='Descarga este archivo, ábrelo con el Bloc de notas, copia todo el texto y pégalo en una '
+             'conversación nueva con Claude (claude.ai) -- ya trae las instrucciones incluidas.',
+    )
+
+    with st.expander("O generar automático aquí mismo (tiene un costo mínimo de API)"):
+        cache_key = f"analisis_ia_{paciente}"
+        if st.button("Generar análisis", key=f"generar_ia_{paciente}"):
+            with st.spinner("Cruzando los datos del paciente..."):
+                try:
+                    st.session_state[cache_key] = ai_analisis.generar_analisis(
+                        paciente, data, historial_inbody, historial_antro,
+                    )
+                except Exception as e:
+                    st.error(f"No se pudo generar el análisis: {e}")
+        texto = st.session_state.get(cache_key)
+        if texto:
+            st.markdown(texto)
 
 
 st.divider()
