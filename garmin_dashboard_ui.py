@@ -301,14 +301,18 @@ def render_composicion_avanzada(historial: pd.DataFrame):
     """TDEE real, ritmo de pérdida de grasa y retención de masa magra
     entre dos mediciones de InBody elegidas, más la proyección de peso a
     un % de grasa objetivo -- ver metabolic_calc.py. Necesita al menos 2
-    mediciones con Peso y Masa grasa; si no, no se dibuja nada (el aviso
-    de "sube más resultados" ya lo da render_inbody_section)."""
+    mediciones con Peso y Masa grasa."""
     historial = inbody_historial_valido(historial)
-    if len(historial) < 2:
-        return
 
     st.divider()
     st.subheader("📈 TDEE real y proyección de peso")
+
+    if len(historial) < 2:
+        st.info(
+            f"Necesitas al menos 2 resultados de InBody con fecha para calcular esto -- "
+            f"por ahora tienes {len(historial)}. Sube otro resultado más adelante para verlo."
+        )
+        return
 
     def _fmt(i):
         return historial.iloc[i]["Fecha"]
