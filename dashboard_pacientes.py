@@ -31,7 +31,6 @@ import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
 from garmin_dashboard_ui import (
-    inbody_ultimo_registro,
     render_antropometria_section,
     render_composicion_avanzada,
     render_dashboard_body,
@@ -149,10 +148,9 @@ datos_json = fila.get("Datos")
 fuente = fila.get("Fuente") or "Garmin"
 
 # Se leen una sola vez aquí (no dentro de _render_composicion_corporal) para
-# poder usar también el último InBody en la pestaña Resumen.
+# poder usar también el historial de InBody en la pestaña Resumen.
 historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-inbody_ultimo = inbody_ultimo_registro(historial_inbody)
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
@@ -345,5 +343,5 @@ except Exception as e:
 
 render_dashboard_body(
     data, composicion_corporal_renderer=_render_composicion_corporal,
-    inbody_resumen=inbody_ultimo, paciente_nombre=paciente,
+    inbody_historial=historial_inbody, paciente_nombre=paciente,
 )

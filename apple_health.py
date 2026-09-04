@@ -409,6 +409,10 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
         # disponible" cuando esta lista/valor vienen vacíos.
         "hidratacion_por_tipo": [],
         "hidratacion_diaria": {"promedio_ml_dia": None, "dias_con_actividad": 0, "serie": {}},
+        # Edad física y nivel de estrés son propios de Garmin (algoritmos
+        # internos) -- Apple Health no tiene un equivalente directo.
+        "edad_fisica": None,
+        "nivel_estres": None,
     }
 
 

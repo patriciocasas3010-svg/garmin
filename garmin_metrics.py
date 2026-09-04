@@ -153,6 +153,35 @@ def fetch_day_hr_summary(client, day: date) -> dict | None:
         return None
 
 
+def fetch_fitness_age(client, day: date) -> float | None:
+    """Edad física (Fitness Age) de Garmin -- estimada a partir de VO2max,
+    % grasa, actividad, etc. No todos los relojes/cuentas la calculan (si
+    no, el endpoint regresa vacío y esto da None, sin reventar)."""
+    try:
+        datos = client.get_fitnessage_data(day.isoformat())
+    except Exception:
+        return None
+    valor = (datos or {}).get("fitnessAge")
+    return float(valor) if valor is not None else None
+
+
+def fetch_nivel_estres(client, day: date) -> float | None:
+    """Nivel de estrés (0-100) que reporta Garmin para un día. -1/-2 son
+    valores centinela de Garmin para "sin datos suficientes", se tratan
+    igual que None."""
+    try:
+        datos = client.get_stress_data(day.isoformat())
+    except Exception:
+        return None
+    if not datos:
+        return None
+    for llave in ("overallStressLevel", "avgStressLevel"):
+        valor = datos.get(llave)
+        if valor is not None and valor >= 0:
+            return float(valor)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Sueño, hidratación, desgaste físico (Body Battery) y recuperación
 # ---------------------------------------------------------------------------
@@ -674,6 +703,8 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
     readiness_series = fetch_training_readiness_series(client, start30, end)
     battery_df = fetch_body_battery_series(client, start30, end)
     calories_df = fetch_calories_series(client, start30, end)
+    edad_fisica = fetch_fitness_age(client, end)
+    nivel_estres = fetch_nivel_estres(client, end)
 
     week_ago = pd.Timestamp(end - timedelta(days=7))
     wellness_window_start = pd.Timestamp(start30)
@@ -759,6 +790,8 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
         "resumen_mes": resumen_mes,
         "hidratacion_por_tipo": hidratacion_por_tipo,
         "hidratacion_diaria": hidratacion_diaria,
+        "edad_fisica": edad_fisica,
+        "nivel_estres": nivel_estres,
     }
 
 
@@ -818,6 +851,7 @@ def _trim_activity_calorias(a: dict) -> dict:
 _SCALAR_KEYS = [
     "ultimo_acwr", "ultimo_hrv_z", "peor_deriva_val", "rhr_avg",
     "rhr_baseline", "rhr_today", "max_hr", "peor_caida_min",
+    "edad_fisica", "nivel_estres",
 ]
 
 _RESUMEN_MES_NUM_KEYS = [

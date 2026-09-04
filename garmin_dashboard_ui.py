@@ -517,18 +517,27 @@ def render_antropometria_section(historial: pd.DataFrame):
 
 def render_dashboard_body(
     data: dict, composicion_corporal_renderer=None,
-    inbody_resumen: pd.Series | None = None, paciente_nombre: str | None = None,
+    inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
     dashboard_pacientes.py, que es quien tiene acceso a la hoja de Google) --
     si se pasa, se agrega como pestaña propia justo después de Resumen.
 
-    inbody_resumen: fila más reciente del historial de InBody (ver
-    inbody_ultimo_registro) -- si se pasa, Peso/Grasa/Masa muscular
+    inbody_historial: historial completo de InBody de este paciente -- si
+    se pasa, Peso/Grasa/Masa muscular/Hidratación del más reciente (y el
+    cambio de grasa/músculo vs. la medición anterior, si hay al menos 2)
     aparecen arriba de todo en Resumen.
 
     paciente_nombre: solo para el encabezado del PDF descargable."""
+    inbody_resumen = None
+    inbody_penultimo = None
+    if inbody_historial is not None:
+        _historial_valido = inbody_historial_valido(inbody_historial)
+        if len(_historial_valido) >= 1:
+            inbody_resumen = _historial_valido.iloc[-1]
+        if len(_historial_valido) >= 2:
+            inbody_penultimo = _historial_valido.iloc[-2]
     load_series = data["load_series"]
     rhr_series = data["rhr_series"]
     sleep_df = data["sleep_df"]
@@ -576,14 +585,53 @@ def render_dashboard_body(
     # --- Resumen ---
     with tab_resumen:
         if inbody_resumen is not None:
-            b1, b2, b3 = st.columns(3)
+            b1, b2, b3, b4 = st.columns(4)
             peso_val = inbody_resumen.get("Peso_kg")
             grasa_val = inbody_resumen.get("MasaGrasa_kg")
             mme_val = inbody_resumen.get("MME_kg")
+            agua_val = inbody_resumen.get("AguaTotal_L")
+
+            delta_grasa_str = delta_mme_str = None
+            if inbody_penultimo is not None:
+                grasa_prev = inbody_penultimo.get("MasaGrasa_kg")
+                mme_prev = inbody_penultimo.get("MME_kg")
+                if pd.notna(grasa_val) and pd.notna(grasa_prev):
+                    delta_grasa_str = f"{grasa_val - grasa_prev:+.1f} kg vs. cita anterior"
+                if pd.notna(mme_val) and pd.notna(mme_prev):
+                    delta_mme_str = f"{mme_val - mme_prev:+.1f} kg vs. cita anterior"
+
             b1.metric("Peso", f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—")
-            b2.metric("Grasa corporal", f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—")
-            b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—")
+            b2.metric(
+                "Grasa corporal", f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—",
+                delta=delta_grasa_str, delta_color="inverse",
+            )
+            b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", delta=delta_mme_str)
+            b4.metric("Hidratación (agua total)", f"{agua_val:.1f} L" if pd.notna(agua_val) else "—")
             st.caption(f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en 🧬 Composición corporal.")
+            st.divider()
+
+        edad_fisica = data.get("edad_fisica")
+        nivel_estres = data.get("nivel_estres")
+        gasto_total_avg = None
+        if calories_df is not None and not calories_df.empty and "total_kcal" in calories_df.columns:
+            gasto_total_avg = calories_df["total_kcal"].dropna().mean()
+            gasto_total_avg = gasto_total_avg if pd.notna(gasto_total_avg) else None
+
+        if edad_fisica is not None or nivel_estres is not None or gasto_total_avg is not None:
+            g1, g2, g3 = st.columns(3)
+            g1.metric(
+                "Edad física", f"{edad_fisica:.0f} años" if edad_fisica is not None else "—",
+                help="Fitness Age de Garmin -- estimada de VO2max, actividad y composición corporal. "
+                "No todos los relojes la calculan.",
+            )
+            g2.metric(
+                "Gasto energético total (30d)", f"{gasto_total_avg:.0f} kcal/día" if gasto_total_avg is not None else "—",
+                help="Promedio de calorías en reposo + actividad de los últimos 30 días.",
+            )
+            g3.metric(
+                "Nivel de estrés", f"{nivel_estres:.0f}/100" if nivel_estres is not None else "—",
+                help="Nivel de estrés de hoy que reporta el reloj (0-100).",
+            )
             st.divider()
 
         st.subheader("¿Cómo vengo hoy?")
