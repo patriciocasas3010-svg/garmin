@@ -63,18 +63,15 @@ def sheet_config_disponible() -> bool:
     return os.path.exists(CREDENCIALES_PATH) and os.path.exists(SHEET_ID_PATH)
 
 
-def push_snapshot(nombre: str, runtime_data: dict, fuente: str = "Garmin") -> None:
-    """Manda un runtime_data (de garmin_metrics.build_runtime_data o
-    apple_health.build_runtime_data -- misma forma exacta) a la hoja de
-    Google del nutriólogo. Compartido por push_resumen.py (Garmin) y
-    push_resumen_apple.py (Apple Health), así que un paciente Garmin y uno
-    Apple terminan en la misma hoja, con el mismo formato."""
-    import gspread
-    from google.oauth2.service_account import Credentials
+def write_snapshot_to_worksheet(ws, nombre: str, runtime_data: dict, fuente: str = "Garmin") -> None:
+    """Escribe un runtime_data (de garmin_metrics.build_runtime_data,
+    apple_health.build_runtime_data u oura_metrics.build_runtime_data --
+    misma forma exacta) en la fila de este paciente dentro de la hoja ya
+    abierta `ws`. Es el paso común de push_snapshot() (cuando el paciente
+    lo manda desde su propia computadora) y de dashboard_pacientes.py
+    (cuando tú subes el archivo directo desde el dashboard central) -- así
+    los dos caminos terminan escribiendo exactamente lo mismo."""
     import garmin_metrics as gm
-
-    with open(SHEET_ID_PATH, encoding="utf-8") as f:
-        sheet_id = f.read().strip()
 
     resumen = runtime_data["resumen_mes"]
 
@@ -83,9 +80,9 @@ def push_snapshot(nombre: str, runtime_data: dict, fuente: str = "Garmin") -> No
 
     if len(datos_json) > LIMITE_CARACTERES_CELDA:
         print(
-            f"Aviso: tu dashboard completo pesa más de lo normal ({len(datos_json)} caracteres) "
-            "y puede que no quepa en la hoja. Se manda el resumen igual, pero avísale a tu "
-            "nutriólogo si el dashboard central no te muestra el detalle completo."
+            f"Aviso: el dashboard completo de {nombre} pesa más de lo normal ({len(datos_json)} "
+            "caracteres) y puede que no quepa en la hoja. Se manda el resumen igual, pero revisa "
+            "si el dashboard central no muestra el detalle completo."
         )
 
     fila = [
@@ -101,11 +98,6 @@ def push_snapshot(nombre: str, runtime_data: dict, fuente: str = "Garmin") -> No
         datos_json,
         fuente,
     ]
-
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_file(CREDENCIALES_PATH, scopes=scope)
-    gc = gspread.authorize(creds)
-    ws = gc.open_by_key(sheet_id).sheet1
 
     registros = ws.get_all_values()
     if not registros:
@@ -130,6 +122,24 @@ def push_snapshot(nombre: str, runtime_data: dict, fuente: str = "Garmin") -> No
     else:
         ws.append_row(fila)
 
+
+def push_snapshot(nombre: str, runtime_data: dict, fuente: str = "Garmin") -> None:
+    """Como write_snapshot_to_worksheet(), pero abriendo la hoja con las
+    credenciales locales (credenciales_hoja.json/hoja_id.txt) -- lo que usa
+    cada paciente desde su propia computadora (push_resumen.py,
+    push_resumen_apple.py, push_resumen_oura.py)."""
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    with open(SHEET_ID_PATH, encoding="utf-8") as f:
+        sheet_id = f.read().strip()
+
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_file(CREDENCIALES_PATH, scopes=scope)
+    gc = gspread.authorize(creds)
+    ws = gc.open_by_key(sheet_id).sheet1
+
+    write_snapshot_to_worksheet(ws, nombre, runtime_data, fuente)
     print(f"Listo, tu dashboard se envió a tu nutriólogo ({nombre}).")
 
 

@@ -19,6 +19,8 @@ Ver PUBLICAR_DASHBOARD_PACIENTES.md para la guía paso a paso completa.
 """
 
 import json
+import tempfile
+from pathlib import Path
 
 import gspread
 import pandas as pd
@@ -27,6 +29,7 @@ from google.oauth2.service_account import Credentials
 
 import antropometria_parser
 import antropometria_store
+import apple_health
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
@@ -36,6 +39,7 @@ from garmin_dashboard_ui import (
     render_dashboard_body,
     render_inbody_section,
 )
+from push_resumen import write_snapshot_to_worksheet
 from theme import apply_theme, render_header
 
 st.set_page_config(page_title="Resumen de pacientes", layout="wide", page_icon="🩺")
@@ -189,6 +193,29 @@ with st.expander("¿Cómo actualiza sus datos este paciente?"):
             "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
             "tardar hasta 5 minutos en reflejarlo sola)."
         )
+
+with st.expander("📤 Subir archivo de Apple Health (.zip) directo desde aquí"):
+    st.caption(
+        "Si el paciente te mandó el .zip que exportó de la app Salud de su iPhone (en vez de "
+        "correrlo él mismo en su computadora), lo puedes subir aquí -- se calcula el dashboard "
+        "completo y se guarda en la hoja igual que si lo hubiera mandado él."
+    )
+    archivo_apple = st.file_uploader(
+        "Archivo .zip de la exportación de Salud", type=["zip"], key=f"apple_upload_{paciente}",
+    )
+    if archivo_apple is not None and st.button("Procesar y guardar", key=f"apple_procesar_{paciente}"):
+        with st.spinner("Leyendo el archivo de Salud y calculando el dashboard (puede tardar un poco)..."):
+            try:
+                with tempfile.TemporaryDirectory() as tmp:
+                    zip_path = Path(tmp) / "export.zip"
+                    zip_path.write_bytes(archivo_apple.getvalue())
+                    runtime_data = apple_health.build_runtime_data(str(zip_path))
+                write_snapshot_to_worksheet(_worksheet(), paciente, runtime_data, fuente="Apple Health")
+                st.cache_data.clear()
+                st.success("Listo -- se guardó el dashboard de este paciente.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"No se pudo leer o guardar el archivo: {e}")
 
 def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
