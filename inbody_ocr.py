@@ -184,14 +184,19 @@ def parse_inbody_text(texto: str) -> dict:
     # con punto decimal entre los números de la línea, es el correcto.
     agua_total = _valor_de_fila(lineas, r"Agua\s*Corporal\b(?!.*Total)", preferir_decimal=True)
     agua_intra = _valor_de_fila(lineas, r"Agua\s*Intracelular", primero=True)
-    # Igual que Grasa Visceral: esta fila también suele salir contaminada
-    # con la columna vecina (Pierna Izquierda %) -- se busca puntual el
-    # número justo antes de la "L" de litros ("Agua Extracelular 19.0L").
-    agua_extra_m = re.search(r"Extracelular\D*?(\d{1,3}(?:[.,]\d+)?)\s*L", texto, re.IGNORECASE)
-    agua_extra = (
-        _a_float(agua_extra_m.group(1)) if agua_extra_m
-        else _valor_de_fila(lineas, r"Agua\s*Extracelular", primero=True)
-    )
+    # Agua Extracelular es justo la fila donde más se pierde el punto
+    # decimal en el OCR ("19.0L" leído como "190L") -- en vez de confiar en
+    # leerla directo, se calcula: Agua Corporal Total = Intracelular +
+    # Extracelular siempre (no es una fila más, es una identidad), y
+    # agua_total/agua_intra ya se leen de forma confiable arriba.
+    if agua_total is not None and agua_intra is not None and agua_total > agua_intra:
+        agua_extra = round(agua_total - agua_intra, 2)
+    else:
+        agua_extra_m = re.search(r"Extracelular\D*?(\d{1,3}(?:[.,]\d+)?)\s*L", texto, re.IGNORECASE)
+        agua_extra = (
+            _a_float(agua_extra_m.group(1)) if agua_extra_m
+            else _valor_de_fila(lineas, r"Agua\s*Extracelular", primero=True)
+        )
     imc = _valor_de_fila(lineas, r"^IMC\b")
     # primero=True: cuando la línea del valor viene contaminada con la
     # sección de al lado (Grasa Segmental), el valor de PGC queda primero,
