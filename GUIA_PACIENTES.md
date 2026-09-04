@@ -53,6 +53,22 @@ Se arregla así:
 Si te vuelve a pasar seguido, pide que te compartan la carpeta por Google
 Drive o correo en vez de WhatsApp — así no debería volver a pasar.
 
+### Si Windows te avisa "Windows protegió su PC"
+
+Es normal la primera vez que abres un programa nuevo — no significa que
+esté dañado ni que tenga virus, solo que Windows todavía no lo reconoce.
+
+1. En esa ventana azul, busca el texto pequeño que dice **"Más información"**
+   (o "More info") y dale clic.
+2. Va a aparecer un botón nuevo, **"Ejecutar de todas formas"** (o "Run
+   anyway") — dale clic ahí.
+3. El programa va a abrir normal. Esto solo hace falta la primera vez.
+
+Si en vez de eso tu antivirus (Windows Defender u otro) borra el archivo o
+dice que es una amenaza, avísale a tu nutriólogo con una foto de ese
+mensaje — puede que tengas que restaurarlo desde la "Cuarentena" del
+antivirus o pedir la carpeta de nuevo.
+
 ## Paso 3: Inicia sesión (solo la primera vez)
 
 La ventana te va a pedir:
