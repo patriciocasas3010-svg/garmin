@@ -99,10 +99,14 @@ def _valor_de_fila(
         if re.search(etiqueta_patron, linea, re.IGNORECASE):
             nums = _numeros(linea)
             # 0 números (la etiqueta y el valor cayeron en líneas
-            # distintas) o >=4 números (esta línea es la regla de una
-            # gráfica de barras) -- en ambos casos, el valor real está en
-            # una de las siguientes líneas.
-            if not nums or len(nums) >= 4:
+            # distintas) o >=6 números (esta línea es la regla de una
+            # gráfica de barras, que trae 8-11 valores) -- en ambos casos,
+            # el valor real está en una de las siguientes líneas. El corte
+            # es 6 (no 4) porque una línea contaminada con la columna
+            # vecina puede traer 4-5 números sueltos sin ser una regla de
+            # verdad -- con 4 se confundía y agarraba el valor de la
+            # columna de al lado en vez de dejar la etiqueta sin match.
+            if not nums or len(nums) >= 6:
                 for j in (i + 1, i + 2):
                     if j < len(lineas):
                         nums_sig = _numeros(lineas[j])
@@ -118,10 +122,29 @@ _HEADER_RE = re.compile(
     r"(\d{4,6}-\d+|\d{7,12})\s+"        # ID de perfil (con o sin guion, según el modelo)
     r"(\d{2,3})\s*cm\s+"                # altura
     r"(\d{1,3})\s+"                     # edad
-    r"(Femenino|Masculino)[^0-9\n]{0,15}"  # sexo (a veces sigue un "|" u otro símbolo suelto del OCR)
+    r"(Femenino|Masculino|Female|Male)[^0-9\n]{0,15}"  # sexo, ES o EN (a veces sigue un "|" suelto del OCR)
     r"(\d{2}\.\d{2}\.\d{4}|\d{4}\.\d{2}\.\d{2})",  # fecha, DD.MM.AAAA o AAAA.MM.DD según el modelo
     re.IGNORECASE,
 )
+
+_SEXO_A_ESPANOL = {"femenino": "Femenino", "female": "Femenino", "masculino": "Masculino", "male": "Masculino"}
+
+# Rangos humanamente posibles -- un valor fuera de esto es casi siempre
+# basura del OCR (agarró un número de otra parte del reporte), no un dato
+# real. Se usa como última red de seguridad antes de regresar los campos.
+_RANGOS_PLAUSIBLES = {
+    "altura_cm": (100, 220),
+    "edad": (5, 110),
+    "peso_kg": (20, 250),
+    "masa_grasa_kg": (1, 150),
+    "mme_kg": (5, 80),
+    "grasa_visceral": (1, 30),
+    "agua_total_l": (10, 80),
+    "agua_intra_l": (5, 60),
+    "agua_extra_l": (2, 30),
+    "imc": (10, 70),
+    "pgc_pct": (2, 70),
+}
 
 
 def _normaliza_fecha(fecha_cruda: str) -> str:
@@ -146,21 +169,24 @@ def parse_inbody_text(texto: str) -> dict:
     # cuenta (que puede agarrar el número equivocado si el OCR separa las
     # columnas de forma rara). Si no hace match (otro modelo/diseño de
     # reporte), se cae al método campo por campo de antes.
+    # Algunos reportes de InBody salen en inglés (p. ej. exportados desde
+    # el portal web LookinBody, en vez de impresos del aparato) en lugar de
+    # español -- todos los patrones de abajo aceptan ambos idiomas.
     header_m = _HEADER_RE.search(texto)
     if header_m:
         perfil_id_val = header_m.group(1)
         altura = _a_float(header_m.group(2))
         edad_val = int(header_m.group(3))
-        sexo_val = header_m.group(4).capitalize()
+        sexo_val = _SEXO_A_ESPANOL.get(header_m.group(4).lower())
         fecha_val = _normaliza_fecha(header_m.group(5))
     else:
         perfil_id = re.search(r"\b(\d{4,6}-\d+|\d{7,12})\b", texto)
         perfil_id_val = perfil_id.group(1) if perfil_id else None
         altura = _valor_de_fila(lineas, r"\d{2,3}\s*cm")
-        edad_bruta = _valor_de_fila(lineas, r"^Edad\b")
+        edad_bruta = _valor_de_fila(lineas, r"^(Edad|Age)\b")
         edad_val = int(edad_bruta) if edad_bruta is not None else None
-        sexo_m = re.search(r"\b(Femenino|Masculino)\b", texto, re.IGNORECASE)
-        sexo_val = sexo_m.group(1).capitalize() if sexo_m else None
+        sexo_m = re.search(r"\b(Femenino|Masculino|Female|Male)\b", texto, re.IGNORECASE)
+        sexo_val = _SEXO_A_ESPANOL.get(sexo_m.group(1).lower()) if sexo_m else None
         fecha_m = re.search(r"(\d{2}\.\d{2}\.\d{4})", texto)
         fecha_val = fecha_m.group(1) if fecha_m else None
 
@@ -168,22 +194,42 @@ def parse_inbody_text(texto: str) -> dict:
 
     # "(kg)" a veces sale mal leído (p. ej. "(9)" o "(ka)") -- se busca solo
     # la etiqueta al inicio de línea, sin exigir la unidad literal.
-    peso = _valor_de_fila(lineas, r"^Peso\b")
-    mme = _valor_de_fila(lineas, r"\bMME\b")
+    # preferir_decimal=True porque estas filas a veces vienen contaminadas
+    # con números enteros sueltos de la columna vecina.
+    peso = _valor_de_fila(lineas, r"^(Peso|Weight)\b(?!\s*Control)", preferir_decimal=True)
+    mme = _valor_de_fila(lineas, r"\b(MME|SMM)\b", preferir_decimal=True)
     # Nivel de Grasa Visceral es un entero (no trae decimales) que a veces
     # cae en una línea contaminada con números de la columna vecina -- se
     # busca puntual justo entre "Visceral" y el "(" del rango de referencia
-    # ("Nivel de Grasa Visceral 14 ( 1-9 )"), en vez del método genérico.
-    grasa_visceral_m = re.search(r"Grasa\s*Visceral\D*?(\d{1,3})\s*\(", texto, re.IGNORECASE)
+    # ("Nivel de Grasa Visceral 14 ( 1-9 )" / "Visceral Fat Level 6 ( 1-9 )"),
+    # en vez del método genérico.
+    grasa_visceral_m = re.search(
+        r"(?:Grasa\s*Visceral|Visceral\s*Fat\s*Level)\D*?(\d{1,3})\s*\(", texto, re.IGNORECASE,
+    )
     grasa_visceral = (
         _a_float(grasa_visceral_m.group(1)) if grasa_visceral_m
-        else _valor_de_fila(lineas, r"Nivel\s*de\s*Grasa\s*Visceral", primero=True)
+        else _valor_de_fila(lineas, r"Nivel\s*de\s*Grasa\s*Visceral|Visceral\s*Fat\s*Level", primero=True)
     )
     # preferir_decimal=True: esta fila casi siempre sale con un número
     # entero de sobra pegado (columna vecina) -- si hay un solo candidato
     # con punto decimal entre los números de la línea, es el correcto.
+    # "Total Body Water" en inglés SIEMPRE trae "Total" (a diferencia del
+    # español, donde se evita esa fila a propósito porque ahí es la
+    # columna, no el renglón) -- se intenta primero el patrón en español y,
+    # si no hay resultado, el de inglés por separado.
     agua_total = _valor_de_fila(lineas, r"Agua\s*Corporal\b(?!.*Total)", preferir_decimal=True)
-    agua_intra = _valor_de_fila(lineas, r"Agua\s*Intracelular", primero=True)
+    if agua_total is None:
+        agua_total = _valor_de_fila(lineas, r"Total\s*Body\s*Water", preferir_decimal=True)
+    # Igual que Agua Extracelular: se busca puntual el número justo antes
+    # de la "L" de litros, en vez de confiar en el método genérico (que
+    # puede caer en una línea contaminada con la columna vecina).
+    agua_intra_m = re.search(
+        r"(?:Agua\s*Intracelular|Intracellular\s*Water)\D*?(\d{1,3}(?:[.,]\d+)?)\s*L", texto, re.IGNORECASE,
+    )
+    agua_intra = (
+        _a_float(agua_intra_m.group(1)) if agua_intra_m
+        else _valor_de_fila(lineas, r"Agua\s*Intracelular|Intracellular\s*Water", primero=True)
+    )
     # Agua Extracelular es justo la fila donde más se pierde el punto
     # decimal en el OCR ("19.0L" leído como "190L") -- en vez de confiar en
     # leerla directo, se calcula: Agua Corporal Total = Intracelular +
@@ -192,16 +238,18 @@ def parse_inbody_text(texto: str) -> dict:
     if agua_total is not None and agua_intra is not None and agua_total > agua_intra:
         agua_extra = round(agua_total - agua_intra, 2)
     else:
-        agua_extra_m = re.search(r"Extracelular\D*?(\d{1,3}(?:[.,]\d+)?)\s*L", texto, re.IGNORECASE)
+        agua_extra_m = re.search(
+            r"(?:Extracelular|Extracellular\s*Water)\D*?(\d{1,3}(?:[.,]\d+)?)\s*L", texto, re.IGNORECASE,
+        )
         agua_extra = (
             _a_float(agua_extra_m.group(1)) if agua_extra_m
-            else _valor_de_fila(lineas, r"Agua\s*Extracelular", primero=True)
+            else _valor_de_fila(lineas, r"Agua\s*Extracelular|Extracellular\s*Water", primero=True)
         )
-    imc = _valor_de_fila(lineas, r"^IMC\b")
+    imc = _valor_de_fila(lineas, r"^(IMC|BMI)\b")
     # primero=True: cuando la línea del valor viene contaminada con la
     # sección de al lado (Grasa Segmental), el valor de PGC queda primero,
     # no al final.
-    pgc = _valor_de_fila(lineas, r"^PGC\b", primero=True)
+    pgc = _valor_de_fila(lineas, r"^(PGC|PBF)\b", primero=True)
 
     # La etiqueta de "Masa Grasa Corporal (kg)" en la gráfica de barras es
     # justo la fila que casi siempre se lee peor con OCR -- en vez de
@@ -222,7 +270,13 @@ def parse_inbody_text(texto: str) -> dict:
                         break
             break
 
-    return {
+    # Si el IMC no se pudo leer (o salió fuera de rango humano, señal de
+    # que se agarró basura), se calcula con la fórmula normal en vez de
+    # dejarlo vacío -- para esto sí es información real, no una lectura.
+    if (imc is None or not (10 <= imc <= 70)) and peso is not None and altura is not None and altura > 0:
+        imc = round(peso / (altura / 100) ** 2, 1)
+
+    campos = {
         "id": perfil_id_val,
         "modelo": modelo_m.group(1) if modelo_m else None,
         "altura_cm": altura,
@@ -239,3 +293,14 @@ def parse_inbody_text(texto: str) -> dict:
         "imc": imc,
         "pgc_pct": pgc,
     }
+
+    # Última red de seguridad: un valor físicamente imposible (IMC de 1,
+    # peso de 2072 kg) es peor que dejarlo vacío -- si el OCR agarró basura
+    # de otra parte del reporte (p. ej. una cifra de kcal), es mejor que se
+    # note como campo vacío a que se cuele un número absurdo sin revisar.
+    for campo, (minimo, maximo) in _RANGOS_PLAUSIBLES.items():
+        valor = campos.get(campo)
+        if valor is not None and not (minimo <= valor <= maximo):
+            campos[campo] = None
+
+    return campos
