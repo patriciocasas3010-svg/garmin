@@ -12,15 +12,20 @@ import pandas as pd
 import streamlit as st
 
 import garmin_metrics as gm
+from resumen_pdf import build_resumen_pdf
 
 # ---------------------------------------------------------------------------
-# Paleta (colores validados para daltonismo, ver dataviz skill / references/palette.md)
+# Paleta "Identidad Botánica" (validada para daltonismo -- ver dataviz skill;
+# olive/terracota queda en el límite de separación para protanopía, así que
+# solo se usan juntos en gráficas con leyenda/etiqueta directa, nunca como
+# único código de color).
 # ---------------------------------------------------------------------------
 
-BLUE, ORANGE, AQUA, VIOLET = "#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7"
-STATUS_GOOD, STATUS_CRITICAL = "#0ca30c", "#d03b3b"
-INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#0b0b0b", "#52514e", "#898781"
-GRID_COLOR = "#e1e0d9"
+OLIVE, TERRACOTTA, GOLD, MAUVE = "#3a6b28", "#c9673f", "#9c6a12", "#7a5490"
+BLUE, ORANGE, AQUA, VIOLET = OLIVE, TERRACOTTA, GOLD, MAUVE  # alias históricos
+STATUS_GOOD, STATUS_CRITICAL = "#3a6b28", "#c0392b"
+INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#221e14", "#4a4536", "#8a8064"
+GRID_COLOR = "#e7e2d3"
 ZONE_RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # Z1 (suave) -> Z5 (intenso)
 
 alt.themes.enable("none")
@@ -208,6 +213,23 @@ def style_estado_table(df: pd.DataFrame):
 # aparte desde dashboard_pacientes.py cuando hay historial guardado.
 # ---------------------------------------------------------------------------
 
+def inbody_ultimo_registro(historial: pd.DataFrame) -> pd.Series | None:
+    """Regresa la fila más reciente (por fecha real, no por orden en la
+    hoja) de un historial de InBody, o None si está vacío / sin fechas
+    legibles. Se usa tanto para dibujar la sección de InBody como para las
+    3 métricas de composición corporal en el Resumen."""
+    if historial.empty:
+        return None
+    historial = historial.copy()
+    # dayfirst=True porque el formato es DD.MM.AAAA (o DD.MM.AA) -- sin un
+    # format= fijo, para aceptar tanto años de 2 como de 4 dígitos.
+    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
+    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
+    if historial.empty:
+        return None
+    return historial.iloc[-1]
+
+
 def render_inbody_section(historial: pd.DataFrame):
     """historial: DataFrame con las columnas de inbody_store.ENCABEZADOS,
     ya filtrado a un solo paciente, más reciente al final."""
@@ -218,15 +240,13 @@ def render_inbody_section(historial: pd.DataFrame):
         )
         return
 
-    historial = historial.copy()
-    # dayfirst=True porque el formato es DD.MM.AAAA (o DD.MM.AA) -- sin un
-    # format= fijo, para aceptar tanto años de 2 como de 4 dígitos.
-    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
-    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
-    if historial.empty:
+    ultimo = inbody_ultimo_registro(historial)
+    if ultimo is None:
         st.info("No se pudieron leer las fechas de este historial.")
         return
-    ultimo = historial.iloc[-1]
+    historial = historial.copy()
+    historial["_fecha"] = pd.to_datetime(historial["Fecha"], dayfirst=True, errors="coerce")
+    historial = historial.dropna(subset=["_fecha"]).sort_values("_fecha")
 
     st.caption(
         f"Último InBody: {ultimo.get('Fecha', '')} · {ultimo.get('Modelo', '')} · "
@@ -367,11 +387,20 @@ def render_antropometria_section(historial: pd.DataFrame):
 # garmin_metrics.build_runtime_data() o snapshot_from_json()
 # ---------------------------------------------------------------------------
 
-def render_dashboard_body(data: dict, composicion_corporal_renderer=None):
+def render_dashboard_body(
+    data: dict, composicion_corporal_renderer=None,
+    inbody_resumen: pd.Series | None = None, paciente_nombre: str | None = None,
+):
     """composicion_corporal_renderer: función sin argumentos que dibuja el
     contenido de InBody/mediciones antropométricas (definida en
     dashboard_pacientes.py, que es quien tiene acceso a la hoja de Google) --
-    si se pasa, se agrega como pestaña propia justo después de Resumen."""
+    si se pasa, se agrega como pestaña propia justo después de Resumen.
+
+    inbody_resumen: fila más reciente del historial de InBody (ver
+    inbody_ultimo_registro) -- si se pasa, Peso/Grasa/Masa muscular
+    aparecen arriba de todo en Resumen.
+
+    paciente_nombre: solo para el encabezado del PDF descargable."""
     load_series = data["load_series"]
     rhr_series = data["rhr_series"]
     sleep_df = data["sleep_df"]
@@ -418,6 +447,47 @@ def render_dashboard_body(data: dict, composicion_corporal_renderer=None):
 
     # --- Resumen ---
     with tab_resumen:
+        if inbody_resumen is not None:
+            b1, b2, b3 = st.columns(3)
+            peso_val = inbody_resumen.get("Peso_kg")
+            grasa_val = inbody_resumen.get("MasaGrasa_kg")
+            mme_val = inbody_resumen.get("MME_kg")
+            b1.metric("Peso", f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—")
+            b2.metric("Grasa corporal", f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—")
+            b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—")
+            st.caption(f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en 🧬 Composición corporal.")
+            st.divider()
+
+        st.subheader("¿Cómo vengo hoy?")
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
+        c2.metric("HRV (Z-score)", f"{ultimo_hrv_z:.2f}" if ultimo_hrv_z is not None else "—", help="Qué tan lejos está tu HRV de tu línea base de 60 días")
+        c3.metric(
+            "FC en reposo hoy",
+            f"{rhr_today:.0f}" if rhr_today is not None else "—",
+            delta=f"{rhr_today - rhr_baseline:+.0f} vs. tu media" if rhr_today is not None and rhr_baseline is not None else None,
+            delta_color="inverse",
+        )
+        sueno_7d = sleep_df["hours"].tail(7).mean()
+        c4.metric("Sueño (7d)", f"{sueno_7d:.1f} h" if pd.notna(sueno_7d) else "—")
+        promedio_ml_dia = (data.get("hidratacion_diaria") or {}).get("promedio_ml_dia")
+        c5.metric(
+            "Líquido/día activo", f"{promedio_ml_dia:.0f} mL" if promedio_ml_dia is not None else "—",
+            help="Promedio de pérdida de líquidos estimada en días con actividad (ver pestaña Sueño y Bienestar).",
+        )
+        c6.metric("Alertas activas", str(alertas_activas), delta=None)
+
+        if alertas_activas:
+            st.error(f"Hay {alertas_activas} indicador(es) en alerta esta semana — revisa la pestaña 🚦 Alertas.")
+        else:
+            st.success("Sin alertas activas esta semana. Todo dentro de rango.")
+
+        st.caption(
+            "Este resumen cruza tus datos de los últimos días para dar una foto rápida "
+            "antes de entrar al detalle de cada pestaña."
+        )
+
+        st.divider()
         st.subheader(f"Calificación del mes (últimos {wellness_days} días)")
 
         overall_score = resumen_mes["overall_score"]
@@ -479,33 +549,18 @@ def render_dashboard_body(data: dict, composicion_corporal_renderer=None):
                 st.warning(f"Más de la mitad del mes sin actividad registrada ({num_dias_sin_actividad} de {total_dias} días).")
 
         st.divider()
-        st.subheader("¿Cómo vengo hoy?")
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
-        c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
-        c2.metric("HRV (Z-score)", f"{ultimo_hrv_z:.2f}" if ultimo_hrv_z is not None else "—", help="Qué tan lejos está tu HRV de tu línea base de 60 días")
-        c3.metric(
-            "FC en reposo hoy",
-            f"{rhr_today:.0f}" if rhr_today is not None else "—",
-            delta=f"{rhr_today - rhr_baseline:+.0f} vs. tu media" if rhr_today is not None and rhr_baseline is not None else None,
-            delta_color="inverse",
+        pdf_bytes = build_resumen_pdf(
+            paciente_nombre=paciente_nombre,
+            resumen_mes=resumen_mes, wellness_days=wellness_days,
+            ultimo_acwr=ultimo_acwr, ultimo_hrv_z=ultimo_hrv_z,
+            rhr_today=rhr_today, rhr_baseline=rhr_baseline, sueno_7d=sueno_7d,
+            promedio_ml_dia=promedio_ml_dia, alertas_activas=alertas_activas,
+            inbody_resumen=inbody_resumen,
         )
-        sueno_7d = sleep_df["hours"].tail(7).mean()
-        c4.metric("Sueño (7d)", f"{sueno_7d:.1f} h" if pd.notna(sueno_7d) else "—")
-        promedio_ml_dia = (data.get("hidratacion_diaria") or {}).get("promedio_ml_dia")
-        c5.metric(
-            "Líquido/día activo", f"{promedio_ml_dia:.0f} mL" if promedio_ml_dia is not None else "—",
-            help="Promedio de pérdida de líquidos estimada en días con actividad (ver pestaña Sueño y Bienestar).",
-        )
-        c6.metric("Alertas activas", str(alertas_activas), delta=None)
-
-        if alertas_activas:
-            st.error(f"Hay {alertas_activas} indicador(es) en alerta esta semana — revisa la pestaña 🚦 Alertas.")
-        else:
-            st.success("Sin alertas activas esta semana. Todo dentro de rango.")
-
-        st.caption(
-            "Este resumen cruza tus datos de los últimos días para dar una foto rápida "
-            "antes de entrar al detalle de cada pestaña."
+        st.download_button(
+            "🖨️ Descargar resumen (PDF)", data=pdf_bytes,
+            file_name=f"resumen_{(paciente_nombre or 'paciente').replace(' ', '_')}.pdf",
+            mime="application/pdf",
         )
 
     # --- Carga y Preparación ---

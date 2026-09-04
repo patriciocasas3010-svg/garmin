@@ -30,9 +30,16 @@ import antropometria_store
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
-from garmin_dashboard_ui import render_antropometria_section, render_dashboard_body, render_inbody_section
+from garmin_dashboard_ui import (
+    inbody_ultimo_registro,
+    render_antropometria_section,
+    render_dashboard_body,
+    render_inbody_section,
+)
+from theme import apply_theme, render_header
 
 st.set_page_config(page_title="Resumen de pacientes", layout="wide", page_icon="🩺")
+apply_theme()
 
 
 def _check_password() -> bool:
@@ -55,7 +62,7 @@ def _check_password() -> bool:
     if st.session_state.get("_authed"):
         return True
 
-    st.title("🩺 Resumen de pacientes")
+    render_header("Resumen de pacientes")
     pwd = st.text_input("Contraseña", type="password")
     if pwd == expected:
         st.session_state["_authed"] = True
@@ -103,7 +110,7 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 
 if st.session_state["paciente_actual"] is None:
-    st.title("🩺 Resumen de pacientes")
+    render_header("Resumen de pacientes")
     st.caption("Selecciona tu nombre para ver tu Tablero Maestro de Rendimiento.")
 
     if df.empty or "Nombre" not in df.columns:
@@ -140,11 +147,16 @@ fila = filas_paciente.iloc[-1]
 datos_json = fila.get("Datos")
 fuente = fila.get("Fuente") or "Garmin"
 
+# Se leen una sola vez aquí (no dentro de _render_composicion_corporal) para
+# poder usar también el último InBody en la pestaña Resumen.
+historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+inbody_ultimo = inbody_ultimo_registro(historial_inbody)
+
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
-    icono = "🍎" if fuente == "Apple Health" else "🏃"
-    st.title(f"{icono} {paciente}")
-    st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')} · Fuente: {fuente}")
+    render_header(paciente, subtitulo=fuente)
+    st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')}")
 with top_col2:
     if st.button("🔄 Actualizar", width="stretch"):
         st.cache_data.clear()
@@ -237,7 +249,6 @@ def _render_composicion_corporal():
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
 
-    historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
     render_inbody_section(historial_inbody)
 
     st.divider()
@@ -308,7 +319,6 @@ def _render_composicion_corporal():
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
 
-    historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
     render_antropometria_section(historial_antro)
 
 
@@ -330,4 +340,7 @@ except Exception as e:
     st.error(f"No se pudo leer el dashboard guardado de este paciente. Detalle: {e}")
     st.stop()
 
-render_dashboard_body(data, composicion_corporal_renderer=_render_composicion_corporal)
+render_dashboard_body(
+    data, composicion_corporal_renderer=_render_composicion_corporal,
+    inbody_resumen=inbody_ultimo, paciente_nombre=paciente,
+)

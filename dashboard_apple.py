@@ -18,8 +18,10 @@ import streamlit as st
 
 import apple_health as ah
 from garmin_dashboard_ui import render_dashboard_body
+from theme import apply_theme, render_header
 
 st.set_page_config(page_title="Tablero Maestro de Rendimiento", layout="wide", page_icon="🍎")
+apply_theme()
 
 
 def _check_password() -> bool:
@@ -33,7 +35,7 @@ def _check_password() -> bool:
     if st.session_state.get("_authed"):
         return True
 
-    st.title("🍎 Tablero Maestro de Rendimiento")
+    render_header("Tablero Maestro de Rendimiento")
     pwd = st.text_input("Contraseña", type="password")
     if pwd == expected:
         st.session_state["_authed"] = True
