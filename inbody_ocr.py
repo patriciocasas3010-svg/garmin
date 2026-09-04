@@ -120,7 +120,7 @@ def _valor_de_fila(
 
 _HEADER_RE = re.compile(
     r"(\d{4,6}-\d+|\d{7,12})\s+"        # ID de perfil (con o sin guion, según el modelo)
-    r"(\d{2,3})\s*cm\s+"                # altura
+    r"(\d{2,3}(?:\.\d+)?)\s*(cm|in|\")\s+"  # altura, cm (normal) o in/" (reporte en unidades imperiales)
     r"(\d{1,3})\s+"                     # edad
     r"(Femenino|Masculino|Female|Male)[^0-9\n]{0,15}"  # sexo, ES o EN (a veces sigue un "|" suelto del OCR)
     r"(\d{2}\.\d{2}\.\d{4}|\d{4}\.\d{2}\.\d{2})",  # fecha, DD.MM.AAAA o AAAA.MM.DD según el modelo
@@ -128,6 +128,9 @@ _HEADER_RE = re.compile(
 )
 
 _SEXO_A_ESPANOL = {"femenino": "Femenino", "female": "Femenino", "masculino": "Masculino", "male": "Masculino"}
+
+_LB_A_KG = 0.453592
+_IN_A_CM = 2.54
 
 # Rangos humanamente posibles -- un valor fuera de esto es casi siempre
 # basura del OCR (agarró un número de otra parte del reporte), no un dato
@@ -176,13 +179,20 @@ def parse_inbody_text(texto: str) -> dict:
     if header_m:
         perfil_id_val = header_m.group(1)
         altura = _a_float(header_m.group(2))
-        edad_val = int(header_m.group(3))
-        sexo_val = _SEXO_A_ESPANOL.get(header_m.group(4).lower())
-        fecha_val = _normaliza_fecha(header_m.group(5))
+        if altura is not None and header_m.group(3) != "cm":
+            altura = round(altura * _IN_A_CM, 1)  # in o " -> cm
+        edad_val = int(header_m.group(4))
+        sexo_val = _SEXO_A_ESPANOL.get(header_m.group(5).lower())
+        fecha_val = _normaliza_fecha(header_m.group(6))
     else:
         perfil_id = re.search(r"\b(\d{4,6}-\d+|\d{7,12})\b", texto)
         perfil_id_val = perfil_id.group(1) if perfil_id else None
-        altura = _valor_de_fila(lineas, r"\d{2,3}\s*cm")
+        altura_m = re.search(r"\b(\d{2,3}(?:\.\d+)?)\s*(cm|in|\")\b", texto, re.IGNORECASE)
+        altura = None
+        if altura_m:
+            altura = _a_float(altura_m.group(1))
+            if altura is not None and altura_m.group(2) != "cm":
+                altura = round(altura * _IN_A_CM, 1)
         edad_bruta = _valor_de_fila(lineas, r"^(Edad|Age)\b")
         edad_val = int(edad_bruta) if edad_bruta is not None else None
         sexo_m = re.search(r"\b(Femenino|Masculino|Female|Male)\b", texto, re.IGNORECASE)
@@ -191,6 +201,12 @@ def parse_inbody_text(texto: str) -> dict:
         fecha_val = fecha_m.group(1) if fecha_m else None
 
     modelo_m = re.search(r"\[?(InBody\s?\d{2,4})\]?", texto, re.IGNORECASE)
+
+    # Reporte en unidades imperiales (poco común, pero puede pasar con
+    # cuentas configuradas así) -- se detecta por "(lb)"/"(lbs)" junto a
+    # alguna etiqueta de peso, y se convierte a kg al final. Sin probar
+    # contra un reporte real así -- si algo no cuadra, avisar para ajustar.
+    usa_libras = bool(re.search(r"\((?:lbs?)\)", texto, re.IGNORECASE))
 
     # "(kg)" a veces sale mal leído (p. ej. "(9)" o "(ka)") -- se busca solo
     # la etiqueta al inicio de línea, sin exigir la unidad literal.
@@ -269,6 +285,16 @@ def parse_inbody_text(texto: str) -> dict:
                         masa_grasa = _a_float(nums_sig[-1])
                         break
             break
+
+    if usa_libras:
+        # Ojo: la regla numérica de la gráfica de Masa Grasa Corporal
+        # ("60 80 100...") está calibrada en kg -- en un reporte en libras
+        # esos números salen distintos, así que esa detección en particular
+        # probablemente no encuentre nada (queda en None) en vez de un
+        # valor mal convertido.
+        peso = round(peso * _LB_A_KG, 1) if peso is not None else None
+        masa_grasa = round(masa_grasa * _LB_A_KG, 1) if masa_grasa is not None else None
+        mme = round(mme * _LB_A_KG, 1) if mme is not None else None
 
     # Si el IMC no se pudo leer (o salió fuera de rango humano, señal de
     # que se agarró basura), se calcula con la fórmula normal en vez de
