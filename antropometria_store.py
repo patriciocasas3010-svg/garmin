@@ -61,7 +61,11 @@ def guardar_registro(gc: gspread.Client, sheet_id: str, nombre: str, campos: dic
 
 def leer_historial(gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
     ws = _worksheet(gc, sheet_id)
-    registros = ws.get_all_records()
+    # UNFORMATTED_VALUE: trae el número tal cual (12.82), no el texto ya
+    # formateado según el idioma de la hoja de cálculo ("12,82" en una hoja
+    # en español) -- si no, gspread puede leer mal esa coma y convertirla
+    # en un número de mil (12,82 -> 1282).
+    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
     df = pd.DataFrame(registros)
     if df.empty or "Nombre" not in df.columns:
         return pd.DataFrame(columns=ENCABEZADOS)

@@ -367,7 +367,11 @@ def render_antropometria_section(historial: pd.DataFrame):
 # garmin_metrics.build_runtime_data() o snapshot_from_json()
 # ---------------------------------------------------------------------------
 
-def render_dashboard_body(data: dict):
+def render_dashboard_body(data: dict, composicion_corporal_renderer=None):
+    """composicion_corporal_renderer: función sin argumentos que dibuja el
+    contenido de InBody/mediciones antropométricas (definida en
+    dashboard_pacientes.py, que es quien tiene acceso a la hoja de Google) --
+    si se pasa, se agrega como pestaña propia justo después de Resumen."""
     load_series = data["load_series"]
     rhr_series = data["rhr_series"]
     sleep_df = data["sleep_df"]
@@ -395,9 +399,22 @@ def render_dashboard_body(data: dict):
     resumen_mes = data["resumen_mes"]
     wellness_days = data["wellness_days"]
 
-    tab_resumen, tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas = st.tabs(
-        ["📋 Resumen", "⚖️ Carga y Preparación", "🎯 Eficiencia y Zonas", "😴 Sueño y Bienestar", "🔥 Calorías", "🚦 Alertas"]
-    )
+    etiquetas = ["📋 Resumen"]
+    if composicion_corporal_renderer is not None:
+        etiquetas.append("🧬 Composición corporal")
+    etiquetas += ["⚖️ Carga y Preparación", "🎯 Eficiencia y Zonas", "😴 Sueño y Bienestar", "🔥 Calorías", "🚦 Alertas"]
+    tabs = st.tabs(etiquetas)
+    tab_resumen = tabs[0]
+    idx = 1
+    tab_composicion = None
+    if composicion_corporal_renderer is not None:
+        tab_composicion = tabs[idx]
+        idx += 1
+    tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas = tabs[idx:idx + 5]
+
+    if tab_composicion is not None:
+        with tab_composicion:
+            composicion_corporal_renderer()
 
     # --- Resumen ---
     with tab_resumen:

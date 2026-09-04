@@ -171,142 +171,146 @@ with st.expander("¿Cómo actualiza sus datos este paciente?"):
             "tardar hasta 5 minutos en reflejarlo sola)."
         )
 
-st.divider()
-st.subheader("🧬 Composición corporal (InBody)")
+def _render_composicion_corporal():
+    """InBody + mediciones antropométricas de este paciente -- se llama ya
+    sea dentro de la pestaña "Composición corporal" del dashboard completo,
+    o directo cuando el paciente todavía no tiene dashboard de wearable."""
+    st.subheader("🧬 Composición corporal (InBody)")
 
-with st.expander("Subir nuevo resultado de InBody"):
-    archivo = st.file_uploader(
-        "Foto o PDF del resultado", type=["jpg", "jpeg", "png", "pdf"], key=f"inbody_upload_{paciente}",
-    )
-    if archivo is not None and st.button("Leer archivo", key=f"inbody_leer_{paciente}"):
-        with st.spinner("Leyendo el archivo (OCR, puede tardar unos segundos)..."):
-            try:
-                texto = inbody_ocr.extract_text(archivo.getvalue(), archivo.name)
-                st.session_state[f"inbody_draft_{paciente}"] = inbody_ocr.parse_inbody_text(texto)
-            except FileNotFoundError:
-                st.error(
-                    "Falta Tesseract instalado en el servidor -- agrega 'tesseract-ocr', "
-                    "'tesseract-ocr-spa' y 'poppler-utils' a packages.txt y reinicia la app."
-                )
-            except Exception as e:
-                st.error(f"No se pudo leer el archivo: {e}")
-
-    draft = st.session_state.get(f"inbody_draft_{paciente}")
-    if draft is not None:
-        st.caption(
-            "La lectura automática puede tener errores, sobre todo en números (a veces se pierde "
-            "un punto decimal, por ejemplo). Revisa y corrige antes de guardar."
+    with st.expander("Subir nuevo resultado de InBody"):
+        archivo = st.file_uploader(
+            "Foto o PDF del resultado", type=["jpg", "jpeg", "png", "pdf"], key=f"inbody_upload_{paciente}",
         )
-        with st.form(f"inbody_form_{paciente}"):
-            col1, col2, col3 = st.columns(3)
-            fecha = col1.text_input("Fecha (DD.MM.AAAA)", value=draft.get("fecha") or "")
-            modelo = col2.text_input("Modelo", value=draft.get("modelo") or "")
-            sexo = col3.selectbox("Sexo", ["Femenino", "Masculino"], index=0 if draft.get("sexo") != "Masculino" else 1)
+        if archivo is not None and st.button("Leer archivo", key=f"inbody_leer_{paciente}"):
+            with st.spinner("Leyendo el archivo (OCR, puede tardar unos segundos)..."):
+                try:
+                    texto = inbody_ocr.extract_text(archivo.getvalue(), archivo.name)
+                    st.session_state[f"inbody_draft_{paciente}"] = inbody_ocr.parse_inbody_text(texto)
+                except FileNotFoundError:
+                    st.error(
+                        "Falta Tesseract instalado en el servidor -- agrega 'tesseract-ocr', "
+                        "'tesseract-ocr-spa' y 'poppler-utils' a packages.txt y reinicia la app."
+                    )
+                except Exception as e:
+                    st.error(f"No se pudo leer el archivo: {e}")
 
-            col4, col5 = st.columns(2)
-            altura = col4.number_input("Altura (cm)", value=float(draft.get("altura_cm") or 0), step=0.5)
-            edad = col5.number_input("Edad", value=int(draft.get("edad") or 0), step=1)
+        draft = st.session_state.get(f"inbody_draft_{paciente}")
+        if draft is not None:
+            st.caption(
+                "La lectura automática puede tener errores, sobre todo en números (a veces se pierde "
+                "un punto decimal, por ejemplo). Revisa y corrige antes de guardar."
+            )
+            with st.form(f"inbody_form_{paciente}"):
+                col1, col2, col3 = st.columns(3)
+                fecha = col1.text_input("Fecha (DD.MM.AAAA)", value=draft.get("fecha") or "")
+                modelo = col2.text_input("Modelo", value=draft.get("modelo") or "")
+                sexo = col3.selectbox("Sexo", ["Femenino", "Masculino"], index=0 if draft.get("sexo") != "Masculino" else 1)
 
-            col6, col7, col8, col9 = st.columns(4)
-            peso = col6.number_input("Peso (kg)", value=float(draft.get("peso_kg") or 0), step=0.1)
-            masa_grasa = col7.number_input("Masa grasa (kg)", value=float(draft.get("masa_grasa_kg") or 0), step=0.1)
-            mme = col8.number_input("MME -- masa muscular (kg)", value=float(draft.get("mme_kg") or 0), step=0.1)
-            grasa_visceral = col9.number_input("Grasa visceral (nivel)", value=int(draft.get("grasa_visceral") or 0), step=1)
+                col4, col5 = st.columns(2)
+                altura = col4.number_input("Altura (cm)", value=float(draft.get("altura_cm") or 0), step=0.5)
+                edad = col5.number_input("Edad", value=int(draft.get("edad") or 0), step=1)
 
-            col10, col11, col12, col13 = st.columns(4)
-            agua_total = col10.number_input("Agua total (L)", value=float(draft.get("agua_total_l") or 0), step=0.1)
-            agua_intra = col11.number_input("Agua intracelular (L)", value=float(draft.get("agua_intra_l") or 0), step=0.1)
-            agua_extra = col12.number_input("Agua extracelular (L)", value=float(draft.get("agua_extra_l") or 0), step=0.1)
-            imc = col13.number_input("IMC", value=float(draft.get("imc") or 0), step=0.1)
+                col6, col7, col8, col9 = st.columns(4)
+                peso = col6.number_input("Peso (kg)", value=float(draft.get("peso_kg") or 0), step=0.1)
+                masa_grasa = col7.number_input("Masa grasa (kg)", value=float(draft.get("masa_grasa_kg") or 0), step=0.1)
+                mme = col8.number_input("MME -- masa muscular (kg)", value=float(draft.get("mme_kg") or 0), step=0.1)
+                grasa_visceral = col9.number_input("Grasa visceral (nivel)", value=int(draft.get("grasa_visceral") or 0), step=1)
 
-            if st.form_submit_button("Guardar en el historial", type="primary"):
-                campos_final = {
-                    "fecha": fecha, "modelo": modelo, "sexo": sexo,
-                    "altura_cm": altura or None, "edad": int(edad) or None,
-                    "peso_kg": peso or None, "masa_grasa_kg": masa_grasa or None,
-                    "mme_kg": mme or None, "grasa_visceral": int(grasa_visceral) or None,
-                    "agua_total_l": agua_total or None, "agua_intra_l": agua_intra or None,
-                    "agua_extra_l": agua_extra or None, "imc": imc or None,
-                    "pgc_pct": draft.get("pgc_pct"),
-                }
-                inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
-                st.session_state.pop(f"inbody_draft_{paciente}", None)
-                st.success("Guardado -- se agregó al historial de este paciente.")
-                st.rerun()
+                col10, col11, col12, col13 = st.columns(4)
+                agua_total = col10.number_input("Agua total (L)", value=float(draft.get("agua_total_l") or 0), step=0.1)
+                agua_intra = col11.number_input("Agua intracelular (L)", value=float(draft.get("agua_intra_l") or 0), step=0.1)
+                agua_extra = col12.number_input("Agua extracelular (L)", value=float(draft.get("agua_extra_l") or 0), step=0.1)
+                imc = col13.number_input("IMC", value=float(draft.get("imc") or 0), step=0.1)
 
-historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-render_inbody_section(historial_inbody)
+                if st.form_submit_button("Guardar en el historial", type="primary"):
+                    campos_final = {
+                        "fecha": fecha, "modelo": modelo, "sexo": sexo,
+                        "altura_cm": altura or None, "edad": int(edad) or None,
+                        "peso_kg": peso or None, "masa_grasa_kg": masa_grasa or None,
+                        "mme_kg": mme or None, "grasa_visceral": int(grasa_visceral) or None,
+                        "agua_total_l": agua_total or None, "agua_intra_l": agua_intra or None,
+                        "agua_extra_l": agua_extra or None, "imc": imc or None,
+                        "pgc_pct": draft.get("pgc_pct"),
+                    }
+                    inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                    st.session_state.pop(f"inbody_draft_{paciente}", None)
+                    st.success("Guardado -- se agregó al historial de este paciente.")
+                    st.rerun()
 
-st.divider()
-st.subheader("📏 Mediciones antropométricas")
+    historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+    render_inbody_section(historial_inbody)
 
-with st.expander("Subir nuevo reporte de mediciones (ej. Avena)"):
-    archivo_antro = st.file_uploader(
-        "PDF del reporte", type=["pdf"], key=f"antro_upload_{paciente}",
-    )
-    if archivo_antro is not None and st.button("Leer archivo", key=f"antro_leer_{paciente}"):
-        with st.spinner("Leyendo el PDF..."):
-            try:
-                texto = antropometria_parser.extract_text(archivo_antro.getvalue())
-                st.session_state[f"antro_draft_{paciente}"] = antropometria_parser.parse_antropometria_text(texto)
-            except Exception as e:
-                st.error(f"No se pudo leer el archivo: {e}")
+    st.divider()
+    st.subheader("📏 Mediciones antropométricas")
 
-    draft_antro = st.session_state.get(f"antro_draft_{paciente}")
-    if draft_antro is not None:
-        st.caption(
-            "Este PDF trae texto real (no es una foto), así que la lectura es más confiable que la "
-            "de InBody -- aun así, revisa los valores antes de guardar."
+    with st.expander("Subir nuevo reporte de mediciones (ej. Avena)"):
+        archivo_antro = st.file_uploader(
+            "PDF del reporte", type=["pdf"], key=f"antro_upload_{paciente}",
         )
-        with st.form(f"antro_form_{paciente}"):
-            fecha_antro = st.text_input("Fecha", value=draft_antro.get("fecha") or "")
+        if archivo_antro is not None and st.button("Leer archivo", key=f"antro_leer_{paciente}"):
+            with st.spinner("Leyendo el PDF..."):
+                try:
+                    texto = antropometria_parser.extract_text(archivo_antro.getvalue())
+                    st.session_state[f"antro_draft_{paciente}"] = antropometria_parser.parse_antropometria_text(texto)
+                except Exception as e:
+                    st.error(f"No se pudo leer el archivo: {e}")
 
-            st.markdown("**Grasa**")
-            col1, col2 = st.columns(2)
-            grasa_faulkner = col1.number_input("Grasa -- Faulkner (%)", value=float(draft_antro.get("grasa_faulkner_pct") or 0), step=0.1)
-            grasa_calculado = col2.number_input("Grasa calculado (kg)", value=float(draft_antro.get("grasa_calculado_kg") or 0), step=0.1)
+        draft_antro = st.session_state.get(f"antro_draft_{paciente}")
+        if draft_antro is not None:
+            st.caption(
+                "Este PDF trae texto real (no es una foto), así que la lectura es más confiable que la "
+                "de InBody -- aun así, revisa los valores antes de guardar."
+            )
+            with st.form(f"antro_form_{paciente}"):
+                fecha_antro = st.text_input("Fecha", value=draft_antro.get("fecha") or "")
 
-            st.markdown("**Pliegues cutáneos (mm)**")
-            pliegues_claves = [
-                ("pliegue_supraespinal_mm", "Supraespinal"), ("pliegue_muslo_frontal_mm", "Muslo frontal"),
-                ("pliegue_pantorrilla_medial_mm", "Pantorrilla medial"), ("pliegue_abdominal_mm", "Abdominal"),
-                ("pliegue_tricipital_mm", "Tríceps"), ("pliegue_subescapular_mm", "Subescapular"),
-                ("pliegue_suprailiaco_mm", "Suprailíaco"), ("pliegue_bicipital_mm", "Bíceps"),
-            ]
-            pliegues_valores = {}
-            for i in range(0, len(pliegues_claves), 4):
-                cols = st.columns(4)
-                for col, (clave, etiqueta) in zip(cols, pliegues_claves[i:i + 4]):
-                    pliegues_valores[clave] = col.number_input(etiqueta, value=float(draft_antro.get(clave) or 0), step=0.5, key=f"antro_{clave}_{paciente}")
+                st.markdown("**Grasa**")
+                col1, col2 = st.columns(2)
+                grasa_faulkner = col1.number_input("Grasa -- Faulkner (%)", value=float(draft_antro.get("grasa_faulkner_pct") or 0), step=0.1)
+                grasa_calculado = col2.number_input("Grasa calculado (kg)", value=float(draft_antro.get("grasa_calculado_kg") or 0), step=0.1)
 
-            st.markdown("**Circunferencias (cm)**")
-            circ_claves = [
-                ("circ_cintura_cm", "Cintura"), ("circ_cadera_cm", "Cadera"),
-                ("circ_muslo_medio_cm", "Muslo medio"), ("circ_muslo_cm", "Muslo"),
-                ("circ_brazo_contraido_cm", "Brazo contraído"), ("circ_brazo_relajado_cm", "Brazo relajado"),
-                ("circ_pantorrilla_cm", "Pantorrilla"),
-            ]
-            circ_valores = {}
-            for i in range(0, len(circ_claves), 4):
-                cols = st.columns(4)
-                for col, (clave, etiqueta) in zip(cols, circ_claves[i:i + 4]):
-                    circ_valores[clave] = col.number_input(etiqueta, value=float(draft_antro.get(clave) or 0), step=0.5, key=f"antro_{clave}_{paciente}")
+                st.markdown("**Pliegues cutáneos (mm)**")
+                pliegues_claves = [
+                    ("pliegue_supraespinal_mm", "Supraespinal"), ("pliegue_muslo_frontal_mm", "Muslo frontal"),
+                    ("pliegue_pantorrilla_medial_mm", "Pantorrilla medial"), ("pliegue_abdominal_mm", "Abdominal"),
+                    ("pliegue_tricipital_mm", "Tríceps"), ("pliegue_subescapular_mm", "Subescapular"),
+                    ("pliegue_suprailiaco_mm", "Suprailíaco"), ("pliegue_bicipital_mm", "Bíceps"),
+                ]
+                pliegues_valores = {}
+                for i in range(0, len(pliegues_claves), 4):
+                    cols = st.columns(4)
+                    for col, (clave, etiqueta) in zip(cols, pliegues_claves[i:i + 4]):
+                        pliegues_valores[clave] = col.number_input(etiqueta, value=float(draft_antro.get(clave) or 0), step=0.5, key=f"antro_{clave}_{paciente}")
 
-            if st.form_submit_button("Guardar en el historial", type="primary"):
-                campos_final = {
-                    "fecha": fecha_antro,
-                    "grasa_faulkner_pct": grasa_faulkner or None,
-                    "grasa_calculado_kg": grasa_calculado or None,
-                    **{k: (v or None) for k, v in pliegues_valores.items()},
-                    **{k: (v or None) for k, v in circ_valores.items()},
-                }
-                antropometria_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
-                st.session_state.pop(f"antro_draft_{paciente}", None)
-                st.success("Guardado -- se agregó al historial de este paciente.")
-                st.rerun()
+                st.markdown("**Circunferencias (cm)**")
+                circ_claves = [
+                    ("circ_cintura_cm", "Cintura"), ("circ_cadera_cm", "Cadera"),
+                    ("circ_muslo_medio_cm", "Muslo medio"), ("circ_muslo_cm", "Muslo"),
+                    ("circ_brazo_contraido_cm", "Brazo contraído"), ("circ_brazo_relajado_cm", "Brazo relajado"),
+                    ("circ_pantorrilla_cm", "Pantorrilla"),
+                ]
+                circ_valores = {}
+                for i in range(0, len(circ_claves), 4):
+                    cols = st.columns(4)
+                    for col, (clave, etiqueta) in zip(cols, circ_claves[i:i + 4]):
+                        circ_valores[clave] = col.number_input(etiqueta, value=float(draft_antro.get(clave) or 0), step=0.5, key=f"antro_{clave}_{paciente}")
 
-historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-render_antropometria_section(historial_antro)
+                if st.form_submit_button("Guardar en el historial", type="primary"):
+                    campos_final = {
+                        "fecha": fecha_antro,
+                        "grasa_faulkner_pct": grasa_faulkner or None,
+                        "grasa_calculado_kg": grasa_calculado or None,
+                        **{k: (v or None) for k, v in pliegues_valores.items()},
+                        **{k: (v or None) for k, v in circ_valores.items()},
+                    }
+                    antropometria_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                    st.session_state.pop(f"antro_draft_{paciente}", None)
+                    st.success("Guardado -- se agregó al historial de este paciente.")
+                    st.rerun()
+
+    historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+    render_antropometria_section(historial_antro)
+
 
 st.divider()
 
@@ -315,6 +319,8 @@ if not datos_json:
         "Este paciente todavía no tiene el dashboard completo guardado (solo un resumen viejo). "
         "Pídele que vuelva a abrir su dashboard local para que se actualice."
     )
+    st.divider()
+    _render_composicion_corporal()
     st.stop()
 
 try:
@@ -324,4 +330,4 @@ except Exception as e:
     st.error(f"No se pudo leer el dashboard guardado de este paciente. Detalle: {e}")
     st.stop()
 
-render_dashboard_body(data)
+render_dashboard_body(data, composicion_corporal_renderer=_render_composicion_corporal)
