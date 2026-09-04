@@ -403,8 +403,10 @@ def _render_analisis_ia(data: dict):
         file_name=f"analisis_{paciente.replace(' ', '_')}.txt",
         mime="text/plain",
         key=f"descargar_contexto_{paciente}",
-        help='Descarga este archivo, ábrelo con el Bloc de notas, copia todo el texto y pégalo en una '
-             'conversación nueva con Claude (claude.ai) -- ya trae las instrucciones incluidas.',
+        help='Descarga este archivo, ábrelo con el Bloc de notas. Si quieres, escribe algo al final donde '
+             'dice "Notas adicionales" (ej. "va a correr un medio maratón el domingo"). Copia todo el '
+             'texto y pégalo en una conversación nueva con Claude (claude.ai) -- ya trae las '
+             'instrucciones incluidas, no hace falta escribir nada más.',
     )
 
     with st.expander("O generar automático aquí mismo (tiene un costo mínimo de API)"):

@@ -135,7 +135,11 @@ Reglas:
 - No des cifras de calorías/macros exactas a prescribir (eso lo decide el nutriólogo) -- puedes \
 sugerir dirección general (ej. "prioriza proteína en el desayuno") pero no un plan de alimentación completo.
 - No repitas números crudos que ya ve el nutriólogo en el tablero -- interpreta, no transcribas.
-- Tono cercano y profesional, nunca alarmista."""
+- Tono cercano y profesional, nunca alarmista.
+- Si el nutriólogo agregó "Notas adicionales" al final (por ejemplo, que el paciente tiene una \
+competencia próxima, una lesión, una restricción alimentaria, un objetivo particular), tómalas en \
+cuenta como el dato más importante para ajustar la lectura y las recomendaciones -- no las ignores \
+ni las trates como un dato más entre los demás."""
 
 
 def _armar_contexto(paciente_nombre: str, data: dict, inbody_historial, antro_historial) -> str:
@@ -147,14 +151,24 @@ def _armar_contexto(paciente_nombre: str, data: dict, inbody_historial, antro_hi
     )
 
 
+_NOTAS_PLACEHOLDER = (
+    "\n\n--- Notas adicionales del nutriólogo (opcional) ---\n"
+    "Escribe aquí cualquier cosa que quieras que se tome en cuenta antes de pegar este mensaje en "
+    "Claude -- por ejemplo: \"va a correr un medio maratón el domingo\", \"tiene una lesión en la "
+    "rodilla\", \"es vegetariano\", \"el objetivo de esta cita es ganar masa muscular, no bajar de "
+    "peso\", etc. Si no escribes nada aquí, se ignora esta sección."
+)
+
+
 def armar_mensaje_para_pegar(paciente_nombre: str, data: dict, inbody_historial, antro_historial) -> str:
     """Mismo contenido que se le manda a la API, pero como un solo texto
     listo para pegar directo en una conversación normal de Claude (la app
     de chat, sin costo por API) -- para cuando no se quiere configurar el
-    Secret ANTHROPIC_API_KEY. Trae las instrucciones incluidas, no hay que
-    escribir nada más."""
+    Secret ANTHROPIC_API_KEY. Trae las instrucciones incluidas y un espacio
+    al final para agregar notas propias antes de pegarlo (ver
+    _NOTAS_PLACEHOLDER) -- no hay que escribir ningún prompt aparte."""
     contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial)
-    return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}"
+    return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}{_NOTAS_PLACEHOLDER}"
 
 
 def generar_analisis(paciente_nombre: str, data: dict, inbody_historial, antro_historial) -> str:
