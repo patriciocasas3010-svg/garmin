@@ -184,10 +184,11 @@ with st.expander("¿Cómo actualiza sus datos este paciente?"):
             "tardar hasta 5 minutos en reflejarlo sola)."
         )
 
-def _render_composicion_corporal():
+def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
-    sea dentro de la pestaña "Composición corporal" del dashboard completo,
-    o directo cuando el paciente todavía no tiene dashboard de wearable."""
+    sea dentro de la pestaña "Composición corporal" del dashboard completo
+    (con `data` del wearable ya cargado), o directo cuando el paciente
+    todavía no tiene dashboard de wearable (data=None)."""
     st.subheader("🧬 Composición corporal (InBody)")
 
     with st.expander("Subir nuevo resultado de InBody"):
@@ -251,7 +252,7 @@ def _render_composicion_corporal():
                     st.rerun()
 
     render_inbody_section(historial_inbody)
-    render_composicion_avanzada(historial_inbody)
+    render_composicion_avanzada(historial_inbody, data=data)
 
     st.divider()
     st.subheader("📏 Mediciones antropométricas")
@@ -332,7 +333,7 @@ if not datos_json:
         "Pídele que vuelva a abrir su dashboard local para que se actualice."
     )
     st.divider()
-    _render_composicion_corporal()
+    _render_composicion_corporal(None)
     st.stop()
 
 try:

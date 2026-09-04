@@ -51,6 +51,56 @@ def fetch_daily_load(client, start: date, end: date, activities=None) -> pd.Seri
     return pd.Series(values, index=idx, name="load")
 
 
+def fetch_daily_running_km(start: date, end: date, activities: list) -> pd.Series:
+    """Km corridos por día -- para cruzar volumen de carrera contra
+    composición corporal/déficit. 0.0 en días sin carrera (no NaN), para
+    que sumar/promediar un rango no ignore silenciosamente los días de
+    descanso."""
+    by_day: dict[date, float] = {}
+    for a in activities:
+        tipo = (a.get("activityType") or {}).get("typeKey") or ""
+        if "running" not in tipo.lower():
+            continue
+        start_str = a.get("startTimeLocal")
+        distancia_m = a.get("distance")
+        if not start_str or distancia_m is None:
+            continue
+        try:
+            d = datetime.strptime(start_str[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        by_day[d] = by_day.get(d, 0.0) + distancia_m / 1000.0
+
+    idx = _date_index(start, end)
+    values = [by_day.get(d.date(), 0.0) for d in idx]
+    return pd.Series(values, index=idx, name="running_km")
+
+
+def fetch_daily_fuerza_minutos(start: date, end: date, activities: list) -> pd.Series:
+    """Minutos de entrenamiento de fuerza por día. No incluye series/peso --
+    en la práctica Garmin casi nunca trae el peso capturado (ver
+    buscar_fuerza.py), así que la duración es la señal más confiable que
+    hay para "cuánta fuerza entrenó"."""
+    by_day: dict[date, float] = {}
+    for a in activities:
+        tipo = (a.get("activityType") or {}).get("typeKey") or ""
+        if "strength" not in tipo.lower():
+            continue
+        start_str = a.get("startTimeLocal")
+        duracion_s = a.get("duration")
+        if not start_str or duracion_s is None:
+            continue
+        try:
+            d = datetime.strptime(start_str[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        by_day[d] = by_day.get(d, 0.0) + duracion_s / 60.0
+
+    idx = _date_index(start, end)
+    values = [by_day.get(d.date(), 0.0) for d in idx]
+    return pd.Series(values, index=idx, name="fuerza_minutos")
+
+
 def fetch_rhr_series(client, start: date, end: date) -> pd.Series:
     """Frecuencia cardiaca en reposo diaria, un solo llamado para todo el rango."""
     data = client.connectapi(
@@ -614,6 +664,8 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
 
     activities = fetch_activities(client, start90, end)
     load_series = fetch_daily_load(client, start90, end, activities=activities)
+    running_km_series = fetch_daily_running_km(start90, end, activities)
+    fuerza_minutos_series = fetch_daily_fuerza_minutos(start90, end, activities)
     rhr_series = fetch_rhr_series(client, start90, end)
     hrv_series = fetch_hrv_series(client, start90, end)
 
@@ -676,6 +728,8 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
         "wellness_days": wellness_days,
         "activities": activities,
         "load_series": load_series,
+        "running_km_series": running_km_series,
+        "fuerza_minutos_series": fuerza_minutos_series,
         "rhr_series": rhr_series,
         "hrv_series": hrv_series,
         "sleep_df": sleep_df,
@@ -788,6 +842,8 @@ def snapshot_to_json(data: dict) -> dict:
     out["activities_calorias"] = [_trim_activity_calorias(a) for a in data["activities_calorias"]]
 
     out["load_series"] = _series_to_json(data["load_series"])
+    out["running_km_series"] = _series_to_json(data["running_km_series"])
+    out["fuerza_minutos_series"] = _series_to_json(data["fuerza_minutos_series"])
     out["rhr_series"] = _series_to_json(data["rhr_series"])
     out["hrv_series"] = _series_to_json(data["hrv_series"])
     out["readiness_series"] = _series_to_json(data["readiness_series"])
@@ -828,6 +884,8 @@ def snapshot_from_json(d: dict) -> dict:
     out = dict(d)
 
     out["load_series"] = _series_from_json(d.get("load_series"), name="load")
+    out["running_km_series"] = _series_from_json(d.get("running_km_series"), name="running_km")
+    out["fuerza_minutos_series"] = _series_from_json(d.get("fuerza_minutos_series"), name="fuerza_minutos")
     out["rhr_series"] = _series_from_json(d.get("rhr_series"), name="rhr")
     out["hrv_series"] = _series_from_json(d.get("hrv_series"), name="hrv")
     out["readiness_series"] = _series_from_json(d.get("readiness_series"))

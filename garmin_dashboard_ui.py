@@ -297,11 +297,17 @@ def render_inbody_section(historial: pd.DataFrame):
         st.altair_chart(chart, width="stretch")
 
 
-def render_composicion_avanzada(historial: pd.DataFrame):
+def render_composicion_avanzada(historial: pd.DataFrame, data: dict | None = None):
     """TDEE real, ritmo de pérdida de grasa y retención de masa magra
     entre dos mediciones de InBody elegidas, más la proyección de peso a
     un % de grasa objetivo -- ver metabolic_calc.py. Necesita al menos 2
-    mediciones con Peso y Masa grasa."""
+    mediciones con Peso y Masa grasa.
+
+    data: dict de garmin_metrics/apple_health.build_runtime_data() (o
+    snapshot_from_json) -- si se pasa y trae running_km_series/
+    fuerza_minutos_series, se muestra además cuánto se entrenó (carrera y
+    fuerza) en el mismo periodo elegido, para verlo junto al cambio de
+    grasa/masa magra sin inventar un veredicto automático."""
     historial = inbody_historial_valido(historial)
 
     st.divider()
@@ -371,6 +377,31 @@ def render_composicion_avanzada(historial: pd.DataFrame):
             "TDEE real = lo que tu cuerpo quemó de verdad en este periodo, calculado a partir del "
             "cambio real en grasa y masa magra -- no una fórmula genérica por edad/peso/altura."
         )
+
+    if data is not None:
+        running_km_series = data.get("running_km_series")
+        fuerza_minutos_series = data.get("fuerza_minutos_series")
+        if running_km_series is not None or fuerza_minutos_series is not None:
+            st.divider()
+            st.markdown("**Entrenamiento en este periodo**")
+            rango = pd.date_range(fila_inicial["_fecha"], fila_final["_fecha"], freq="D")
+            semanas = max(dias / 7, 1)
+
+            e1, e2, e3 = st.columns(3)
+            if running_km_series is not None and len(running_km_series):
+                km_periodo = running_km_series.reindex(rango)
+                if km_periodo.isna().all():
+                    e1.metric("Carrera", "N/D", help="Esta fuente no trae distancia por entrenamiento todavía.")
+                else:
+                    e1.metric("Carrera", f"{km_periodo.fillna(0).sum() / semanas:.1f} km/semana")
+            if fuerza_minutos_series is not None and len(fuerza_minutos_series):
+                min_periodo = fuerza_minutos_series.reindex(rango).fillna(0)
+                e2.metric("Fuerza", f"{min_periodo.sum() / semanas:.0f} min/semana")
+                e3.metric("Días con fuerza", f"{int((min_periodo > 0).sum())} de {dias} días")
+            st.caption(
+                "Sin veredicto automático a propósito -- cruza esto tú mismo con el cambio de grasa "
+                "y masa magra de arriba, tú conoces mejor el contexto de cada paciente."
+            )
 
     st.divider()
     st.markdown("**Proyección de peso objetivo**")
@@ -488,8 +519,8 @@ def render_dashboard_body(
     data: dict, composicion_corporal_renderer=None,
     inbody_resumen: pd.Series | None = None, paciente_nombre: str | None = None,
 ):
-    """composicion_corporal_renderer: función sin argumentos que dibuja el
-    contenido de InBody/mediciones antropométricas (definida en
+    """composicion_corporal_renderer: función que recibe este mismo `data` y
+    dibuja el contenido de InBody/mediciones antropométricas (definida en
     dashboard_pacientes.py, que es quien tiene acceso a la hoja de Google) --
     si se pasa, se agrega como pestaña propia justo después de Resumen.
 
@@ -540,7 +571,7 @@ def render_dashboard_body(
 
     if tab_composicion is not None:
         with tab_composicion:
-            composicion_corporal_renderer()
+            composicion_corporal_renderer(data)
 
     # --- Resumen ---
     with tab_resumen:

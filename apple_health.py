@@ -303,6 +303,14 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
         })
 
     load_series = _daily_load(activities, start90, end)
+    fuerza_minutos_series = _daily_fuerza_minutos(activities, start90, end)
+    # running_km_series NO se calcula todavía -- el export de Salud no
+    # siempre trae la distancia del entrenamiento en un lugar consistente
+    # (varía de formato entre versiones de iOS), y prefiero dejarlo vacío
+    # a inventar un número que puede estar mal. Serie de puros None para
+    # que el resto del dashboard (pensado para el mismo dict shape que
+    # Garmin) no truene por la llave faltante.
+    running_km_series = pd.Series(float("nan"), index=_date_index(start90, end), name="running_km")
     rhr_series = _daily_avg_series(raw.rhr_daily, start90, end, "rhr")
     hrv_series = _daily_avg_series(raw.hrv_daily, start90, end, "hrv")
 
@@ -367,6 +375,8 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
         "wellness_days": wellness_days,
         "activities": activities,
         "load_series": load_series,
+        "running_km_series": running_km_series,
+        "fuerza_minutos_series": fuerza_minutos_series,
         "rhr_series": rhr_series,
         "hrv_series": hrv_series,
         "sleep_df": sleep_df,
@@ -409,6 +419,22 @@ def _daily_load(activities: list[dict], start: date, end: date) -> pd.Series:
         by_day[d] += _activity_load(a)
     idx = _date_index(start, end)
     return pd.Series([by_day.get(d.date(), 0.0) for d in idx], index=idx, name="load")
+
+
+def _daily_fuerza_minutos(activities: list[dict], start: date, end: date) -> pd.Series:
+    """Minutos de entrenamiento de fuerza por día -- identifica el
+    entrenamiento por su nombre ya traducido ("Fuerza"/"Fuerza funcional",
+    ver _WORKOUT_LABELS), no por el tipo crudo de HealthKit."""
+    by_day: dict[date, float] = defaultdict(float)
+    for a in activities:
+        if "fuerza" not in (a.get("activityName") or "").lower():
+            continue
+        d = datetime.strptime(a["startTimeLocal"], "%Y-%m-%d %H:%M:%S").date()
+        duracion_s = a.get("duration")
+        if duracion_s is not None:
+            by_day[d] += duracion_s / 60.0
+    idx = _date_index(start, end)
+    return pd.Series([by_day.get(d.date(), 0.0) for d in idx], index=idx, name="fuerza_minutos")
 
 
 def _daily_avg_series(daily: dict[date, list[float]], start: date, end: date, name: str) -> pd.Series:
