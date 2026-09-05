@@ -213,7 +213,20 @@ def parse_inbody_text(texto: str) -> dict:
     # preferir_decimal=True porque estas filas a veces vienen contaminadas
     # con números enteros sueltos de la columna vecina.
     peso = _valor_de_fila(lineas, r"^(Peso|Weight)\b(?!\s*Control)", preferir_decimal=True)
-    mme = _valor_de_fila(lineas, r"\b(MME|SMM)\b", preferir_decimal=True)
+    # La fila de MME en la gráfica de barras (bajo Análisis de Músculo-
+    # Grasa) casi siempre sale mal (pierde el punto decimal ahí más que en
+    # cualquier otro campo) -- este mismo dato se repite, limpio, en
+    # "Parámetros de Investigación" ("Masa de Músculo Esquelético 39.8 kg"
+    # / "Skeletal Muscle Mass 23.6 kg"), así que se busca puntual ahí
+    # primero. Al pedir que el número esté seguido de "kg" en la MISMA
+    # ocurrencia, si la primera aparición de la etiqueta no cumple (porque
+    # el número quedó pegado a otra cosa), la búsqueda salta sola a la
+    # siguiente aparición limpia -- no puede "brincarse" dígitos de en medio.
+    mme_m = re.search(
+        r"(?:Masa\s*de\s*M[uú]sculo\s*Esquel[eé]tico|Skeletal\s*Muscle\s*Mass)\D*?(\d{1,3}(?:[.,]\d+)?)\s*kg",
+        texto, re.IGNORECASE,
+    )
+    mme = _a_float(mme_m.group(1)) if mme_m else _valor_de_fila(lineas, r"\b(MME|SMM)\b", preferir_decimal=True)
     # Nivel de Grasa Visceral es un entero (no trae decimales) que a veces
     # cae en una línea contaminada con números de la columna vecina -- se
     # busca puntual justo entre "Visceral" y el "(" del rango de referencia
