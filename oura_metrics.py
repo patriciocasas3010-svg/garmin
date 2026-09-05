@@ -433,4 +433,9 @@ def build_runtime_data(token: str, lookback_days: int = 90, wellness_days: int =
         "hidratacion_diaria": {"promedio_ml_dia": None, "dias_con_actividad": 0, "serie": {}},
         "edad_fisica": edad_fisica,
         "nivel_estres": nivel_estres,
+        # Pasos, minutos de ejercicio y VO2 Max son propios de Apple Health
+        # -- Oura no los reporta.
+        "pasos_promedio_dia": None,
+        "minutos_ejercicio_promedio_dia": None,
+        "vo2max": None,
     }

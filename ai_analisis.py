@@ -110,6 +110,9 @@ def _resumen_wearable(data: dict) -> str:
         f"(línea base habitual: {_fmt(data.get('rhr_baseline'), ' lpm', 0)}).",
         f"Edad física (Fitness Age, si el reloj la calcula): {_fmt(data.get('edad_fisica'), ' años', 0)}.",
         f"Nivel de estrés reportado por el dispositivo: {_fmt(data.get('nivel_estres'), '/100', 0)}.",
+        f"Pasos promedio por día: {_fmt(data.get('pasos_promedio_dia'), '', 0)}.",
+        f"Minutos de ejercicio promedio por día: {_fmt(data.get('minutos_ejercicio_promedio_dia'), ' min', 0)}.",
+        f"VO2 Max (condición cardiovascular, si el reloj lo calcula): {_fmt(data.get('vo2max'), ' mL/kg/min', 1)}.",
         f"Alertas activas del tablero: {data.get('alertas_activas', 0)}.",
     ]
     return "\n".join(lineas)

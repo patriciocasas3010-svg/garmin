@@ -45,6 +45,9 @@ def build_resumen_pdf(
     edad_fisica=None,
     nivel_estres=None,
     gasto_total_avg=None,
+    pasos_promedio_dia=None,
+    minutos_ejercicio_promedio_dia=None,
+    vo2max=None,
 ) -> bytes:
     pdf = ps.new_branded_pdf()
     ps.draw_header(
@@ -131,6 +134,14 @@ def build_resumen_pdf(
             ("Edad física", _fmt(edad_fisica, " años", 0)),
             ("Gasto energético (30d)", _fmt(gasto_total_avg, " kcal/día", 0)),
             ("Nivel de estrés", _fmt(nivel_estres, "/100", 0)),
+        ])
+
+    if pasos_promedio_dia is not None or minutos_ejercicio_promedio_dia is not None or vo2max is not None:
+        _section_title("Actividad diaria")
+        _stat_row([
+            ("Pasos (promedio/día)", _fmt(pasos_promedio_dia, "", 0)),
+            ("Ejercicio (promedio/día)", _fmt(minutos_ejercicio_promedio_dia, " min", 0)),
+            ("VO2 Max", _fmt(vo2max, " mL/kg/min", 1)),
         ])
 
     _section_title("¿Cómo vengo hoy?")

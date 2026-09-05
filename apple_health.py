@@ -40,6 +40,7 @@ from garmin_metrics import (
     WELLNESS_DAYS_DEFAULT,
     compute_acwr,
     compute_hrv_zscore,
+    fetch_daily_running_km,
     hr_zone,
     score_label,
     score_range,
@@ -154,6 +155,9 @@ class _RawData:
         self.hydration_ml: dict[date, float] = defaultdict(float)
         self.active_kcal: dict[date, float] = defaultdict(float)
         self.basal_kcal: dict[date, float] = defaultdict(float)
+        self.steps: dict[date, float] = defaultdict(float)
+        self.exercise_min: dict[date, float] = defaultdict(float)
+        self.vo2max: list[tuple[datetime, float]] = []
         self.workouts: list[dict] = []
 
 
@@ -200,6 +204,15 @@ def _parse_export(xml_path: str, keep_hr_since: datetime) -> _RawData:
             elif rtype == "HKQuantityTypeIdentifierBasalEnergyBurned":
                 if value is not None:
                     raw.basal_kcal[day] += value
+            elif rtype == "HKQuantityTypeIdentifierStepCount":
+                if value is not None:
+                    raw.steps[day] += value
+            elif rtype == "HKQuantityTypeIdentifierAppleExerciseTime":
+                if value is not None:
+                    raw.exercise_min[day] += value
+            elif rtype == "HKQuantityTypeIdentifierVO2Max":
+                if value is not None:
+                    raw.vo2max.append((start_dt, value))
             elif rtype == "HKQuantityTypeIdentifierDietaryWater":
                 if value is not None:
                     unit = elem.get("unit") or "mL"
@@ -228,16 +241,34 @@ def _parse_export(xml_path: str, keep_hr_since: datetime) -> _RawData:
             if start_raw and end_raw:
                 try:
                     start_dt, end_dt = _parse_dt(start_raw), _parse_dt(end_raw)
+                    # La distancia de ESTE entrenamiento en particular viene en un
+                    # <WorkoutStatistics> hijo (todavía pegado al <Workout> porque
+                    # no se limpia por separado, ver el "elif tag == WorkoutStatistics"
+                    # de abajo) -- en km, se guarda en metros para que
+                    # garmin_metrics.fetch_daily_running_km() la use tal cual.
+                    distancia_m = None
+                    for stat in elem.findall("WorkoutStatistics"):
+                        if stat.get("type") == "HKQuantityTypeIdentifierDistanceWalkingRunning":
+                            km = _to_float(stat.get("sum"))
+                            if km is not None:
+                                distancia_m = km * 1000
+                            break
                     raw.workouts.append({
                         "type": elem.get("workoutActivityType"),
                         "start": start_dt,
                         "end": end_dt,
                         "duration_s": (end_dt - start_dt).total_seconds(),
                         "calories": _to_float(elem.get("totalEnergyBurned")),
+                        "distance_m": distancia_m,
                     })
                 except ValueError:
                     pass
             elem.clear()
+        elif tag == "WorkoutStatistics":
+            # No se limpia aquí -- se deja pegado a su <Workout> padre (que la
+            # lee arriba y limpia todo junto cuando cierra) porque iterparse
+            # dispara el "end" de este hijo ANTES que el del padre.
+            pass
         else:
             elem.clear()
 
@@ -300,17 +331,18 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
             "movingDuration": w["duration_s"],
             "averageHR": avg_hr,
             "calories": w["calories"],
+            "distance": w.get("distance_m"),
+            "activityType": {"typeKey": (w["type"] or "").replace("HKWorkoutActivityType", "").lower()},
         })
 
     load_series = _daily_load(activities, start90, end)
     fuerza_minutos_series = _daily_fuerza_minutos(activities, start90, end)
-    # running_km_series NO se calcula todavía -- el export de Salud no
-    # siempre trae la distancia del entrenamiento en un lugar consistente
-    # (varía de formato entre versiones de iOS), y prefiero dejarlo vacío
-    # a inventar un número que puede estar mal. Serie de puros None para
-    # que el resto del dashboard (pensado para el mismo dict shape que
-    # Garmin) no truene por la llave faltante.
-    running_km_series = pd.Series(float("nan"), index=_date_index(start90, end), name="running_km")
+    # Confirmado contra un export real: el <Workout> sí trae su distancia en
+    # un <WorkoutStatistics> hijo (HKQuantityTypeIdentifierDistanceWalkingRunning,
+    # en km) -- se reutiliza la misma función que Garmin/Oura ya que ahora
+    # las actividades traen "distance" (metros) y "activityType.typeKey"
+    # con la misma forma.
+    running_km_series = fetch_daily_running_km(start90, end, activities)
     rhr_series = _daily_avg_series(raw.rhr_daily, start90, end, "rhr")
     hrv_series = _daily_avg_series(raw.hrv_daily, start90, end, "hrv")
 
@@ -364,6 +396,21 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
 
     resumen_mes = _monthly_score(activities, sleep_df, calories_df, rhr_series, wellness_days)
 
+    # Pasos, minutos de ejercicio (anillo "Ejercicio" del Apple Watch) y
+    # VO2 Max -- confirmados contra un export real, Garmin/Oura no tienen
+    # un equivalente que ya se esté leyendo hoy, así que ahí quedan en None
+    # (mismo criterio que edad_fisica/nivel_estres, al revés).
+    pasos_series = _daily_sum_series(raw.steps, start30, end)
+    ejercicio_series = _daily_sum_series(raw.exercise_min, start30, end)
+    pasos_promedio_dia = pasos_series.dropna().mean() if pasos_series.notna().any() else None
+    pasos_promedio_dia = float(pasos_promedio_dia) if pd.notna(pasos_promedio_dia) else None
+    minutos_ejercicio_promedio_dia = ejercicio_series.dropna().mean() if ejercicio_series.notna().any() else None
+    minutos_ejercicio_promedio_dia = (
+        float(minutos_ejercicio_promedio_dia) if pd.notna(minutos_ejercicio_promedio_dia) else None
+    )
+    vo2max_reciente = max(raw.vo2max, key=lambda t: t[0], default=None)
+    vo2max = vo2max_reciente[1] if vo2max_reciente else None
+
     for a in activities:
         a.pop("_end", None)
     for a in activities_last_week:
@@ -413,6 +460,11 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
         # internos) -- Apple Health no tiene un equivalente directo.
         "edad_fisica": None,
         "nivel_estres": None,
+        # Pasos, minutos de ejercicio y VO2 Max sí los da Apple Health --
+        # Garmin/Oura no los leen todavía, quedan en None ahí.
+        "pasos_promedio_dia": pasos_promedio_dia,
+        "minutos_ejercicio_promedio_dia": minutos_ejercicio_promedio_dia,
+        "vo2max": vo2max,
     }
 
 
@@ -448,6 +500,16 @@ def _daily_avg_series(daily: dict[date, list[float]], start: date, end: date, na
         for d in idx
     ]
     return pd.Series(values, index=idx, name=name, dtype="float64")
+
+
+def _daily_sum_series(daily: dict[date, float], start: date, end: date) -> pd.Series:
+    """Como _daily_avg_series, pero sumando el día en vez de promediarlo
+    (pasos y minutos de ejercicio son totales del día, no muestras a
+    promediar) -- None (no 0.0) en días sin ningún registro, para
+    distinguir "no traía el reloj puesto" de "cero pasos"."""
+    idx = _date_index(start, end)
+    values = [daily.get(d.date()) if d.date() in daily else None for d in idx]
+    return pd.Series(values, index=idx, dtype="float64")
 
 
 def _sleep_df(raw: _RawData, start: date, end: date) -> pd.DataFrame:

@@ -792,6 +792,12 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
         "hidratacion_diaria": hidratacion_diaria,
         "edad_fisica": edad_fisica,
         "nivel_estres": nivel_estres,
+        # Pasos, minutos de ejercicio y VO2 Max son propios de Apple Health
+        # (por ahora) -- Garmin sí los tiene disponibles en Connect, pero
+        # todavía no se leen aquí, quedan en None mientras tanto.
+        "pasos_promedio_dia": None,
+        "minutos_ejercicio_promedio_dia": None,
+        "vo2max": None,
     }
 
 
@@ -852,6 +858,7 @@ _SCALAR_KEYS = [
     "ultimo_acwr", "ultimo_hrv_z", "peor_deriva_val", "rhr_avg",
     "rhr_baseline", "rhr_today", "max_hr", "peor_caida_min",
     "edad_fisica", "nivel_estres",
+    "pasos_promedio_dia", "minutos_ejercicio_promedio_dia", "vo2max",
 ]
 
 _RESUMEN_MES_NUM_KEYS = [

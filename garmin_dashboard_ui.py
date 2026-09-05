@@ -641,6 +641,26 @@ def render_dashboard_body(
             )
             st.divider()
 
+        pasos_promedio_dia = data.get("pasos_promedio_dia")
+        minutos_ejercicio_promedio_dia = data.get("minutos_ejercicio_promedio_dia")
+        vo2max = data.get("vo2max")
+        if pasos_promedio_dia is not None or minutos_ejercicio_promedio_dia is not None or vo2max is not None:
+            a1, a2, a3 = st.columns(3)
+            a1.metric(
+                "Pasos (promedio/día)", f"{pasos_promedio_dia:,.0f}" if pasos_promedio_dia is not None else "—",
+            )
+            a2.metric(
+                "Minutos de ejercicio (promedio/día)",
+                f"{minutos_ejercicio_promedio_dia:.0f} min" if minutos_ejercicio_promedio_dia is not None else "—",
+                help="Anillo 'Ejercicio' del Apple Watch.",
+            )
+            a3.metric(
+                "VO2 Max", f"{vo2max:.1f} mL/kg/min" if vo2max is not None else "—",
+                help="Estimado por el Apple Watch a partir de carreras/caminatas al aire libre con GPS. "
+                "Indicador de condición cardiovascular -- entre más alto, mejor.",
+            )
+            st.divider()
+
         st.subheader("¿Cómo vengo hoy?")
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
@@ -740,6 +760,8 @@ def render_dashboard_body(
             promedio_ml_dia=promedio_ml_dia, alertas_activas=alertas_activas,
             inbody_resumen=inbody_resumen, inbody_penultimo=inbody_penultimo,
             edad_fisica=edad_fisica, nivel_estres=nivel_estres, gasto_total_avg=gasto_total_avg,
+            pasos_promedio_dia=pasos_promedio_dia,
+            minutos_ejercicio_promedio_dia=minutos_ejercicio_promedio_dia, vo2max=vo2max,
         )
         st.download_button(
             "🖨️ Descargar resumen (PDF)", data=pdf_bytes,
