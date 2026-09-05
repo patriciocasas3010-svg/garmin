@@ -206,8 +206,7 @@ _TEXTO_ACTUALIZACION = {
 col_notas, col_wearable = st.columns(2)
 
 with col_notas:
-    with st.container(border=True):
-        st.markdown("**📝 Notas del paciente**")
+    with st.expander("📝 Notas del paciente"):
         st.caption(
             "Gustos, disgustos, lesiones, adherencia al plan, lo que sea -- se guardan con fecha y se "
             "incluyen solas en el análisis con IA."
@@ -229,8 +228,7 @@ with col_notas:
                     st.markdown(f"**{fila_nota.get('Fecha')}** — {fila_nota.get('Nota')}")
 
 with col_wearable:
-    with st.container(border=True):
-        st.markdown("**⌚ Wearable**")
+    with st.expander("⌚ Wearable"):
         st.caption(_TEXTO_ACTUALIZACION)
         st.divider()
         st.caption("¿Te mandó el .zip de Apple Health (por WhatsApp, correo)? Súbelo aquí directo:")
