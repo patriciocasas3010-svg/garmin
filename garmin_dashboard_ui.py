@@ -510,6 +510,25 @@ def render_antropometria_section(historial: pd.DataFrame):
             st.altair_chart(chart, width="stretch")
 
 
+def _riesgo_lesion(acwr, hrv_z):
+    """Traduce ACWR + Z-score de HRV a una etiqueta de riesgo de lesión en
+    lenguaje llano -- mismos umbrales que alerta_disrupcion en
+    garmin_metrics.py (ACWR > 1.4 y HRV < -1.5 SD = combinación de más
+    riesgo), con un par de escalones intermedios para no saltar de golpe
+    de "bajo" a "alto"."""
+    if acwr is None:
+        return None, None
+    hrv_baja = hrv_z is not None and hrv_z < -1.5
+    hrv_algo_baja = hrv_z is not None and hrv_z < -1.0
+    if acwr > 1.5 or (acwr > 1.3 and hrv_baja):
+        return "Alto", "🔴"
+    if acwr > 1.3 or (acwr > 1.1 and hrv_algo_baja):
+        return "Moderado", "🟠"
+    if acwr < 0.8:
+        return "Bajo (posible destrenamiento)", "🟡"
+    return "Bajo", "🟢"
+
+
 # ---------------------------------------------------------------------------
 # Cuerpo del dashboard (pestañas) -- toma un dict ya armado por
 # garmin_metrics.build_runtime_data() o snapshot_from_json()
@@ -799,6 +818,25 @@ def render_dashboard_body(
                 )
             st.metric("Actual", f"{ultimo_hrv_z:.2f} SD" if ultimo_hrv_z is not None else "sin datos suficientes")
 
+        st.divider()
+        st.markdown("**Resultado: probabilidad de lesión**")
+        nivel_riesgo, icono_riesgo = _riesgo_lesion(ultimo_acwr, ultimo_hrv_z)
+        if nivel_riesgo is None:
+            st.info("Sin datos suficientes de carga de entrenamiento todavía para estimar el riesgo.")
+        else:
+            texto_riesgo = f"{icono_riesgo} Riesgo de lesión: **{nivel_riesgo}**"
+            if nivel_riesgo == "Alto":
+                st.error(texto_riesgo)
+            elif nivel_riesgo == "Moderado":
+                st.warning(texto_riesgo)
+            else:
+                st.success(texto_riesgo)
+        st.caption(
+            "Cruza tu carga de entrenamiento (ACWR) con tu recuperación (HRV) en un solo resultado -- "
+            "no es un diagnóstico, es una señal para decidir si toca bajarle a la intensidad estos días "
+            "o si vas bien para seguir progresando."
+        )
+
     # --- Eficiencia y Zonas ---
     with tab_eficiencia:
         st.subheader("Eficiencia cardiovascular")
@@ -962,6 +1000,33 @@ def render_dashboard_body(
             )
         else:
             st.info("No hay suficientes datos de días con actividad para este cálculo.")
+
+        st.divider()
+        st.markdown("**Pérdida de líquidos en reposo**")
+        st.caption(
+            "Estimación estándar de 25 mL de agua perdida por kg de peso corporal en reposo (sin "
+            "contar la actividad física) -- usa el peso del InBody más reciente del paciente."
+        )
+        peso_inbody = inbody_resumen.get("Peso_kg") if inbody_resumen is not None else None
+        if pd.notna(peso_inbody):
+            perdida_reposo = 25 * peso_inbody
+            perdida_activa = hidratacion_diaria.get("promedio_ml_dia")
+            m_r1, m_r2 = st.columns(2)
+            m_r1.metric("En reposo (estimada)", f"{perdida_reposo:.0f} mL/día")
+            if perdida_activa is not None and pd.notna(perdida_activa):
+                m_r2.metric(
+                    "Total estimado (reposo + actividad)", f"{perdida_reposo + perdida_activa:.0f} mL/día",
+                    help="Suma la pérdida en reposo con el promedio de pérdida activa por actividad "
+                    "física (ver \"Pérdida de líquidos por día\" arriba).",
+                )
+            else:
+                m_r2.metric(
+                    "Total estimado (reposo + actividad)", f"{perdida_reposo:.0f} mL/día",
+                    help="Todavía no hay datos de pérdida activa por actividad física -- por ahora solo "
+                    "se muestra la de reposo.",
+                )
+        else:
+            st.info("Sube un InBody con el peso del paciente para estimar la pérdida de líquidos en reposo.")
 
     # --- Calorías ---
     with tab_calorias:
