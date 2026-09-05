@@ -335,8 +335,11 @@ def compute_monthly_score(client, days: int = WELLNESS_DAYS_DEFAULT) -> dict:
     active_kcal_avg = calories_df["active_kcal"].dropna().mean() if calories_df["active_kcal"].notna().any() else None
     activity_score = score_ramp(active_kcal_avg, 400)
 
+    # Si faltan 2 de los 3 componentes (o los 3), promediar el único que
+    # queda da una "calificación" completa con un solo dato real detrás --
+    # engañoso. Se necesitan al menos 2 de 3 para calcular algo.
     sub_scores = [s for s in [recovery_score, sleep_score, activity_score] if s is not None]
-    overall_score = sum(sub_scores) / len(sub_scores) if sub_scores else None
+    overall_score = sum(sub_scores) / len(sub_scores) if len(sub_scores) >= 2 else None
 
     wellness_start_ts = pd.Timestamp(sleep_df.index.min())
     wellness_end_ts = pd.Timestamp(sleep_df.index.max())
