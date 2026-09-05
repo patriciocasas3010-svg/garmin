@@ -59,6 +59,9 @@ def guardar_registro(gc: gspread.Client, sheet_id: str, nombre: str, campos: dic
     ws.append_row(fila)
 
 
+_COLUMNAS_NUMERICAS = [c for c in ENCABEZADOS if c not in ("Nombre", "Fecha")]
+
+
 def leer_historial(gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
     ws = _worksheet(gc, sheet_id)
     # UNFORMATTED_VALUE: trae el número tal cual (12.82), no el texto ya
@@ -69,4 +72,12 @@ def leer_historial(gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFra
     df = pd.DataFrame(registros)
     if df.empty or "Nombre" not in df.columns:
         return pd.DataFrame(columns=ENCABEZADOS)
-    return df[df["Nombre"] == nombre].reset_index(drop=True)
+    df = df[df["Nombre"] == nombre].reset_index(drop=True)
+    # Una celda vacía (un campo que se guardó como None) llega de gspread
+    # como texto vacío "", no como NaN -- sin este paso, pd.notna("") da
+    # True y cualquier intento de formatear ese "número" truena. to_numeric
+    # con errors="coerce" convierte tanto "" como basura no numérica a NaN.
+    for col in _COLUMNAS_NUMERICAS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
