@@ -34,6 +34,7 @@ import apple_health
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
+import notas_store
 from garmin_dashboard_ui import (
     render_antropometria_section,
     render_composicion_avanzada,
@@ -175,6 +176,7 @@ fuente = fila.get("Fuente") or "Garmin"
 # poder usar también el historial de InBody en la pestaña Resumen.
 historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
@@ -188,6 +190,29 @@ with top_col3:
     if st.button("🚪 Salir", type="secondary", width="stretch"):
         st.session_state["paciente_actual"] = None
         st.rerun()
+
+with st.expander(f"📝 Notas del paciente ({len(historial_notas)})"):
+    st.caption(
+        "Observaciones tuyas sobre este paciente (gustos, disgustos, lesiones, adherencia al plan, "
+        "platillo favorito, lo que sea) -- se guardan con fecha, nunca se borran, y se incluyen solas "
+        "en el análisis con IA y en el archivo para pegar en Claude, sin que tengas que volver a "
+        "escribirlas cada vez."
+    )
+    nota_nueva = st.text_area("Nueva nota", key=f"nota_nueva_{paciente}", placeholder=(
+        "Ej. \"No le gusta la sandía. Dice que no pudo dormir bien con el plan porque hace box y se "
+        "lastimó el pie, no ha podido entrenar. Su platillo favorito del plan fue la lasaña de "
+        "calabaza.\""
+    ))
+    if st.button("Agregar nota", key=f"agregar_nota_{paciente}", disabled=not nota_nueva.strip()):
+        notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], paciente, nota_nueva)
+        st.cache_data.clear()
+        st.success("Nota guardada.")
+        st.rerun()
+
+    if not historial_notas.empty:
+        st.divider()
+        for _, fila_nota in historial_notas.iloc[::-1].iterrows():
+            st.markdown(f"**{fila_nota.get('Fecha')}** — {fila_nota.get('Nota')}")
 
 with st.expander("¿Cómo actualiza sus datos este paciente?"):
     if fuente == "Apple Health":
@@ -396,17 +421,18 @@ def _render_analisis_ia(data: dict):
         "diagnóstico."
     )
 
-    mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(paciente, data, historial_inbody, historial_antro)
+    mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(
+        paciente, data, historial_inbody, historial_antro, historial_notas,
+    )
     st.download_button(
         "📄 Descargar para pegar en Claude (gratis)",
         data=mensaje_para_pegar,
         file_name=f"analisis_{paciente.replace(' ', '_')}.txt",
         mime="text/plain",
         key=f"descargar_contexto_{paciente}",
-        help='Descarga este archivo, ábrelo con el Bloc de notas. Si quieres, escribe algo al final donde '
-             'dice "Notas adicionales" (ej. "va a correr un medio maratón el domingo"). Copia todo el '
-             'texto y pégalo en una conversación nueva con Claude (claude.ai) -- ya trae las '
-             'instrucciones incluidas, no hace falta escribir nada más.',
+        help='Ya trae incluidas las "Notas del paciente" que hayas guardado arriba, en su historial '
+             'completo. Descarga este archivo, cópialo todo, y pégalo en una conversación nueva con '
+             'Claude (claude.ai) -- no hace falta escribir nada más.',
     )
 
     with st.expander("O generar automático aquí mismo (tiene un costo mínimo de API)"):
@@ -415,7 +441,7 @@ def _render_analisis_ia(data: dict):
             with st.spinner("Cruzando los datos del paciente..."):
                 try:
                     st.session_state[cache_key] = ai_analisis.generar_analisis(
-                        paciente, data, historial_inbody, historial_antro,
+                        paciente, data, historial_inbody, historial_antro, historial_notas,
                     )
                 except Exception as e:
                     st.error(f"No se pudo generar el análisis: {e}")
