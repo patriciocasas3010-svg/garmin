@@ -191,76 +191,66 @@ with top_col3:
         st.session_state["paciente_actual"] = None
         st.rerun()
 
-with st.expander(f"📝 Notas del paciente ({len(historial_notas)})"):
-    st.caption(
-        "Observaciones tuyas sobre este paciente (gustos, disgustos, lesiones, adherencia al plan, "
-        "platillo favorito, lo que sea) -- se guardan con fecha, nunca se borran, y se incluyen solas "
-        "en el análisis con IA y en el archivo para pegar en Claude, sin que tengas que volver a "
-        "escribirlas cada vez."
-    )
-    nota_nueva = st.text_area("Nueva nota", key=f"nota_nueva_{paciente}", placeholder=(
-        "Ej. \"No le gusta la sandía. Dice que no pudo dormir bien con el plan porque hace box y se "
-        "lastimó el pie, no ha podido entrenar. Su platillo favorito del plan fue la lasaña de "
-        "calabaza.\""
-    ))
-    if st.button("Agregar nota", key=f"agregar_nota_{paciente}", disabled=not nota_nueva.strip()):
-        notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], paciente, nota_nueva)
-        st.cache_data.clear()
-        st.success("Nota guardada.")
-        st.rerun()
+_TEXTO_ACTUALIZACION = {
+    "Apple Health": "Para actualizar: vuelve a **exportar** desde su iPhone (Ajustes → Salud → foto de "
+    "perfil → \"Exportar todos los datos de salud\") y reemplaza el `.zip` en su carpeta, o mándatelo y "
+    "súbelo aquí abajo.",
+    "Oura": "Su anillo sincroniza solo con la app de Oura en su teléfono (por Bluetooth, cuando estén "
+    "cerca) -- solo tiene que volver a abrir `iniciar_paciente_oura.command`/`.bat`.",
+}.get(
+    fuente,
+    "Solo tiene que volver a abrir `iniciar_paciente.command`/`.bat` en su computadora -- su sesión de "
+    "Garmin ya está guardada.",
+)
 
-    if not historial_notas.empty:
+col_notas, col_wearable = st.columns(2)
+
+with col_notas:
+    with st.container(border=True):
+        st.markdown("**📝 Notas del paciente**")
+        st.caption(
+            "Gustos, disgustos, lesiones, adherencia al plan, lo que sea -- se guardan con fecha y se "
+            "incluyen solas en el análisis con IA."
+        )
+        nota_nueva = st.text_area(
+            "Nueva nota", key=f"nota_nueva_{paciente}", label_visibility="collapsed",
+            placeholder="Ej. \"No le gusta la sandía. Se lastimó el pie haciendo box, no ha podido "
+            "entrenar. Su platillo favorito del plan fue la lasaña de calabaza.\"",
+        )
+        if st.button("Agregar nota", key=f"agregar_nota_{paciente}", disabled=not nota_nueva.strip()):
+            notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], paciente, nota_nueva)
+            st.cache_data.clear()
+            st.success("Nota guardada.")
+            st.rerun()
+
+        if not historial_notas.empty:
+            with st.expander(f"Ver historial ({len(historial_notas)})"):
+                for _, fila_nota in historial_notas.iloc[::-1].iterrows():
+                    st.markdown(f"**{fila_nota.get('Fecha')}** — {fila_nota.get('Nota')}")
+
+with col_wearable:
+    with st.container(border=True):
+        st.markdown("**⌚ Wearable**")
+        st.caption(_TEXTO_ACTUALIZACION)
         st.divider()
-        for _, fila_nota in historial_notas.iloc[::-1].iterrows():
-            st.markdown(f"**{fila_nota.get('Fecha')}** — {fila_nota.get('Nota')}")
-
-with st.expander("¿Cómo actualiza sus datos este paciente?"):
-    if fuente == "Apple Health":
-        st.markdown(
-            "Tiene que **volver a exportar** desde su iPhone (Ajustes → Salud → foto de "
-            "perfil → \"Exportar todos los datos de salud\"), reemplazar el `.zip` en su "
-            "carpeta, y volver a abrir `iniciar_paciente_apple.command`/`.bat`. Después de eso, "
-            "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
-            "tardar hasta 5 minutos en reflejarlo sola)."
+        st.caption("¿Te mandó el .zip de Apple Health (por WhatsApp, correo)? Súbelo aquí directo:")
+        archivo_apple = st.file_uploader(
+            "Archivo .zip de la exportación de Salud", type=["zip"], key=f"apple_upload_{paciente}",
+            label_visibility="collapsed",
         )
-    elif fuente == "Oura":
-        st.markdown(
-            "Su anillo sincroniza solo con la app de Oura en su teléfono (por Bluetooth, cuando "
-            "estén cerca) -- solo tiene que volver a abrir `iniciar_paciente_oura.command`/`.bat` "
-            "en su computadora (no necesita hacer nada más, su token de Oura ya está guardado). "
-            "Después de eso, dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta "
-            "página puede tardar hasta 5 minutos en reflejarlo sola)."
-        )
-    else:
-        st.markdown(
-            "Solo tiene que volver a abrir `iniciar_paciente.command`/`.bat` en su computadora "
-            "(no necesita hacer nada más, su sesión de Garmin ya está guardada). Después de eso, "
-            "dale aquí a **🔄 Actualizar** para traer lo más reciente (si no, esta página puede "
-            "tardar hasta 5 minutos en reflejarlo sola)."
-        )
-
-with st.expander("📤 Subir archivo de Apple Health (.zip) directo desde aquí"):
-    st.caption(
-        "Si el paciente te mandó el .zip que exportó de la app Salud de su iPhone (en vez de "
-        "correrlo él mismo en su computadora), lo puedes subir aquí -- se calcula el dashboard "
-        "completo y se guarda en la hoja igual que si lo hubiera mandado él."
-    )
-    archivo_apple = st.file_uploader(
-        "Archivo .zip de la exportación de Salud", type=["zip"], key=f"apple_upload_{paciente}",
-    )
-    if archivo_apple is not None and st.button("Procesar y guardar", key=f"apple_procesar_{paciente}"):
-        with st.spinner("Leyendo el archivo de Salud y calculando el dashboard (puede tardar un poco)..."):
-            try:
-                with tempfile.TemporaryDirectory() as tmp:
-                    zip_path = Path(tmp) / "export.zip"
-                    zip_path.write_bytes(archivo_apple.getvalue())
-                    runtime_data = apple_health.build_runtime_data(str(zip_path))
-                write_snapshot_to_worksheet(_worksheet(), paciente, runtime_data, fuente="Apple Health")
-                st.cache_data.clear()
-                st.success("Listo -- se guardó el dashboard de este paciente.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"No se pudo leer o guardar el archivo: {e}")
+        if archivo_apple is not None and st.button("Procesar y guardar", key=f"apple_procesar_{paciente}"):
+            with st.spinner("Leyendo el archivo de Salud y calculando el dashboard (puede tardar un poco)..."):
+                try:
+                    with tempfile.TemporaryDirectory() as tmp:
+                        zip_path = Path(tmp) / "export.zip"
+                        zip_path.write_bytes(archivo_apple.getvalue())
+                        runtime_data = apple_health.build_runtime_data(str(zip_path))
+                    write_snapshot_to_worksheet(_worksheet(), paciente, runtime_data, fuente="Apple Health")
+                    st.cache_data.clear()
+                    st.success("Listo -- se guardó el dashboard de este paciente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"No se pudo leer o guardar el archivo: {e}")
 
 def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
