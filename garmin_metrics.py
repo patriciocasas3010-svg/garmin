@@ -240,15 +240,14 @@ def fetch_training_readiness_series(client, start: date, end: date) -> pd.Series
     d = start
     while d <= end:
         try:
-            readiness = client.get_training_readiness(d.isoformat())
+            # get_training_readiness puede devolver varias lecturas del mismo
+            # día (una justo al despertar, otras después, sobre todo con más
+            # de un reloj vinculado) -- get_morning_training_readiness ya
+            # elige la lectura correcta de la mañana (o la primera si ninguna
+            # trae esa marca) y siempre regresa un solo dict o None.
+            readiness = client.get_morning_training_readiness(d.isoformat())
         except Exception:
             readiness = None
-        # get_training_readiness devuelve una lista (un registro por cada
-        # sincronización/dispositivo del día) en vez de un solo dict cuando
-        # el paciente tiene más de un reloj vinculado -- nos quedamos con
-        # el primero (el más reciente).
-        if isinstance(readiness, list):
-            readiness = readiness[0] if readiness else None
         rows.append({"date": d, "score": (readiness or {}).get("score")})
         d += timedelta(days=1)
 
