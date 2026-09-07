@@ -243,6 +243,12 @@ def fetch_training_readiness_series(client, start: date, end: date) -> pd.Series
             readiness = client.get_training_readiness(d.isoformat())
         except Exception:
             readiness = None
+        # get_training_readiness devuelve una lista (un registro por cada
+        # sincronización/dispositivo del día) en vez de un solo dict cuando
+        # el paciente tiene más de un reloj vinculado -- nos quedamos con
+        # el primero (el más reciente).
+        if isinstance(readiness, list):
+            readiness = readiness[0] if readiness else None
         rows.append({"date": d, "score": (readiness or {}).get("score")})
         d += timedelta(days=1)
 
