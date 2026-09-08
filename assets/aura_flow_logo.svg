@@ -23,22 +23,24 @@
 
   <!-- Isotipo: "A" sin travesaño recto; ondas gruesas tipo cinta forman
        la barra horizontal, con un destello sutil sobre el vértice.
-       Triángulo ancho, robusto, de esquinas rectas (miter/square). -->
+       Triángulo robusto, de esquinas rectas (miter/square), ángulo de
+       apertura moderado (ni tan cerrado como el original ni tan abierto
+       como la primera versión ancha). -->
   <g>
-    <path d="M2,112 L58,22 L114,112" fill="none" stroke="url(#silverBevel)"
+    <path d="M10,112 L58,22 L106,112" fill="none" stroke="url(#silverBevel)"
           stroke-width="16" stroke-linecap="square" stroke-linejoin="miter"/>
 
     <circle cx="58" cy="18" r="12" fill="url(#flare)"/>
     <path d="M47,13 Q58,2 69,13" fill="none" stroke="#FFFFFF" stroke-width="2"
           stroke-linecap="round" opacity="0.85"/>
 
-    <path d="M22,63 Q42,45 58,60 Q74,75 94,57" fill="none" stroke="url(#iridescent)"
+    <path d="M27,63 Q44,45 58,60 Q72,75 89,57" fill="none" stroke="url(#iridescent)"
           stroke-width="10" stroke-linecap="round"/>
-    <path d="M25,60 Q45,42 61,57" fill="none" stroke="#FFFFFF" stroke-width="2.5"
+    <path d="M30,60 Q47,42 61,57" fill="none" stroke="#FFFFFF" stroke-width="2.5"
           stroke-linecap="round" opacity="0.35"/>
-    <path d="M19,75 Q40,59 58,73 Q76,87 97,69" fill="none" stroke="url(#iridescent)"
+    <path d="M25,75 Q43,59 58,73 Q73,87 91,69" fill="none" stroke="url(#iridescent)"
           stroke-width="10" stroke-linecap="round" opacity="0.85"/>
-    <path d="M16,87 Q38,73 58,86 Q78,99 100,81" fill="none" stroke="url(#iridescent)"
+    <path d="M22,87 Q41,73 58,86 Q75,99 94,81" fill="none" stroke="url(#iridescent)"
           stroke-width="10" stroke-linecap="round" opacity="0.7"/>
   </g>
 
