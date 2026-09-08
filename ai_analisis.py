@@ -158,8 +158,10 @@ def _resumen_cruces(paneles: list[dict] | None) -> str:
     for panel in paneles:
         resumen = panel.get("resumen") or {}
         linea = f"{panel.get('titulo')}: {resumen.get('diagnostico') or 'sin datos suficientes'}"
-        if resumen.get("alerta"):
-            linea += f" [ALERTA: {resumen['alerta']} -- Pauta sugerida: {resumen.get('pauta')}]"
+        estado = resumen.get("estado")
+        if estado in ("alerta", "riesgo"):
+            etiqueta = "ALERTA" if estado == "alerta" else "RIESGO"
+            linea += f" [{etiqueta}: {resumen.get('hallazgo')} -- Pauta sugerida: {resumen.get('pauta')}]"
         lineas.append(linea)
     return "\n".join(lineas)
 
@@ -322,10 +324,13 @@ def _tabla_cruces_completa(paneles: list[dict] | None) -> str:
     bloques = []
     for panel in paneles:
         resumen = panel.get("resumen") or {}
+        estado = resumen.get("estado", "sin_datos")
+        etiqueta_estado = {"optimo": "Óptimo", "riesgo": "Riesgo", "alerta": "Alerta", "sin_datos": "Sin datos"}[estado]
         lineas = [
             f"### {panel.get('icono', '')} {panel.get('titulo')}",
+            f"Estado (semáforo): {etiqueta_estado}",
             f"Diagnóstico integrado: {resumen.get('diagnostico') or 'sin datos suficientes'}",
-            f"Bandera roja / alerta: {resumen.get('alerta') or 'sin hallazgos prioritarios'}",
+            f"Hallazgo prioritario: {resumen.get('hallazgo') or 'sin hallazgos prioritarios'}",
             f"Pauta sugerida: {resumen.get('pauta') or 'sin pauta'}",
         ]
         for m in panel.get("metricas") or []:

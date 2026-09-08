@@ -190,145 +190,161 @@ def _positivo(texto: str | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Resumen ejecutivo por panel: {"diagnostico", "alerta", "pauta"} -- apoyo a
-# la lectura clínica del nutriólogo, nunca un diagnóstico médico automático
-# ni una prescripción exacta. Si faltan los datos clave del panel, se avisa
-# en vez de inventar un hallazgo.
+# Resumen ejecutivo por panel: {"diagnostico", "estado", "hallazgo", "pauta"}
+# -- apoyo a la lectura clínica del nutriólogo, nunca un diagnóstico médico
+# automático ni una prescripción exacta. "estado" es el semáforo clínico de
+# 3 niveles ("optimo"/"riesgo"/"alerta", o "sin_datos" si falta lo esencial
+# del panel) para que se valide de un vistazo sin leer tabla por tabla --
+# "alerta" (rojo) es para hallazgos que ameritan atención médica pronta
+# (función de órgano, infección, valores muy fuera de rango); "riesgo"
+# (ámbar) es para marcadores de riesgo/borderline que vale la pena vigilar
+# pero no son urgentes.
 # ---------------------------------------------------------------------------
+
+def _armar_resumen(hallazgos, alertas, riesgos, pauta_alerta, pauta_riesgo, pauta_normal) -> dict:
+    diagnostico = "; ".join(hallazgos) + "." if hallazgos else "Métricas disponibles sin hallazgos relevantes."
+    if alertas:
+        return {"diagnostico": diagnostico, "estado": "alerta", "hallazgo": " · ".join(alertas), "pauta": pauta_alerta}
+    if riesgos:
+        return {"diagnostico": diagnostico, "estado": "riesgo", "hallazgo": " · ".join(riesgos), "pauta": pauta_riesgo}
+    return {"diagnostico": diagnostico, "estado": "optimo", "hallazgo": None, "pauta": pauta_normal}
+
+
+def _sin_datos(diagnostico: str, pauta: str) -> dict:
+    return {"diagnostico": diagnostico, "estado": "sin_datos", "hallazgo": None, "pauta": pauta}
+
 
 def _resumen_p1(filas, glucosa, insulina, homa_ir, grasa_visceral) -> dict:
     glucosa_estado = _estado_lab(filas, "glucosa")
     tg_estado = _estado_lab(filas, "trigliceridos")
     if homa_ir is None and glucosa is None and insulina is None:
-        return {
-            "diagnostico": "Sin glucosa/insulina en ayunas registradas -- no se puede valorar sensibilidad a la insulina.",
-            "alerta": None,
-            "pauta": "Solicita glucosa e insulina en ayunas (idealmente del mismo estudio) para calcular HOMA-IR.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin glucosa/insulina en ayunas registradas -- no se puede valorar sensibilidad a la insulina.",
+            "Solicita glucosa e insulina en ayunas (idealmente del mismo estudio) para calcular HOMA-IR.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if homa_ir is not None:
         if homa_ir >= 2.5:
             hallazgos.append(f"HOMA-IR de {homa_ir} sugiere resistencia a la insulina")
-            banderas.append("HOMA-IR elevado")
+            alertas.append("HOMA-IR elevado")
         elif homa_ir >= 1.9:
             hallazgos.append(f"HOMA-IR de {homa_ir} en zona límite")
+            riesgos.append("HOMA-IR en zona límite")
         else:
             hallazgos.append(f"HOMA-IR de {homa_ir} dentro de lo esperado")
     if glucosa_estado == "alto":
         hallazgos.append("glucosa en ayunas por encima del rango del laboratorio")
-        banderas.append("glucosa en ayunas alta")
+        alertas.append("glucosa en ayunas alta")
     if tg_estado == "alto":
         hallazgos.append("triglicéridos elevados")
-        banderas.append("triglicéridos altos")
+        riesgos.append("triglicéridos altos")
     if grasa_visceral is not None and grasa_visceral >= 10:
         hallazgos.append(f"grasa visceral en nivel {grasa_visceral:.0f} (InBody)")
-        banderas.append("grasa visceral elevada")
-    diagnostico = "; ".join(hallazgos) + "." if hallazgos else "Métricas disponibles sin hallazgos relevantes."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Prioriza minutos en Zona 2 y trabajo de fuerza, revisa la densidad de carbohidratos simples/"
-                 "ultraprocesados, y considera repetir glucosa/insulina en 8-12 semanas.")
-    else:
-        alerta = None
-        pauta = "Sin cambios urgentes en este eje -- mantener hábitos actuales de actividad y alimentación."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+        riesgos.append("grasa visceral elevada")
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="Prioriza minutos en Zona 2 y trabajo de fuerza, revisa la densidad de carbohidratos simples/"
+                     "ultraprocesados, y considera repetir glucosa/insulina en 8-12 semanas.",
+        pauta_riesgo="Vigila la tendencia -- refuerza Zona 2/fuerza y densidad de carbohidratos simples, y repite "
+                     "glucosa/insulina en unos meses para confirmar si mejora.",
+        pauta_normal="Sin cambios urgentes en este eje -- mantener hábitos actuales de actividad y alimentación.",
+    )
 
 
 def _resumen_p2(filas, acwr, hrv_z) -> dict:
     albumina_estado = _estado_lab(filas, "albumina")
     proteinuria = _texto_prueba(filas, "proteinas_orina")
-    riesgo = _riesgo_carga(acwr, hrv_z)
-    if albumina_estado is None and not proteinuria and riesgo is None:
-        return {
-            "diagnostico": "Sin BUN/urea/albúmina ni carga de entrenamiento sincronizada para valorar este eje.",
-            "alerta": None,
-            "pauta": "Registra BUN/urea/albúmina en el próximo estudio y confirma que el wearable esté sincronizado.",
-        }
-    hallazgos, banderas = [], []
+    riesgo_carga = _riesgo_carga(acwr, hrv_z)
+    if albumina_estado is None and not proteinuria and riesgo_carga is None:
+        return _sin_datos(
+            "Sin BUN/urea/albúmina ni carga de entrenamiento sincronizada para valorar este eje.",
+            "Registra BUN/urea/albúmina en el próximo estudio y confirma que el wearable esté sincronizado.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if albumina_estado == "bajo":
         hallazgos.append("albúmina baja (posible déficit proteico o inflamación)")
-        banderas.append("albúmina baja")
+        alertas.append("albúmina baja")
     if _positivo(proteinuria):
         hallazgos.append(f"proteínas en orina: {proteinuria}")
-        banderas.append("proteinuria")
-    if riesgo in ("alto", "moderado"):
-        hallazgos.append(f"carga de entrenamiento (ACWR) en riesgo {riesgo}")
-        banderas.append(f"ACWR {riesgo}")
-    if hrv_z is not None and hrv_z < -1.0:
-        hallazgos.append(f"HRV nocturna por debajo de su línea base (Z={hrv_z})")
-        banderas.append("HRV baja")
+        alertas.append("proteinuria")
+    if riesgo_carga == "alto":
+        hallazgos.append("carga de entrenamiento (ACWR) en riesgo alto")
+        alertas.append("ACWR alto")
+    elif riesgo_carga == "moderado":
+        hallazgos.append("carga de entrenamiento (ACWR) en riesgo moderado")
+        riesgos.append("ACWR moderado")
+    if hrv_z is not None and hrv_z < -1.5:
+        hallazgos.append(f"HRV nocturna muy por debajo de su línea base (Z={hrv_z})")
+        alertas.append("HRV muy baja")
+    elif hrv_z is not None and hrv_z < -1.0:
+        hallazgos.append(f"HRV nocturna algo por debajo de su línea base (Z={hrv_z})")
+        riesgos.append("HRV algo baja")
     if not hallazgos:
         hallazgos.append("sin hallazgos relevantes de estrés catabólico con los datos disponibles")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = "Considera reducir temporalmente la carga de entrenamiento, reforzar la ingesta proteica y priorizar recuperación/sueño."
-    else:
-        alerta = None
-        pauta = "Sin señales de estrés catabólico relevante -- la carga actual parece bien tolerada."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="Considera reducir temporalmente la carga de entrenamiento, reforzar la ingesta proteica y "
+                     "priorizar recuperación/sueño.",
+        pauta_riesgo="Vigila la tendencia de HRV/ACWR de los próximos días antes de ajustar nada -- si sigue "
+                     "bajando, prioriza recuperación.",
+        pauta_normal="Sin señales de estrés catabólico relevante -- la carga actual parece bien tolerada.",
+    )
 
 
 def _resumen_p3(filas, bmr_kcal, ffmi) -> dict:
     tsh_estado = _estado_lab(filas, "tsh")
     vitd_estado = _estado_lab(filas, "vitamina_d")
     if tsh_estado is None and vitd_estado is None and bmr_kcal is None:
-        return {
-            "diagnostico": "Sin perfil tiroideo, vitamina D ni BMR de InBody disponibles.",
-            "alerta": None,
-            "pauta": "Solicita perfil tiroideo (TSH/T4/T3) y vitamina D si no se ha hecho en el último año; "
-                     "verifica que el InBody capture BMR.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin perfil tiroideo, vitamina D ni BMR de InBody disponibles.",
+            "Solicita perfil tiroideo (TSH/T4/T3) y vitamina D si no se ha hecho en el último año; "
+            "verifica que el InBody capture BMR.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if tsh_estado in ("alto", "bajo"):
         hallazgos.append(f"TSH {tsh_estado} respecto al rango del laboratorio")
-        banderas.append(f"TSH {tsh_estado}")
+        alertas.append(f"TSH {tsh_estado}")
     if vitd_estado == "bajo":
         hallazgos.append("vitamina D por debajo del rango")
-        banderas.append("vitamina D baja")
+        riesgos.append("vitamina D baja")
     if bmr_kcal is not None and ffmi is not None:
         hallazgos.append(f"BMR de {bmr_kcal:.0f} kcal con FFMI de {ffmi} kg/m²")
     if not hallazgos:
         hallazgos.append("perfil tiroideo/metabólico sin hallazgos relevantes")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Si TSH está fuera de rango, refiere seguimiento endocrinológico; si vitamina D está baja, "
-                 "valora suplementación bajo indicación médica.")
-    else:
-        alerta = None
-        pauta = "Sin hallazgos que requieran ajuste inmediato en este eje."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="TSH fuera de rango -- refiere seguimiento endocrinológico.",
+        pauta_riesgo="Vitamina D baja -- valora suplementación bajo indicación médica y repite en unos meses.",
+        pauta_normal="Sin hallazgos que requieran ajuste inmediato en este eje.",
+    )
 
 
 def _resumen_p4(filas, ratio_aec_act, nivel_estres) -> dict:
     pcr_estado = _estado_lab(filas, "pcr")
     if pcr_estado is None and ratio_aec_act is None:
-        return {
-            "diagnostico": "Sin PCR ni datos de agua corporal (InBody) para valorar inflamación/retención.",
-            "alerta": None,
-            "pauta": "Solicita PCR ultrasensible y confirma que el InBody reporte agua intra/extracelular.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin PCR ni datos de agua corporal (InBody) para valorar inflamación/retención.",
+            "Solicita PCR ultrasensible y confirma que el InBody reporte agua intra/extracelular.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if pcr_estado == "alto":
         hallazgos.append("PCR ultrasensible elevada")
-        banderas.append("PCR alta")
+        alertas.append("PCR alta")
     if ratio_aec_act is not None and ratio_aec_act > 0.40:
         hallazgos.append(f"ratio Agua Extra/Agua Total de {ratio_aec_act} (>0.40, sugiere retención)")
-        banderas.append("retención de agua")
+        riesgos.append("retención de agua")
     if nivel_estres is not None and nivel_estres >= 60:
         hallazgos.append(f"estrés diario promedio alto ({nivel_estres:.0f}/100)")
     if not hallazgos:
         hallazgos.append("sin señales relevantes de inflamación/retención con los datos disponibles")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("La báscula puede no reflejar la pérdida real de grasa mientras haya retención -- da más peso "
-                 "a la tendencia de composición corporal y a bajar estrés/mejorar sueño que al peso puntual.")
-    else:
-        alerta = None
-        pauta = "Sin señales de retención/inflamación relevantes -- el peso en báscula es razonablemente confiable como referencia."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="PCR elevada -- refiere valoración médica para descartar un proceso inflamatorio activo.",
+        pauta_riesgo="La báscula puede no reflejar la pérdida real de grasa mientras haya retención -- da más peso "
+                     "a la tendencia de composición corporal y a bajar estrés/mejorar sueño que al peso puntual.",
+        pauta_normal="Sin señales de retención/inflamación relevantes -- el peso en báscula es razonablemente "
+                     "confiable como referencia.",
+    )
 
 
 def _resumen_p5(filas, tasa_sudoracion) -> dict:
@@ -336,68 +352,62 @@ def _resumen_p5(filas, tasa_sudoracion) -> dict:
     acido_urico_estado = _estado_lab(filas, "acido_urico")
     densidad = _texto_prueba(filas, "densidad_orina")
     if tfge is None and acido_urico_estado is None and not densidad:
-        return {
-            "diagnostico": "Sin TFGe, ácido úrico ni densidad urinaria para valorar carga renal/hídrica.",
-            "alerta": None,
-            "pauta": "Solicita química sanguínea con TFGe y examen general de orina.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin TFGe, ácido úrico ni densidad urinaria para valorar carga renal/hídrica.",
+            "Solicita química sanguínea con TFGe y examen general de orina.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if tfge is not None and tfge < 60:
         hallazgos.append(f"TFGe de {tfge} mL/min/1.73m² (<60)")
-        banderas.append("TFGe baja")
+        alertas.append("TFGe baja")
     if acido_urico_estado == "alto":
         hallazgos.append("ácido úrico elevado")
-        banderas.append("ácido úrico alto")
+        riesgos.append("ácido úrico alto")
     densidad_val = _a_float(densidad)
     if densidad_val is not None and densidad_val >= 1.025:
         hallazgos.append(f"densidad urinaria de {densidad} (posible hidratación insuficiente al momento del estudio)")
-        banderas.append("densidad urinaria alta")
+        riesgos.append("densidad urinaria alta")
     if not hallazgos:
         hallazgos.append("sin hallazgos relevantes de carga renal/balance hídrico")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Si TFGe/ácido úrico están alterados, refiere valoración médica; si la densidad urinaria fue "
-                 "alta, refuerza la hidratación antes del próximo estudio.")
-    else:
-        alerta = None
-        pauta = "Función renal y balance hídrico sin hallazgos relevantes."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="TFGe baja -- refiere valoración médica para revisar función renal.",
+        pauta_riesgo="Si el ácido úrico está alto o la densidad urinaria fue alta, refuerza la hidratación y da "
+                     "seguimiento en el próximo estudio.",
+        pauta_normal="Función renal y balance hídrico sin hallazgos relevantes.",
+    )
 
 
 def _resumen_p6(filas, ratio_tg_hdl, indice_aterogenico, grasa_visceral, vo2max) -> dict:
     ldl_estado = _estado_lab(filas, "colesterol_ldl")
     if ratio_tg_hdl is None and indice_aterogenico is None and ldl_estado is None:
-        return {
-            "diagnostico": "Sin perfil lipídico completo para valorar riesgo cardiometabólico.",
-            "alerta": None,
-            "pauta": "Solicita perfil de lípidos completo (colesterol total, HDL, LDL, triglicéridos).",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin perfil lipídico completo para valorar riesgo cardiometabólico.",
+            "Solicita perfil de lípidos completo (colesterol total, HDL, LDL, triglicéridos).",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if ratio_tg_hdl is not None and ratio_tg_hdl > 3.5:
         hallazgos.append(f"relación TG/HDL de {ratio_tg_hdl} (>3.5, asociada a resistencia a la insulina)")
-        banderas.append("TG/HDL alto")
+        riesgos.append("TG/HDL alto")
     if indice_aterogenico is not None and indice_aterogenico >= 4.5:
         hallazgos.append(f"índice aterogénico de {indice_aterogenico} (elevado)")
-        banderas.append("índice aterogénico alto")
+        riesgos.append("índice aterogénico alto")
     if ldl_estado == "alto":
         hallazgos.append("LDL por encima del rango del laboratorio")
-        banderas.append("LDL alto")
+        alertas.append("LDL alto")
     if grasa_visceral is not None and grasa_visceral >= 10:
         hallazgos.append(f"grasa visceral en nivel {grasa_visceral:.0f}")
     if vo2max is not None:
         hallazgos.append(f"VO2max estimado de {vo2max} mL/kg/min")
     if not hallazgos:
         hallazgos.append("perfil lipídico/cardiovascular sin hallazgos relevantes")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Aumenta minutos semanales en Zona 2, revisa la calidad de grasas dietéticas (saturadas vs. "
-                 "insaturadas) y da seguimiento al perfil lipídico en unos 3 meses.")
-    else:
-        alerta = None
-        pauta = "Perfil lipídico/cardiovascular sin hallazgos que requieran ajuste inmediato."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="LDL fuera de rango -- da seguimiento médico al perfil lipídico.",
+        pauta_riesgo="Aumenta minutos semanales en Zona 2, revisa la calidad de grasas dietéticas (saturadas vs. "
+                     "insaturadas) y da seguimiento al perfil lipídico en unos 3 meses.",
+        pauta_normal="Perfil lipídico/cardiovascular sin hallazgos que requieran ajuste inmediato.",
+    )
 
 
 def _resumen_p7(filas, pgc_pct) -> dict:
@@ -405,31 +415,28 @@ def _resumen_p7(filas, pgc_pct) -> dict:
     alt_estado = _estado_lab(filas, "alt")
     ggt_estado = _estado_lab(filas, "ggt")
     if ast_estado is None and alt_estado is None and ggt_estado is None:
-        return {
-            "diagnostico": "Sin pruebas de función hepática (AST/ALT/GGT) para valorar este eje.",
-            "alerta": None,
-            "pauta": "Solicita perfil hepático (AST, ALT, GGT), sobre todo si el % de grasa corporal es elevado.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin pruebas de función hepática (AST/ALT/GGT) para valorar este eje.",
+            "Solicita perfil hepático (AST, ALT, GGT), sobre todo si el % de grasa corporal es elevado.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if alt_estado == "alto" or ast_estado == "alto":
         hallazgos.append("transaminasas (AST/ALT) por encima del rango")
-        banderas.append("transaminasas elevadas")
+        alertas.append("transaminasas elevadas")
     if ggt_estado == "alto":
         hallazgos.append("GGT elevada")
-        banderas.append("GGT alta")
+        riesgos.append("GGT alta")
     if pgc_pct is not None and pgc_pct >= 25:
         hallazgos.append(f"% de grasa corporal de {pgc_pct}% (InBody)")
     if not hallazgos:
         hallazgos.append("perfil hepático sin hallazgos relevantes")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Refiere valoración médica si las transaminasas/GGT persisten elevadas; mientras tanto, enfoca "
-                 "el plan en reducir grasa visceral y evitar alcohol/hepatotóxicos.")
-    else:
-        alerta = None
-        pauta = "Función hepática sin hallazgos relevantes."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="Transaminasas elevadas -- refiere valoración médica.",
+        pauta_riesgo="GGT elevada -- enfoca el plan en reducir grasa visceral, evita alcohol/hepatotóxicos y da "
+                     "seguimiento en el próximo estudio.",
+        pauta_normal="Función hepática sin hallazgos relevantes.",
+    )
 
 
 def _resumen_p8(filas, training_status) -> dict:
@@ -437,34 +444,32 @@ def _resumen_p8(filas, training_status) -> dict:
     ldh_estado = _estado_lab(filas, "ldh")
     mg_estado = _estado_lab(filas, "magnesio")
     if cpk_estado is None and ldh_estado is None and mg_estado is None and not training_status:
-        return {
-            "diagnostico": "Sin CPK/LDH/magnesio ni estado de entrenamiento para valorar recuperación tisular.",
-            "alerta": None,
-            "pauta": "Solicita CPK y LDH si hay sospecha de sobreentrenamiento; confirma que el wearable reporte Training Status.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin CPK/LDH/magnesio ni estado de entrenamiento para valorar recuperación tisular.",
+            "Solicita CPK y LDH si hay sospecha de sobreentrenamiento; confirma que el wearable reporte Training Status.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if cpk_estado == "alto":
         hallazgos.append("CPK elevada (posible daño muscular reciente por entrenamiento)")
-        banderas.append("CPK alta")
+        riesgos.append("CPK alta")
     if ldh_estado == "alto":
         hallazgos.append("LDH elevada")
-        banderas.append("LDH alta")
+        riesgos.append("LDH alta")
     if mg_estado == "bajo":
         hallazgos.append("magnesio bajo")
-        banderas.append("magnesio bajo")
+        riesgos.append("magnesio bajo")
     if training_status:
         hallazgos.append(f"estado de entrenamiento reportado: {training_status}")
     if not hallazgos:
         hallazgos.append("sin hallazgos relevantes de recuperación tisular")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Si CPK/LDH están elevadas sin relación con entrenamiento intenso reciente, refiere valoración "
-                 "médica; si es por entrenamiento, prioriza descanso y refuerza magnesio/calcio en la dieta.")
-    else:
-        alerta = None
-        pauta = "Recuperación tisular sin hallazgos relevantes."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="Refiere valoración médica.",
+        pauta_riesgo="Si CPK/LDH están elevadas sin relación con entrenamiento intenso reciente, refiere "
+                     "valoración médica; si es por entrenamiento, prioriza descanso y refuerza magnesio/calcio "
+                     "en la dieta.",
+        pauta_normal="Recuperación tisular sin hallazgos relevantes.",
+    )
 
 
 def _resumen_p9(filas, spo2_minimo) -> dict:
@@ -473,69 +478,65 @@ def _resumen_p9(filas, spo2_minimo) -> dict:
     hierro_estado = _estado_lab(filas, "hierro_serico")
     sat_estado = _estado_lab(filas, "sat_transferrina")
     if hb_estado is None and hto_estado is None and hierro_estado is None and spo2_minimo is None:
-        return {
-            "diagnostico": "Sin biometría hemática, hierro sérico ni SpO2 para valorar transporte de oxígeno.",
-            "alerta": None,
-            "pauta": "Solicita biometría hemática completa con hierro sérico/saturación de transferrina.",
-        }
-    hallazgos, banderas = [], []
+        return _sin_datos(
+            "Sin biometría hemática, hierro sérico ni SpO2 para valorar transporte de oxígeno.",
+            "Solicita biometría hemática completa con hierro sérico/saturación de transferrina.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if hb_estado == "bajo" or hto_estado == "bajo":
         hallazgos.append("hemoglobina/hematocrito por debajo del rango (posible anemia)")
-        banderas.append("hemoglobina/hematocrito bajos")
+        alertas.append("hemoglobina/hematocrito bajos")
     if hierro_estado == "bajo" or sat_estado == "bajo":
         hallazgos.append("hierro sérico/saturación de transferrina bajos")
-        banderas.append("hierro bajo")
+        riesgos.append("hierro bajo")
     if spo2_minimo is not None and spo2_minimo < 90:
         hallazgos.append(f"SpO2 mínima nocturna de {spo2_minimo:.0f}% (<90%)")
-        banderas.append("SpO2 baja")
+        alertas.append("SpO2 baja")
     if not hallazgos:
         hallazgos.append("capacidad hematológica/transporte de oxígeno sin hallazgos relevantes")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Si hay hemoglobina/hierro bajos, refiere valoración médica para descartar anemia (puede "
-                 "explicar fatiga o bajo rendimiento aeróbico); si la SpO2 nocturna es baja de forma persistente, "
-                 "refiere valoración respiratoria/del sueño.")
-    else:
-        alerta = None
-        pauta = "Capacidad hematológica y transporte de oxígeno sin hallazgos relevantes."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="Refiere valoración médica para descartar anemia o un problema respiratorio/del sueño según "
+                     "corresponda.",
+        pauta_riesgo="Hierro bajo -- vigila la tendencia y considera reforzar la ingesta de hierro en la dieta.",
+        pauta_normal="Capacidad hematológica y transporte de oxígeno sin hallazgos relevantes.",
+    )
 
 
 def _resumen_p10(filas, ratio_neu_lin, acwr, battery_recarga_prom) -> dict:
     esterasa = _texto_prueba(filas, "esterasa_leucocitaria")
     nitritos = _texto_prueba(filas, "nitritos")
-    riesgo = _riesgo_carga(acwr, None)
-    if ratio_neu_lin is None and not esterasa and not nitritos and riesgo is None:
-        return {
-            "diagnostico": "Sin biometría hemática con diferencial ni carga de entrenamiento para valorar tolerancia inmune.",
-            "alerta": None,
-            "pauta": "Solicita biometría hemática con diferencial (neutrófilos/linfocitos) y confirma sincronización del wearable.",
-        }
-    hallazgos, banderas = [], []
+    riesgo_carga = _riesgo_carga(acwr, None)
+    if ratio_neu_lin is None and not esterasa and not nitritos and riesgo_carga is None:
+        return _sin_datos(
+            "Sin biometría hemática con diferencial ni carga de entrenamiento para valorar tolerancia inmune.",
+            "Solicita biometría hemática con diferencial (neutrófilos/linfocitos) y confirma sincronización del wearable.",
+        )
+    hallazgos, alertas, riesgos = [], [], []
     if ratio_neu_lin is not None and ratio_neu_lin > 3:
         hallazgos.append(f"ratio Neutrófilo/Linfocito de {ratio_neu_lin} (>3, marcador inespecífico de estrés/inflamación)")
-        banderas.append("ratio Neu/Lin alto")
+        riesgos.append("ratio Neu/Lin alto")
     if _positivo(esterasa) or _positivo(nitritos):
         hallazgos.append("esterasa leucocitaria/nitritos positivos en orina (posible proceso infeccioso)")
-        banderas.append("posible infección urinaria")
-    if riesgo in ("alto", "moderado"):
-        hallazgos.append(f"carga de entrenamiento (ACWR) en riesgo {riesgo}")
-        banderas.append(f"ACWR {riesgo}")
+        alertas.append("posible infección urinaria")
+    if riesgo_carga == "alto":
+        hallazgos.append("carga de entrenamiento (ACWR) en riesgo alto")
+        alertas.append("ACWR alto")
+    elif riesgo_carga == "moderado":
+        hallazgos.append("carga de entrenamiento (ACWR) en riesgo moderado")
+        riesgos.append("ACWR moderado")
     if battery_recarga_prom is not None and battery_recarga_prom < 40:
         hallazgos.append(f"recarga nocturna de Body Battery baja ({battery_recarga_prom:.0f} pts)")
-        banderas.append("baja recarga nocturna")
+        riesgos.append("baja recarga nocturna")
     if not hallazgos:
         hallazgos.append("sin hallazgos relevantes de estrés inmune/tolerancia al entrenamiento")
-    diagnostico = "; ".join(hallazgos) + "."
-    if banderas:
-        alerta = " · ".join(banderas)
-        pauta = ("Prioriza descanso/recuperación y valora reducir temporalmente la carga de entrenamiento; si hay "
-                 "signos de infección urinaria, refiere valoración médica.")
-    else:
-        alerta = None
-        pauta = "Sin señales relevantes de estrés inmune -- la carga actual parece bien tolerada."
-    return {"diagnostico": diagnostico, "alerta": alerta, "pauta": pauta}
+    return _armar_resumen(
+        hallazgos, alertas, riesgos,
+        pauta_alerta="Si hay signos de infección urinaria, refiere valoración médica; si es la carga de "
+                     "entrenamiento, prioriza descanso y reduce temporalmente el volumen/intensidad.",
+        pauta_riesgo="Prioriza descanso/recuperación y vigila la tendencia de los próximos días.",
+        pauta_normal="Sin señales relevantes de estrés inmune -- la carga actual parece bien tolerada.",
+    )
 
 
 def calcular_paneles(

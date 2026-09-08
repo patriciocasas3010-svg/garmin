@@ -45,6 +45,9 @@ import libre_store
 import notas_store
 import sheet_cache
 from garmin_dashboard_ui import (
+    CRITICAL_CORAL,
+    OPTIMUM_GREEN,
+    WARNING_AMBER,
     render_antropometria_section,
     render_composicion_avanzada,
     render_dashboard_body,
@@ -195,7 +198,8 @@ fuente = fila.get("Fuente") or "Garmin"
 historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-enfoque_actual = enfoque_store.leer_enfoque(_gc(), st.secrets["SHEET_ID"], paciente)
+perfil_actual = enfoque_store.leer_perfil(_gc(), st.secrets["SHEET_ID"], paciente)
+enfoque_actual = perfil_actual["enfoque"]
 historial_calorias = calorias_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 
@@ -241,6 +245,40 @@ with col_notas:
             st.cache_data.clear()
             st.success("Enfoque guardado.")
             st.rerun()
+
+        col_meta, col_dias = st.columns(2)
+        with col_meta:
+            meta_grasa_elegida = st.number_input(
+                "Meta de % de grasa corporal", min_value=0.0, max_value=60.0, step=0.5,
+                value=float(perfil_actual["meta_grasa_pct"]) if perfil_actual["meta_grasa_pct"] is not None else 0.0,
+                key=f"meta_grasa_{paciente}",
+                help="Para la barra de progreso de composición corporal. Déjalo en 0 si todavía no defines una meta.",
+            )
+            if meta_grasa_elegida != (perfil_actual["meta_grasa_pct"] or 0.0) and st.button(
+                "Guardar meta", key=f"guardar_meta_{paciente}",
+            ):
+                enfoque_store.guardar_perfil(
+                    _gc(), st.secrets["SHEET_ID"], paciente, meta_grasa_pct=meta_grasa_elegida or None,
+                )
+                st.cache_data.clear()
+                st.success("Meta guardada.")
+                st.rerun()
+        with col_dias:
+            dias_plan_elegidos = st.number_input(
+                "Días de entrenamiento planeados (por mes)", min_value=0, max_value=31, step=1,
+                value=perfil_actual["dias_plan_mes"] or 0,
+                key=f"dias_plan_{paciente}",
+                help="Para comparar días ejercitados vs. lo planeado en el resumen. Déjalo en 0 si no aplica.",
+            )
+            if dias_plan_elegidos != (perfil_actual["dias_plan_mes"] or 0) and st.button(
+                "Guardar plan", key=f"guardar_dias_plan_{paciente}",
+            ):
+                enfoque_store.guardar_perfil(
+                    _gc(), st.secrets["SHEET_ID"], paciente, dias_plan_mes=dias_plan_elegidos or None,
+                )
+                st.cache_data.clear()
+                st.success("Días de plan guardados.")
+                st.rerun()
 
         st.divider()
         st.caption(
@@ -481,18 +519,48 @@ def _calcular_paneles_cruces(data: dict | None):
     return cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
 
 
+_COLOR_ESTADO = {
+    "optimo": OPTIMUM_GREEN, "riesgo": WARNING_AMBER, "alerta": CRITICAL_CORAL, "sin_datos": "#9AA1AB",
+}
+_ETIQUETA_ESTADO = {
+    "optimo": "Óptimo", "riesgo": "Riesgo", "alerta": "Alerta", "sin_datos": "Sin datos",
+}
+
+
+def _render_semaforo_cruces(paneles: list[dict]) -> None:
+    """Fila compacta con los 10 paneles como chips de color -- para que
+    la nutrióloga valide de un vistazo cuáles están en verde sin tener
+    que abrir panel por panel."""
+    chips = []
+    for panel in paneles:
+        estado = (panel.get("resumen") or {}).get("estado", "sin_datos")
+        color = _COLOR_ESTADO.get(estado, _COLOR_ESTADO["sin_datos"])
+        titulo_corto = panel["titulo"].split(". ", 1)[-1]
+        chips.append(
+            f'<div style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; '
+            f'border-radius:999px; background:{color}1a; border:1px solid {color}55; margin:3px;">'
+            f'<span style="width:8px; height:8px; border-radius:50%; background:{color};"></span>'
+            f'<span style="font-size:12.5px; font-weight:600;">{panel["icono"]} {titulo_corto}</span>'
+            f"</div>"
+        )
+    st.markdown(f'<div style="line-height:2.4;">{"".join(chips)}</div>', unsafe_allow_html=True)
+
+
 def _render_alertas_cruces(data: dict | None):
-    """Solo las banderas rojas activas de los 10 paneles de Cruces
-    clínicos -- para que salten a la vista en Alertas sin tener que
-    abrir la pestaña de Cruces clínicos panel por panel."""
+    """Los paneles de Cruces clínicos que NO están en verde (riesgo o
+    alerta) -- para que salten a la vista en Alertas sin tener que abrir
+    la pestaña de Cruces clínicos panel por panel."""
     paneles = _calcular_paneles_cruces(data)
-    con_bandera = [p for p in paneles if p.get("resumen") and p["resumen"].get("alerta")]
-    if not con_bandera:
-        st.success("✅ Sin banderas rojas activas en los cruces clínicos por ahora.")
+    por_atender = [p for p in paneles if (p.get("resumen") or {}).get("estado") in ("alerta", "riesgo")]
+    if not por_atender:
+        st.success("✅ Todos los cruces clínicos están en verde (óptimo) por ahora.")
         return
-    for panel in con_bandera:
-        st.error(f"{panel['icono']} **{panel['titulo']}** -- {panel['resumen']['alerta']}")
-        st.caption(f"Pauta sugerida: {panel['resumen']['pauta']}")
+    for panel in por_atender:
+        resumen = panel["resumen"]
+        aviso = st.error if resumen["estado"] == "alerta" else st.warning
+        icono_estado = "🔴" if resumen["estado"] == "alerta" else "🟡"
+        aviso(f"{icono_estado} {panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}")
+        st.caption(f"Pauta sugerida: {resumen['pauta']}")
 
 
 def _render_cruces_clinicos(data: dict | None):
@@ -505,16 +573,23 @@ def _render_cruces_clinicos(data: dict | None):
         "se muestra como \"sin dato\" -- nunca se inventa."
     )
     paneles = _calcular_paneles_cruces(data)
+    _render_semaforo_cruces(paneles)
+    st.divider()
     _COLS_POR_FILA = 3
     for panel in paneles:
         with st.expander(f"{panel['icono']} {panel['titulo']}"):
             resumen = panel.get("resumen")
             if resumen:
                 st.markdown(f"**🧭 Diagnóstico integrado:** {resumen['diagnostico']}")
-                if resumen.get("alerta"):
-                    st.error(f"🚩 **Bandera roja / alerta:** {resumen['alerta']}")
+                estado = resumen["estado"]
+                if estado == "alerta":
+                    st.error(f"🔴 **Alerta:** {resumen['hallazgo']}")
+                elif estado == "riesgo":
+                    st.warning(f"🟡 **Riesgo:** {resumen['hallazgo']}")
+                elif estado == "optimo":
+                    st.success("🟢 **Óptimo:** sin hallazgos prioritarios con los datos disponibles.")
                 else:
-                    st.success("✅ **Bandera roja / alerta:** sin hallazgos prioritarios con los datos disponibles.")
+                    st.caption("⚪ Sin datos suficientes todavía para clasificar este panel.")
                 st.info(f"🎯 **Pauta sugerida:** {resumen['pauta']}")
                 st.divider()
             metricas = panel["metricas"]
