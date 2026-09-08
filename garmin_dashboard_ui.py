@@ -272,6 +272,56 @@ def inbody_ultimo_registro(historial: pd.DataFrame) -> pd.Series | None:
     return valido.iloc[-1]
 
 
+_PGC_LIMITES = {
+    "Femenino": (24.0, 31.0),
+    "Masculino": (17.0, 24.0),
+}
+_PGC_LIMITES_GENERICO = (25.0, 32.0)
+
+_AVATAR_SVG_TEMPLATE = (
+    '<svg viewBox="0 0 140 260" width="{width}" xmlns="http://www.w3.org/2000/svg">'
+    '<circle cx="70" cy="26" r="18" fill="{color}" stroke="#00000022"/>'
+    '<rect x="60" y="42" width="20" height="14" rx="4" fill="{color}" stroke="#00000022"/>'
+    '<path d="M40,56 Q70,46 100,56 L96,140 Q70,150 44,140 Z" fill="{color}" stroke="#00000022"/>'
+    '<rect x="14" y="58" width="20" height="95" rx="10" fill="{color}" stroke="#00000022" transform="rotate(-6 24 58)"/>'
+    '<rect x="106" y="58" width="20" height="95" rx="10" fill="{color}" stroke="#00000022" transform="rotate(6 116 58)"/>'
+    '<rect x="46" y="138" width="22" height="112" rx="10" fill="{color}" stroke="#00000022"/>'
+    '<rect x="72" y="138" width="22" height="112" rx="10" fill="{color}" stroke="#00000022"/>'
+    "</svg>"
+)
+
+
+def _avatar_corporal(pgc_pct: float | None, sexo: str | None) -> None:
+    """Silueta corporal de cuerpo completo, coloreada UNIFORME según el %
+    de grasa corporal total (verde/ámbar/coral) -- no segmentada por
+    brazos/tronco/piernas todavía, porque el InBody real trae masa por
+    segmento pero nuestro OCR/formulario solo captura los totales."""
+    if pgc_pct is None or pd.isna(pgc_pct):
+        st.caption("Sin % de grasa corporal (PGC) capturado en este InBody -- no se puede colorear el avatar.")
+        return
+    limite_bajo, limite_alto = _PGC_LIMITES.get(sexo, _PGC_LIMITES_GENERICO)
+    if pgc_pct <= limite_bajo:
+        color, etiqueta = OPTIMUM_GREEN, "En rango saludable"
+    elif pgc_pct <= limite_alto:
+        color, etiqueta = WARNING_AMBER, "Por encima del rango saludable"
+    else:
+        color, etiqueta = CRITICAL_CORAL, "Bastante por encima del rango saludable"
+
+    col_avatar, col_leyenda = st.columns([1, 2])
+    with col_avatar:
+        st.markdown(_AVATAR_SVG_TEMPLATE.format(color=color, width=110), unsafe_allow_html=True)
+    with col_leyenda:
+        st.markdown(f"**{pgc_pct:.1f}% de grasa corporal**")
+        st.markdown(f'<span style="color:{color}; font-weight:600;">● {etiqueta}</span>', unsafe_allow_html=True)
+        if sexo:
+            st.caption(f"Referencia orientativa para {sexo.lower()}: hasta {limite_bajo:.0f}% saludable, "
+                       f"{limite_bajo:.0f}-{limite_alto:.0f}% por encima, más de {limite_alto:.0f}% bastante por encima.")
+        else:
+            st.caption("Sin sexo capturado -- usando una referencia genérica, no ajustada.")
+        st.caption("⏳ Avatar sin segmentar por brazos/tronco/piernas todavía -- color uniforme según el % de "
+                   "grasa TOTAL, no por zona.")
+
+
 def render_inbody_section(historial: pd.DataFrame):
     """historial: DataFrame con las columnas de inbody_store.ENCABEZADOS,
     ya filtrado a un solo paciente, más reciente al final."""
@@ -292,6 +342,9 @@ def render_inbody_section(historial: pd.DataFrame):
         f"Último InBody: {ultimo.get('Fecha', '')} · {ultimo.get('Modelo', '')} · "
         f"{ultimo.get('Altura_cm', '—')} cm · {ultimo.get('Edad', '—')} años · {ultimo.get('Sexo', '—')}"
     )
+
+    _avatar_corporal(ultimo.get("PGC_pct"), ultimo.get("Sexo"))
+    st.divider()
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Peso", f"{ultimo['Peso_kg']:.1f} kg" if pd.notna(ultimo.get("Peso_kg")) else "—")
