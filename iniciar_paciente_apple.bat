@@ -20,6 +20,14 @@ where uv >nul 2>nul
 if errorlevel 1 goto :falla_uv
 
 :uv_lista
+if exist .venv (
+    .venv\Scripts\python.exe -c "" >nul 2>nul
+    if errorlevel 1 (
+        echo El entorno de Python de esta carpeta no es valido en esta computadora, recreandolo...
+        rmdir /s /q .venv
+    )
+)
+
 if not exist .venv (
     echo Preparando el programa (puede tardar un minuto la primera vez)...
     uv venv --python 3.11 .venv

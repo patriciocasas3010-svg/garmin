@@ -26,6 +26,14 @@ fi
 
 command -v uv >/dev/null 2>&1 || falla "No se pudo preparar el programa. Revisa tu conexión a internet e inténtalo de nuevo."
 
+if [ -d ".venv" ] && ! .venv/bin/python3 -c "" >/dev/null 2>&1; then
+    # El .venv de esta carpeta no sirve en esta computadora -- lo más
+    # probable es que la carpeta se copió de otra (el .venv queda "amarrado"
+    # a la ruta y al usuario de la compu original). Se recrea solo.
+    echo "El entorno de Python de esta carpeta no es válido en esta computadora, recreándolo..."
+    rm -rf .venv
+fi
+
 if [ ! -d ".venv" ]; then
     echo "Preparando el programa (puede tardar un minuto la primera vez)..."
     uv venv --python 3.11 .venv || falla "No se pudo preparar el programa."
