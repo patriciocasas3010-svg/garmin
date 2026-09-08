@@ -1,110 +1,215 @@
-"""Lee un PDF de estudios clínicos de sangre (o de orina) y extrae cada
-prueba con su resultado, unidad, rango de referencia y si salió bajo,
-normal o alto -- sin importar el laboratorio.
+"""Lee un PDF de estudios clínicos de sangre/orina y extrae cada prueba
+con su resultado, unidad, rango de referencia y si salió bajo/normal/alto.
 
-A diferencia de InBody (que es una plantilla fija y usa OCR sobre una
-imagen), un estudio de sangre puede venir en decenas de formatos
-distintos según el laboratorio (SYNLAB/MédicaSur, Chopo, etc.) -- cada
-uno con sus propias columnas, iconos de estatus, y hasta la forma de
-mostrar el resultado (algunos laboratorios ni siquiera tienen una
-columna de "resultado": el número aparece en una de tres columnas según
-si está bajo, normal o alto). Escribir un regex por laboratorio no
-escala. En vez de eso, se usa la API de Claude (la misma que ya usa
-ai_analisis.py, mismo Secret ANTHROPIC_API_KEY) para leer el PDF
-directamente y devolver los resultados ya estructurados -- así funciona
-con cualquier formato de laboratorio con el que Claude sepa lidiar, sin
-tener que anticipar cada plantilla."""
+A diferencia de la primera versión de este archivo, esto NO usa la API
+de Claude (tiene costo, y se decidió no usarla para esto) -- en vez de
+eso, cada laboratorio conocido tiene su propio lector con expresiones
+regulares, igual que antropometria_parser.py (el PDF trae texto real,
+no es una foto, así que no hace falta OCR). Es gratis, pero solo
+funciona con los laboratorios que ya se agregaron aquí -- si llega un
+PDF de un laboratorio nuevo, hay que mandarlo para agregar su lector.
 
-import base64
-import json
+Laboratorios soportados: SYNLAB/MédicaSur, Chopo (Grupo Diagnóstico
+Médico PROA). El estado (bajo/normal/alto) no se lee de ningún ícono o
+columna de color del PDF -- se calcula comparando el resultado contra
+el rango de referencia impreso, que es lo mismo que hace el laboratorio
+para poner su propio ícono, así que da el mismo resultado."""
 
-MODEL = "claude-opus-5"
-
-_PROMPT = """Este PDF es un estudio clínico de laboratorio (sangre, orina, u \
-otro). Extrae CADA prueba/analito que tenga un resultado (ignora texto \
-explicativo, metodología, avisos legales, tablas de "límites de referencia" \
-que son solo texto informativo sin un resultado del paciente).
-
-Devuelve ÚNICAMENTE un JSON válido (nada de texto antes o después, nada de \
-```), con esta forma exacta:
-
-{
-  "fecha": "DD.MM.AAAA",
-  "laboratorio": "nombre del laboratorio si aparece, o null",
-  "resultados": [
-    {
-      "prueba": "nombre de la prueba tal cual aparece (ej. \\"Glucosa\\", \\"Colesterol LDL\\")",
-      "resultado": "el valor tal cual (ej. \\"91\\", \\"NEGATIVO\\", \\"CLARO\\")",
-      "unidad": "unidad si aplica (ej. \\"mg/dL\\"), o null si no tiene",
-      "rango_min": número o null si no hay mínimo,
-      "rango_max": número o null si no hay máximo,
-      "estado": "bajo" | "normal" | "alto" | "sin_dato"
-    }
-  ]
-}
-
-Reglas para "estado":
-- Compara el resultado contra el rango de referencia del PDF (sin importar \
-cómo esté representado ahí -- como una columna de texto, como un ícono, o \
-porque el número aparece bajo una columna de "Bajo"/"Dentro"/"Sobre").
-- Si el resultado es texto no numérico dentro de lo esperado (ej. \
-"NEGATIVO", "AUSENTES", "CLARO" cuando eso es lo normal), usa "normal".
-- Si no se puede determinar el estado (no hay rango, o el formato no lo deja \
-claro), usa "sin_dato" -- nunca inventes un estado.
-
-"fecha": usa la fecha de toma de muestra si aparece: si no, la fecha de \
-registro/recepción. Si un mismo PDF tiene pruebas de fechas de toma \
-distintas (poco común), usa la más reciente para "fecha" y no te preocupes \
-por separarlas.
-
-No incluyas datos del paciente (nombre, edad, etc.), solo los resultados de \
-laboratorio."""
+import re
+import subprocess
+import tempfile
+from pathlib import Path
 
 
-def extraer_estudio(pdf_bytes: bytes, api_key: str | None = None) -> dict:
-    """Manda el PDF a la API de Claude y regresa
-    {"fecha": ..., "laboratorio": ..., "resultados": [...]} ya parseado.
-    Lanza RuntimeError con un mensaje claro si falta la API key, si Claude
-    no devuelve JSON válido, o si la llamada falla -- quien lo llama
-    decide cómo mostrarlo (ver dashboard_pacientes.py)."""
-    import anthropic
-
-    if not api_key:
-        raise RuntimeError(
-            "Falta configurar el Secret ANTHROPIC_API_KEY en Streamlit Cloud (Settings -> Secrets) "
-            "para poder leer estudios clínicos -- es el mismo que usa el análisis con IA."
+def extract_text(pdf_bytes: bytes) -> str:
+    """Extrae el texto de un PDF con texto real, conservando el orden por
+    columnas/renglones (-layout) -- mismo mecanismo que antropometria_parser.py."""
+    with tempfile.TemporaryDirectory() as tmp:
+        pdf_path = Path(tmp) / "input.pdf"
+        pdf_path.write_bytes(pdf_bytes)
+        resultado = subprocess.run(
+            ["pdftotext", "-layout", str(pdf_path), "-"],
+            check=True, capture_output=True,
         )
+        return resultado.stdout.decode("utf-8", errors="replace")
 
-    pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
 
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
-                {"type": "text", "text": _PROMPT},
-            ],
-        }],
+def _a_float(s: str | None) -> float | None:
+    if not s:
+        return None
+    m = re.search(r"-?\d+(?:[.,]\d+)?", s)
+    if not m:
+        return None
+    return float(m.group().replace(",", "."))
+
+
+def _parsear_rango(rango: str | None) -> tuple[float | None, float | None]:
+    if not rango:
+        return None, None
+    rango = rango.strip()
+    m = re.match(r"^(-?\d+(?:[.,]\d+)?)\s*[-–]\s*(-?\d+(?:[.,]\d+)?)$", rango)
+    if m:
+        return _a_float(m.group(1)), _a_float(m.group(2))
+    if rango.startswith(">="):
+        return _a_float(rango[2:]), None
+    if rango.startswith("<="):
+        return None, _a_float(rango[2:])
+    if rango.startswith(">"):
+        return _a_float(rango[1:]), None
+    if rango.startswith("<"):
+        return None, _a_float(rango[1:])
+    return None, None
+
+
+def _calcular_estado(resultado: str, rango_min: float | None, rango_max: float | None) -> str:
+    valor = _a_float(resultado)
+    if valor is None or (rango_min is None and rango_max is None):
+        return "sin_dato"
+    if rango_min is not None and valor < rango_min:
+        return "bajo"
+    if rango_max is not None and valor > rango_max:
+        return "alto"
+    return "normal"
+
+
+def _fila(prueba: str, resultado: str, unidad: str | None, rango: str | None) -> dict:
+    rango_min, rango_max = _parsear_rango(rango)
+    return {
+        "prueba": prueba.strip(),
+        "resultado": resultado.strip(),
+        "unidad": (unidad or "").strip() or None,
+        "rango_min": rango_min,
+        "rango_max": rango_max,
+        "estado": _calcular_estado(resultado, rango_min, rango_max),
+    }
+
+
+def _fecha_normalizada(texto: str, *patrones: str) -> str | None:
+    for patron in patrones:
+        m = re.search(patron, texto)
+        if m:
+            return m.group(1).replace("/", ".")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# SYNLAB / MédicaSur
+# ---------------------------------------------------------------------------
+
+_FILA_SYNLAB_RE = re.compile(
+    r"^[ ]*(?P<nombre>[A-Za-zÁÉÍÓÚÑáéíóúñ][^\n]*?)[ ]{2,}"
+    r"(?P<valor>[<>]=?[ ]*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)[ ]{2,}"
+    r"(?P<resto>\S.*\S)[ ]*$"
+)
+_RANGO_TOKEN_RE = re.compile(r"^[<>]=?[ ]*\d|^\d+(?:[.,]\d+)?[ ]*-[ ]*\d")
+
+
+def _es_synlab(texto: str) -> bool:
+    return "SYNLAB" in texto
+
+
+def _parse_synlab(texto: str) -> list[dict]:
+    filas = []
+    for linea in texto.splitlines():
+        if linea.strip().startswith("_"):
+            continue
+        m = _FILA_SYNLAB_RE.match(linea)
+        if not m:
+            continue
+        nombre = m.group("nombre").strip()
+        if nombre.endswith(":") or len(nombre) < 3:
+            continue
+        resto = m.group("resto").strip()
+        tokens = [t.strip() for t in re.split(r"[ ]{2,}", resto) if t.strip()]
+        if tokens and tokens[-1].upper() == "LMS":
+            tokens = tokens[:-1]
+        rango = unidad = None
+        for t in tokens:
+            if _RANGO_TOKEN_RE.match(t):
+                rango = t
+            elif unidad is None:
+                unidad = t
+        filas.append(_fila(nombre, m.group("valor"), unidad, rango))
+    return filas
+
+
+def _fecha_synlab(texto: str) -> str | None:
+    return _fecha_normalizada(texto, r"FECHA TOMA MUESTRA:\s*(\d{1,2}/\d{1,2}/\d{4})")
+
+
+# ---------------------------------------------------------------------------
+# Chopo (Grupo Diagnóstico Médico PROA)
+# ---------------------------------------------------------------------------
+
+_FILA_CHOPO_RE = re.compile(
+    r"^[ ]*(?P<nombre>[A-Za-zÁÉÍÓÚÑáéíóúñ][^\n]*?)[ ]{2,}"
+    r"(?P<valor>[<>]=?[ ]*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)[ ]{1,}"
+    r"(?P<resto>\S.*\S)[ ]*$"
+)
+_RANGO_CON_UNIDAD_RE = re.compile(
+    r"^(?P<rango>(?:[<>]=?[ ]*)?\d+(?:[.,]\d+)?(?:[ ]*[-–][ ]*\d+(?:[.,]\d+)?)?)[ ]*(?P<unidad>.*)$"
+)
+
+
+def _es_chopo(texto: str) -> bool:
+    return "chopo" in texto.lower() or "GRUPO DIAGNÓSTICO MÉDICO PROA" in texto
+
+
+def _parse_chopo(texto: str) -> list[dict]:
+    filas = []
+    for linea in texto.splitlines():
+        m = _FILA_CHOPO_RE.match(linea)
+        if not m:
+            continue
+        nombre = m.group("nombre").strip()
+        if nombre.endswith(":") or len(nombre) < 3:
+            continue
+        resto = m.group("resto").strip()
+        if resto == "___":
+            continue
+        m2 = _RANGO_CON_UNIDAD_RE.match(resto)
+        if m2:
+            rango, unidad = m2.group("rango").strip(), m2.group("unidad").strip() or None
+        else:
+            rango, unidad = None, resto or None
+        filas.append(_fila(nombre, m.group("valor"), unidad, rango))
+    return filas
+
+
+def _fecha_chopo(texto: str) -> str | None:
+    return _fecha_normalizada(
+        texto,
+        r"Fecha de toma:\s*(\d{1,2}/\d{1,2}/\d{4})",
+        r"Fecha de Registro:\s*(\d{1,2}/\d{1,2}/\d{4})",
     )
-    texto = "".join(block.text for block in response.content if block.type == "text").strip()
 
-    # Por si Claude envuelve el JSON en ```json ... ``` a pesar de que se le
-    # pidió que no lo hiciera -- se limpia antes de parsear en vez de fallar.
-    if texto.startswith("```"):
-        texto = texto.strip("`")
-        if texto.lower().startswith("json"):
-            texto = texto[4:]
-        texto = texto.strip()
 
-    try:
-        datos = json.loads(texto)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Claude no devolvió un JSON válido al leer el estudio: {e}")
+# ---------------------------------------------------------------------------
 
-    if not isinstance(datos, dict) or "resultados" not in datos:
-        raise RuntimeError("La respuesta de Claude no tiene la forma esperada (falta \"resultados\").")
+_LABORATORIOS = [
+    ("SYNLAB/MédicaSur", _es_synlab, _parse_synlab, _fecha_synlab),
+    ("Chopo", _es_chopo, _parse_chopo, _fecha_chopo),
+]
 
-    return datos
+
+def extraer_estudio(pdf_bytes: bytes) -> dict:
+    """Regresa {"fecha": ..., "laboratorio": ..., "resultados": [...]}.
+    Lanza RuntimeError con un mensaje claro si el PDF no es de ninguno de
+    los laboratorios ya soportados -- quien lo llama decide cómo
+    mostrarlo (ver dashboard_pacientes.py)."""
+    texto = extract_text(pdf_bytes)
+
+    for nombre, es_de_este_lab, parsear, sacar_fecha in _LABORATORIOS:
+        if es_de_este_lab(texto):
+            resultados = parsear(texto)
+            if not resultados:
+                raise RuntimeError(
+                    f"Se reconoció el formato de {nombre}, pero no se pudo leer ninguna prueba -- "
+                    "puede que el PDF venga distinto a lo esperado. Avisa para revisarlo."
+                )
+            return {"fecha": sacar_fecha(texto), "laboratorio": nombre, "resultados": resultados}
+
+    raise RuntimeError(
+        "Este PDF no es de ningún laboratorio que ya sepamos leer (por ahora: SYNLAB/MédicaSur, "
+        "Chopo). Mándalo para agregar su formato."
+    )

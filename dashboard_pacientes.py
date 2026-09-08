@@ -528,8 +528,8 @@ def _render_composicion_corporal(data: dict | None):
     st.divider()
     st.subheader("🩺 Estudios clínicos (sangre, orina, etc.)")
     st.caption(
-        "Sube el PDF del laboratorio que sea -- lo lee una IA, no un formato fijo, así que funciona "
-        "sin importar el laboratorio."
+        "Sube el PDF del laboratorio -- por ahora lee automático SYNLAB/MédicaSur y Chopo (los más "
+        "comunes). Si llega uno de otro laboratorio, avisa para agregarlo. Es gratis, no usa ninguna API de pago."
     )
 
     with st.expander("Subir nuevo estudio"):
@@ -537,18 +537,16 @@ def _render_composicion_corporal(data: dict | None):
             "PDF del estudio", type=["pdf"], key=f"estudio_upload_{paciente}",
         )
         if archivo_estudio is not None and st.button("Leer estudio", key=f"estudio_leer_{paciente}"):
-            with st.spinner("Leyendo el estudio con IA (puede tardar unos segundos)..."):
+            with st.spinner("Leyendo el estudio..."):
                 try:
-                    datos = estudios_parser.extraer_estudio(
-                        archivo_estudio.getvalue(), st.secrets.get("ANTHROPIC_API_KEY"),
-                    )
+                    datos = estudios_parser.extraer_estudio(archivo_estudio.getvalue())
                     st.session_state[f"estudio_draft_{paciente}"] = datos
                 except Exception as e:
                     st.error(f"No se pudo leer el estudio: {e}")
 
         draft_estudio = st.session_state.get(f"estudio_draft_{paciente}")
         if draft_estudio is not None:
-            st.caption("Revisa y corrige antes de guardar -- la lectura la hace una IA, puede haber errores.")
+            st.caption("Revisa y corrige antes de guardar -- la lectura automática puede tener errores.")
             col_fecha, col_lab = st.columns(2)
             fecha_estudio = col_fecha.text_input(
                 "Fecha (DD.MM.AAAA)", value=draft_estudio.get("fecha") or "", key=f"estudio_fecha_{paciente}",
