@@ -6,6 +6,9 @@ de Garmin/Apple Health de esa hoja."""
 
 import gspread
 import pandas as pd
+import streamlit as st
+
+import sheet_cache
 
 HOJA_NOMBRE = "InBody"
 
@@ -17,7 +20,7 @@ ENCABEZADOS = [
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = gc.open_by_key(sheet_id)
+    sh = sheet_cache.abrir_hoja(gc, sheet_id)
     try:
         return sh.worksheet(HOJA_NOMBRE)
     except gspread.exceptions.WorksheetNotFound:
@@ -57,8 +60,9 @@ _COLUMNAS_NUMERICAS = [
 ]
 
 
-def leer_historial(gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
-    ws = _worksheet(gc, sheet_id)
+@st.cache_data(ttl=30, show_spinner=False)
+def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+    ws = _worksheet(_gc, sheet_id)
     # UNFORMATTED_VALUE: trae el número tal cual (13.3), no el texto ya
     # formateado según el idioma de la hoja de cálculo ("13,3" en una hoja
     # en español) -- si no, gspread puede leer mal esa coma y convertirla

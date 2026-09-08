@@ -42,6 +42,7 @@ import inbody_store
 import libre_metrics
 import libre_store
 import notas_store
+import sheet_cache
 from garmin_dashboard_ui import (
     render_antropometria_section,
     render_composicion_avanzada,
@@ -109,7 +110,7 @@ def _libre_client():
 
 
 def _worksheet():
-    return _gc().open_by_key(st.secrets["SHEET_ID"]).sheet1
+    return sheet_cache.abrir_hoja(_gc(), st.secrets["SHEET_ID"]).sheet1
 
 
 @st.cache_data(ttl=300)

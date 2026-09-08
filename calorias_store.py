@@ -11,6 +11,9 @@ from datetime import date
 
 import gspread
 import pandas as pd
+import streamlit as st
+
+import sheet_cache
 
 HOJA_NOMBRE = "Calorias"
 
@@ -18,7 +21,7 @@ ENCABEZADOS = ["Nombre", "Fecha", "CaloriasComidas"]
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = gc.open_by_key(sheet_id)
+    sh = sheet_cache.abrir_hoja(gc, sheet_id)
     try:
         return sh.worksheet(HOJA_NOMBRE)
     except gspread.exceptions.WorksheetNotFound:
@@ -43,8 +46,9 @@ def guardar_calorias(gc: gspread.Client, sheet_id: str, nombre: str, fecha: date
     ws.append_row(fila)
 
 
-def leer_historial(gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
-    ws = _worksheet(gc, sheet_id)
+@st.cache_data(ttl=30, show_spinner=False)
+def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+    ws = _worksheet(_gc, sheet_id)
     registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
     df = pd.DataFrame(registros)
     if df.empty or "Nombre" not in df.columns:

@@ -5,6 +5,9 @@ inbody_store.py, sin mezclarse con los demás datos."""
 
 import gspread
 import pandas as pd
+import streamlit as st
+
+import sheet_cache
 
 HOJA_NOMBRE = "Antropometria"
 
@@ -22,7 +25,7 @@ ENCABEZADOS = [
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = gc.open_by_key(sheet_id)
+    sh = sheet_cache.abrir_hoja(gc, sheet_id)
     try:
         return sh.worksheet(HOJA_NOMBRE)
     except gspread.exceptions.WorksheetNotFound:
@@ -62,8 +65,9 @@ def guardar_registro(gc: gspread.Client, sheet_id: str, nombre: str, campos: dic
 _COLUMNAS_NUMERICAS = [c for c in ENCABEZADOS if c not in ("Nombre", "Fecha")]
 
 
-def leer_historial(gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
-    ws = _worksheet(gc, sheet_id)
+@st.cache_data(ttl=30, show_spinner=False)
+def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+    ws = _worksheet(_gc, sheet_id)
     # UNFORMATTED_VALUE: trae el número tal cual (12.82), no el texto ya
     # formateado según el idioma de la hoja de cálculo ("12,82" en una hoja
     # en español) -- si no, gspread puede leer mal esa coma y convertirla
