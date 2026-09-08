@@ -13,10 +13,33 @@ st.title(...). El fondo oscuro real lo pone .streamlit/config.toml
 ([theme] base="dark") -- aquí solo van tipografías, logo y los acentos
 que Streamlit no cubre con su theming nativo (tabs, alertas)."""
 
+import os
+
 import streamlit as st
 
 BRAND_NAME = "AURA FLOW"
 BRAND_TAGLINE = "Human Coherence System"
+
+_LOGO_HEADER_HEIGHT = 52
+_LOGO_HEADER_WIDTH = round(_LOGO_HEADER_HEIGHT * 560 / 130)  # 560x130 = proporción del SVG original
+
+_ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+with open(os.path.join(_ASSETS_DIR, "aura_flow_logo.svg"), encoding="utf-8") as _f:
+    # El logo completo (isotipo + wordmark "AURA FLOW" + tagline) tal cual
+    # vive en assets/ -- se le pone el tamaño fijo que usa el encabezado
+    # (width="auto" con display:block hace que el navegador estire el
+    # SVG a lo ancho del contenedor y centre el dibujo adentro -- con
+    # ancho/alto fijos en la misma proporción no hay nada que centrar).
+    # st.markdown() procesa el contenido como Markdown antes del HTML
+    # crudo, y una línea en blanco dentro de un bloque HTML lo corta a la
+    # mitad (el resto sale como texto escapado) -- por eso se colapsa a
+    # una sola línea aquí, sin tocar el archivo original (que sí se queda
+    # bien formateado).
+    _FULL_LOGO_SVG = " ".join(
+        _f.read()
+        .replace('width="560" height="130"', f'width="{_LOGO_HEADER_WIDTH}" height="{_LOGO_HEADER_HEIGHT}"', 1)
+        .split()
+    )
 
 BIO_CHARCOAL = "#121417"
 CLINICAL_WHITE = "#F8F9FA"
@@ -31,26 +54,6 @@ VITAL_RED = "#E63946"
 INK = CLINICAL_WHITE
 INK_SOFT = "#9AA1AB"
 AETHER_BLUE_TEXT = "#5B9BD1"
-
-_LOGO_TEMPLATE = (
-    '<svg viewBox="0 0 34 34" width="{size}" height="{size}" fill="none" '
-    'xmlns="http://www.w3.org/2000/svg">'
-    '<path d="M4,29 L17,5 L30,29" stroke="{color}" stroke-width="2" '
-    'stroke-linecap="round" stroke-linejoin="round"/>'
-    '<path d="M9,23 Q14,11 17,17 Q20,23 25,11" stroke="{blue}" stroke-width="1.6" '
-    'stroke-linecap="round" fill="none"/>'
-    '<path d="M9,11 Q14,23 17,17 Q20,11 25,23" stroke="{terra}" stroke-width="1.6" '
-    'stroke-linecap="round" fill="none"/>'
-    "</svg>"
-)
-
-
-def logo_svg(color: str = INK, size: int = 34) -> str:
-    """La Hélice Integrada -- una "A" sin trazo horizontal (estructura
-    rígida, `color`) con dos ondas entrelazadas (Aether Blue + Anthro-
-    Terra, datos de movimiento/wearable y datos clínicos/físicos)."""
-    return _LOGO_TEMPLATE.format(color=color, size=size, blue=AETHER_BLUE, terra=ANTHRO_TERRA)
-
 
 def apply_theme() -> None:
     """Carga las tipografías de marca y recolorea tabs/alertas/acentos --
@@ -98,8 +101,10 @@ def apply_theme() -> None:
 
 
 def render_header(titulo: str, subtitulo: str = "") -> None:
-    """Encabezado de marca (símbolo + AURA + título de la página en
-    Syne) -- reemplaza a st.title("emoji Texto")."""
+    """Encabezado de marca -- el logo completo (assets/aura_flow_logo.svg,
+    ya trae "AURA FLOW" + tagline) arriba, y el título de esta página en
+    particular (ej. "Resumen de pacientes" o el nombre del paciente)
+    debajo, en Syne -- reemplaza a st.title("emoji Texto")."""
     sub_html = (
         f'<div style="font-family:\'JetBrains Mono\',monospace; font-size:11px; '
         f'text-transform:uppercase; letter-spacing:.08em; color:{INK_SOFT}; margin-top:2px;">{subtitulo}</div>'
@@ -107,15 +112,10 @@ def render_header(titulo: str, subtitulo: str = "") -> None:
     )
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-            {logo_svg(size=36)}
-            <div>
-                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:{AETHER_BLUE_TEXT};">
-                    {BRAND_NAME} &middot; {BRAND_TAGLINE}
-                </div>
-                <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:24px; text-transform:uppercase; letter-spacing:3px; color:{INK};">{titulo}</div>
-                {sub_html}
-            </div>
+        <div style="margin-bottom:14px;">
+            <div style="margin-bottom:16px;">{_FULL_LOGO_SVG}</div>
+            <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:24px; text-transform:uppercase; letter-spacing:3px; color:{INK};">{titulo}</div>
+            {sub_html}
         </div>
         """,
         unsafe_allow_html=True,
