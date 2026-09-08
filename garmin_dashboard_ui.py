@@ -16,18 +16,20 @@ import metabolic_calc as mc
 from resumen_pdf import build_resumen_pdf
 
 # ---------------------------------------------------------------------------
-# Paleta "Identidad Botánica" (validada para daltonismo -- ver dataviz skill;
-# olive/terracota queda en el límite de separación para protanopía, así que
-# solo se usan juntos en gráficas con leyenda/etiqueta directa, nunca como
-# único código de color).
+# Paleta de marca "AURA" (Bio-Charcoal / Aether Blue / Anthro-Terra) --
+# BLUE (Aether Blue) es el acento primario/default; ORANGE (Anthro-Terra)
+# el acento cálido/humano; AQUA y VIOLET son dos tonos más de la misma
+# familia (azul claro y violeta espectral, de "Synthesis Luminescence")
+# para diferenciar series -- solo BLUE+ORANGE se combinan en la misma
+# gráfica (Body Battery, Calorías), y ese par ya tiene buen contraste de
+# luminancia para daltonismo.
 # ---------------------------------------------------------------------------
 
-OLIVE, TERRACOTTA, GOLD, MAUVE = "#3a6b28", "#c9673f", "#9c6a12", "#7a5490"
-BLUE, ORANGE, AQUA, VIOLET = OLIVE, TERRACOTTA, GOLD, MAUVE  # alias históricos
-STATUS_GOOD, STATUS_CRITICAL = "#3a6b28", "#c0392b"
-INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#221e14", "#4a4536", "#8a8064"
-GRID_COLOR = "#e7e2d3"
-ZONE_RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # Z1 (suave) -> Z5 (intenso)
+BLUE, ORANGE, AQUA, VIOLET = "#2C5E8A", "#BCA38C", "#5B8FB9", "#6B5CA5"
+STATUS_GOOD, STATUS_CRITICAL = "#2E7D46", "#C0392B"
+INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#121417", "#4B5157", "#8A9099"
+GRID_COLOR = "#E3E5E8"
+ZONE_RAMP = ["#D6E4EE", "#9FBFD6", "#5B8FB9", "#2C5E8A", "#173E5B"]  # Z1 (suave) -> Z5 (intenso)
 
 alt.themes.enable("none")
 
