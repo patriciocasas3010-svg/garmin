@@ -16,24 +16,23 @@ import metabolic_calc as mc
 from resumen_pdf import build_resumen_pdf
 
 # ---------------------------------------------------------------------------
-# Paleta de marca "AURA" sobre fondo oscuro Bio-Charcoal (ver theme.py /
-# .streamlit/config.toml) -- BLUE (Aether Blue) es el acento primario/
-# default; ORANGE (Anthro-Terra) el acento cálido/humano; AQUA y VIOLET
-# son dos tonos más de la misma familia (azul claro y violeta espectral,
-# de "Synthesis Luminescence") para diferenciar series -- solo BLUE+
-# ORANGE se combinan en la misma gráfica (Body Battery, Calorías), y ese
-# par ya tiene buen contraste de luminancia para daltonismo. Los grises
-# de texto/rejilla y el ZONE_RAMP están aclarados para leerse bien sobre
-# el fondo oscuro (nada queda tan tenue que se pierda contra #121417).
+# Paleta de marca "AURA CLINICAL" sobre fondo claro Clinical White (ver
+# theme.py / .streamlit/config.toml) -- BLUE (Warm Sage Green) es el
+# acento primario/default; ORANGE (Warning Amber) el acento cálido de
+# atención; AQUA y VIOLET son dos tonos más para diferenciar series
+# (verde azulado y malva polvo) -- solo BLUE+ORANGE se combinan en la
+# misma gráfica (Body Battery, Calorías). STATUS_GOOD/CRITICAL usan el
+# semáforo clínico (Optimum Green / Critical Coral), no los acentos de
+# marca -- son estados de salud, no branding.
 # ---------------------------------------------------------------------------
 
-BLUE, ORANGE, AQUA, VIOLET = "#4A8FC2", "#BCA38C", "#5B8FB9", "#8C7BC4"
-VITAL_RED = "#E63946"
-STATUS_GOOD, STATUS_CRITICAL = "#3DAA6B", VITAL_RED
-INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#F8F9FA", "#B7BEC7", "#6E7580"
-GRID_COLOR = "#2A2E34"
+BLUE, ORANGE, AQUA, VIOLET = "#6B8E78", "#DD6B20", "#4F8A8B", "#A8677D"
+OPTIMUM_GREEN, WARNING_AMBER, CRITICAL_CORAL = "#38A169", "#DD6B20", "#E53E3E"
+STATUS_GOOD, STATUS_CRITICAL = OPTIMUM_GREEN, CRITICAL_CORAL
+INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#2A3439", "#5B6670", "#8B95A0"
+GRID_COLOR = "#E2DED4"
 CHART_BG = "transparent"
-ZONE_RAMP = ["#3A5978", "#3F72A0", "#4A8FC2", "#63B3E0", "#9AD4F0"]  # Z1 (suave) -> Z5 (intenso)
+ZONE_RAMP = ["#D7E4DC", "#A9C4B3", "#6B8E78", "#4A7059", "#2E4A3B"]  # Z1 (suave) -> Z5 (intenso)
 
 alt.themes.enable("none")
 

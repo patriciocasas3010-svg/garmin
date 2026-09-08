@@ -1,0 +1,50 @@
+<svg width="560" height="130" viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="slate" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2A3439"/>
+      <stop offset="100%" stop-color="#4A5760"/>
+    </linearGradient>
+    <linearGradient id="sageAmber" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6B8E78"/>
+      <stop offset="50%" stop-color="#A9B37A"/>
+      <stop offset="100%" stop-color="#DD6B20"/>
+    </linearGradient>
+    <radialGradient id="flareWarm" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6B8E78" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#6B8E78" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="slateBevel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3E4B52"/>
+      <stop offset="45%" stop-color="#2A3439"/>
+      <stop offset="55%" stop-color="#232B2F"/>
+      <stop offset="100%" stop-color="#3E4B52"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Isotipo: mismo glifo "A" de AURA FLOW (patas rígidas + cintas tipo
+       onda), recoloreado para fondo claro y cálido: slate en vez de
+       plata, sage/amber en vez de azul/violeta. -->
+  <g>
+    <path d="M10,112 L58,22 L106,112" fill="none" stroke="url(#slateBevel)"
+          stroke-width="16" stroke-linecap="square" stroke-linejoin="miter"/>
+
+    <circle cx="58" cy="18" r="12" fill="url(#flareWarm)"/>
+    <path d="M47,13 Q58,2 69,13" fill="none" stroke="#6B8E78" stroke-width="2"
+          stroke-linecap="round" opacity="0.7"/>
+
+    <path d="M27,63 Q44,45 58,60 Q72,75 89,57" fill="none" stroke="url(#sageAmber)"
+          stroke-width="10" stroke-linecap="round"/>
+    <path d="M30,60 Q47,42 61,57" fill="none" stroke="#FFFFFF" stroke-width="2.5"
+          stroke-linecap="round" opacity="0.4"/>
+    <path d="M25,75 Q43,59 58,73 Q73,87 91,69" fill="none" stroke="url(#sageAmber)"
+          stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+    <path d="M22,87 Q41,73 58,86 Q75,99 94,81" fill="none" stroke="url(#sageAmber)"
+          stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <text x="140" y="72" font-family="Syne, 'Arial Black', sans-serif" font-weight="800"
+        font-size="38" letter-spacing="1.5" fill="url(#slate)">AURA CLINICAL</text>
+  <text x="142" y="97" font-family="'Inter', 'Courier New', sans-serif"
+        font-weight="600" font-size="11" letter-spacing="3" fill="#6B7680">HUMAN COHERENCE SYSTEM</text>
+</svg>
