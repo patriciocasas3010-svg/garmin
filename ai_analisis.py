@@ -118,6 +118,31 @@ def _resumen_wearable(data: dict) -> str:
     return "\n".join(lineas)
 
 
+def _resumen_estudios(historial: list[dict] | None) -> str:
+    if not historial:
+        return "Sin estudios clínicos de laboratorio (sangre, orina, etc.) registrados."
+
+    ultimo = historial[-1]
+    resultados = ultimo.get("resultados") or []
+    anormales = [r for r in resultados if r.get("estado") in ("bajo", "alto")]
+
+    lineas = [
+        f"Último estudio ({ultimo.get('fecha') or 'sin fecha'}, "
+        f"{ultimo.get('laboratorio') or 'laboratorio sin especificar'}): {len(resultados)} pruebas."
+    ]
+    if anormales:
+        partes = [
+            f"{r.get('prueba')} {r.get('resultado')}{(' ' + r['unidad']) if r.get('unidad') else ''} ({r.get('estado')})"
+            for r in anormales
+        ]
+        lineas.append("Fuera de rango: " + "; ".join(partes) + ".")
+    elif resultados:
+        lineas.append("Todo dentro de rango en este estudio.")
+    if len(historial) >= 2:
+        lineas.append(f"Hay {len(historial)} estudios guardados en el historial de este paciente.")
+    return "\n".join(lineas)
+
+
 def _resumen_enfoque(enfoque: str | None) -> str:
     return enfoque or "Sin enfoque principal declarado -- trátalo como un caso general."
 
@@ -135,9 +160,10 @@ def _resumen_notas(historial: pd.DataFrame | None) -> str:
 
 _SYSTEM_PROMPT = """Eres un asistente de apoyo clínico para un nutriólogo. Te van a dar el \
 "Enfoque principal" del paciente (pérdida de peso, atleta, control de una condición médica, etc.), \
-datos de composición corporal (InBody), mediciones antropométricas, métricas de un reloj/anillo \
-wearable y notas cualitativas guardadas del paciente. Tu trabajo es cruzar TODO eso -- números, \
-enfoque y notas por igual -- para darle al nutriólogo el mejor borrador posible de lectura, enfoque \
+datos de composición corporal (InBody), mediciones antropométricas, estudios clínicos de \
+laboratorio (sangre, orina, etc.), métricas de un reloj/anillo wearable y notas cualitativas \
+guardadas del paciente. Tu trabajo es cruzar TODO eso -- números, estudios, enfoque y notas por \
+igual -- para darle al nutriólogo el mejor borrador posible de lectura, enfoque \
 nutriológico e ideas de alimentos como punto de partida para armar el plan de alimentación en \
 Avena. NUNCA un diagnóstico médico ni una prescripción cerrada, siempre un apoyo a lo que el \
 nutriólogo va a revisar, ajustar y decidir él mismo.
@@ -149,9 +175,10 @@ recomendaciones a ESE enfoque en concreto, no des una lectura genérica.
 
 Responde en español, en formato markdown, con esta estructura exacta:
 
-**Lectura rápida:** 2-3 oraciones con lo más relevante de cruzar composición corporal, \
-entrenamiento/recuperación y las notas guardadas (tendencia, si el entrenamiento está apoyando o \
-dificultando el objetivo, cualquier bandera que valga la pena que el nutriólogo revise).
+**Lectura rápida:** 2-3 oraciones con lo más relevante de cruzar composición corporal, estudios de \
+laboratorio, entrenamiento/recuperación y las notas guardadas (tendencia, si el entrenamiento está \
+apoyando o dificultando el objetivo, cualquier valor de laboratorio fuera de rango que valga la \
+pena que el nutriólogo revise -- nunca lo diagnostiques, solo señálalo).
 
 **Enfoque nutriológico:** 2-3 oraciones con hacia dónde orientar el plan dado todo lo anterior \
 (ej. prioridad de recuperación muscular, manejo de hidratación, apoyo a la carga de entrenamiento, \
@@ -169,6 +196,10 @@ su casa. Cada bullet debe ser concreto (qué hacer, no solo "mejorar el sueño")
 
 Reglas:
 - Si un dato viene como "sin dato", no lo menciones ni inventes un valor -- trabaja con lo que sí hay.
+- Los estudios de laboratorio son para orientar el enfoque nutriológico y las ideas de alimentos \
+(ej. triglicéridos altos -> menos azúcares simples y grasas saturadas; glucosa alta -> cuidar \
+carbohidratos refinados) -- NUNCA los uses para diagnosticar una enfermedad ni digas cosas como \
+"tienes diabetes" o "tienes hipotiroidismo", eso es exclusivamente del médico/nutriólogo.
 - Sí puedes y debes sugerir alimentos, grupos de alimentos, combinaciones y momentos del día \
 concretos -- es justo lo que se pide en "Ideas de alimentos". Lo único que NO debes dar son cifras \
 exactas de calorías, macros o porciones/gramos a prescribir (eso lo decide el nutriólogo al armar el \
@@ -191,13 +222,14 @@ actividad" como si nada."""
 
 def _armar_contexto(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None,
+    enfoque: str | None = None, estudios_historial=None,
 ) -> str:
     return (
         f"Paciente: {paciente_nombre}\n\n"
         f"--- Enfoque principal ---\n{_resumen_enfoque(enfoque)}\n\n"
         f"--- InBody ---\n{_resumen_inbody(inbody_historial)}\n\n"
         f"--- Mediciones antropométricas ---\n{_resumen_antropometria(antro_historial)}\n\n"
+        f"--- Estudios clínicos de laboratorio ---\n{_resumen_estudios(estudios_historial)}\n\n"
         f"--- Wearable (últimos {data.get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}\n\n"
         f"--- Notas del nutriólogo (historial, la más reciente al final) ---\n{_resumen_notas(notas_historial)}"
     )
@@ -214,7 +246,7 @@ _NOTAS_PLACEHOLDER = (
 
 def armar_mensaje_para_pegar(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None,
+    enfoque: str | None = None, estudios_historial=None,
 ) -> str:
     """Mismo contenido que se le manda a la API, pero como un solo texto
     listo para pegar directo en una conversación normal de Claude (la app
@@ -223,13 +255,15 @@ def armar_mensaje_para_pegar(
     notas guardadas del paciente, y un espacio al final para algo de último
     momento que no se quiera guardar (ver _NOTAS_PLACEHOLDER) -- no hay que
     escribir ningún prompt aparte."""
-    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque)
+    contexto = _armar_contexto(
+        paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque, estudios_historial,
+    )
     return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}{_NOTAS_PLACEHOLDER}"
 
 
 def generar_analisis(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None,
+    enfoque: str | None = None, estudios_historial=None,
 ) -> str:
     """Arma el contexto del paciente y le pide a Claude una lectura rápida +
     recomendaciones vía la API (tiene costo, requiere el Secret
@@ -247,7 +281,9 @@ def generar_analisis(
             "para poder generar el análisis con IA."
         )
 
-    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque)
+    contexto = _armar_contexto(
+        paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque, estudios_historial,
+    )
 
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(

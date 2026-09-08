@@ -34,6 +34,8 @@ import antropometria_store
 import apple_health
 import calorias_store
 import enfoque_store
+import estudios_parser
+import estudios_store
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
@@ -193,6 +195,7 @@ historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID
 historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 enfoque_actual = enfoque_store.leer_enfoque(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_calorias = calorias_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
@@ -522,6 +525,88 @@ def _render_composicion_corporal(data: dict | None):
 
     render_antropometria_section(historial_antro)
 
+    st.divider()
+    st.subheader("🩺 Estudios clínicos (sangre, orina, etc.)")
+    st.caption(
+        "Sube el PDF del laboratorio que sea -- lo lee una IA, no un formato fijo, así que funciona "
+        "sin importar el laboratorio."
+    )
+
+    with st.expander("Subir nuevo estudio"):
+        archivo_estudio = st.file_uploader(
+            "PDF del estudio", type=["pdf"], key=f"estudio_upload_{paciente}",
+        )
+        if archivo_estudio is not None and st.button("Leer estudio", key=f"estudio_leer_{paciente}"):
+            with st.spinner("Leyendo el estudio con IA (puede tardar unos segundos)..."):
+                try:
+                    datos = estudios_parser.extraer_estudio(
+                        archivo_estudio.getvalue(), st.secrets.get("ANTHROPIC_API_KEY"),
+                    )
+                    st.session_state[f"estudio_draft_{paciente}"] = datos
+                except Exception as e:
+                    st.error(f"No se pudo leer el estudio: {e}")
+
+        draft_estudio = st.session_state.get(f"estudio_draft_{paciente}")
+        if draft_estudio is not None:
+            st.caption("Revisa y corrige antes de guardar -- la lectura la hace una IA, puede haber errores.")
+            col_fecha, col_lab = st.columns(2)
+            fecha_estudio = col_fecha.text_input(
+                "Fecha (DD.MM.AAAA)", value=draft_estudio.get("fecha") or "", key=f"estudio_fecha_{paciente}",
+            )
+            laboratorio_estudio = col_lab.text_input(
+                "Laboratorio", value=draft_estudio.get("laboratorio") or "", key=f"estudio_lab_{paciente}",
+            )
+
+            df_resultados = pd.DataFrame(draft_estudio.get("resultados") or [])
+            for col in ["prueba", "resultado", "unidad", "rango_min", "rango_max", "estado"]:
+                if col not in df_resultados.columns:
+                    df_resultados[col] = None
+
+            df_editado = st.data_editor(
+                df_resultados[["prueba", "resultado", "unidad", "rango_min", "rango_max", "estado"]],
+                num_rows="dynamic", width="stretch", key=f"estudio_editor_{paciente}",
+                column_config={
+                    "prueba": "Prueba", "resultado": "Resultado", "unidad": "Unidad",
+                    "rango_min": "Rango mín.", "rango_max": "Rango máx.",
+                    "estado": st.column_config.SelectboxColumn(
+                        "Estado", options=["bajo", "normal", "alto", "sin_dato"],
+                    ),
+                },
+            )
+
+            if st.button("Guardar estudio", key=f"estudio_guardar_{paciente}", type="primary"):
+                estudio_final = {
+                    "fecha": fecha_estudio,
+                    "laboratorio": laboratorio_estudio,
+                    "resultados": df_editado.to_dict("records"),
+                }
+                estudios_store.guardar_estudio(_gc(), st.secrets["SHEET_ID"], paciente, estudio_final)
+                st.session_state.pop(f"estudio_draft_{paciente}", None)
+                st.cache_data.clear()
+                st.success("Estudio guardado -- se agregó al historial de este paciente.")
+                st.rerun()
+
+    if not historial_estudios:
+        st.info("Este paciente todavía no tiene estudios clínicos guardados.")
+    else:
+        _ICONO_ESTADO = {"bajo": "🔵 Bajo", "alto": "🔴 Alto", "normal": "🟢 Normal", "sin_dato": "—"}
+        for estudio in reversed(historial_estudios):
+            resultados = estudio.get("resultados") or []
+            etiqueta = f"{estudio.get('fecha') or 'sin fecha'} -- {estudio.get('laboratorio') or 'laboratorio sin especificar'} ({len(resultados)} pruebas)"
+            with st.expander(etiqueta):
+                if resultados:
+                    df_mostrar = pd.DataFrame(resultados)
+                    df_mostrar["Estado"] = df_mostrar.get("estado", pd.Series(dtype=str)).map(
+                        lambda e: _ICONO_ESTADO.get(e, "—")
+                    )
+                    columnas = [c for c in ["prueba", "resultado", "unidad", "Estado"] if c in df_mostrar.columns or c == "Estado"]
+                    st.dataframe(
+                        df_mostrar[columnas].rename(columns={"prueba": "Prueba", "resultado": "Resultado", "unidad": "Unidad"}),
+                        width="stretch", hide_index=True,
+                    )
+                else:
+                    st.caption("Sin resultados guardados en este estudio.")
+
 
 def _render_analisis_ia(data: dict):
     """Lectura rápida + recomendaciones cruzando InBody, Antropometría y
@@ -542,7 +627,7 @@ def _render_analisis_ia(data: dict):
     )
 
     mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(
-        paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
+        paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual, historial_estudios,
     )
     st.download_button(
         "📄 Descargar para pegar en Claude (gratis)",
@@ -562,6 +647,7 @@ def _render_analisis_ia(data: dict):
                 try:
                     st.session_state[cache_key] = ai_analisis.generar_analisis(
                         paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
+                        historial_estudios,
                     )
                 except Exception as e:
                     st.error(f"No se pudo generar el análisis: {e}")
