@@ -48,6 +48,7 @@ from garmin_dashboard_ui import (
     CRITICAL_CORAL,
     OPTIMUM_GREEN,
     WARNING_AMBER,
+    inbody_ultimo_registro,
     render_antropometria_section,
     render_composicion_avanzada,
     render_dashboard_body,
@@ -757,7 +758,9 @@ def _render_composicion_corporal(data: dict | None):
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
 
-    render_antropometria_section(historial_antro)
+    ultimo_inbody = inbody_ultimo_registro(historial_inbody)
+    sexo_paciente = ultimo_inbody.get("Sexo") if ultimo_inbody is not None else None
+    render_antropometria_section(historial_antro, sexo=sexo_paciente)
 
 
 def _render_analisis_ia(data: dict):
@@ -860,4 +863,5 @@ render_dashboard_body(
     estudios_clinicos_renderer=_render_estudios_clinicos,
     calorias_renderer=_render_calorias_comidas, glucosa_renderer=_render_glucosa_libre,
     cruces_clinicos_renderer=_render_cruces_clinicos, cruces_alertas_renderer=_render_alertas_cruces,
+    perfil=perfil_actual,
 )

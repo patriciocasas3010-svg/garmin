@@ -472,7 +472,6 @@ _PLIEGUES = [
 ]
 
 _CIRCUNFERENCIAS = [
-    ("Circ_Cintura_cm", "Cintura"),
     ("Circ_Cadera_cm", "Cadera"),
     ("Circ_MusloMedio_cm", "Muslo medio"),
     ("Circ_Muslo_cm", "Muslo"),
@@ -480,6 +479,10 @@ _CIRCUNFERENCIAS = [
     ("Circ_BrazoRelajado_cm", "Brazo relajado"),
     ("Circ_Pantorrilla_cm", "Pantorrilla"),
 ]
+
+# Límite de riesgo cardiovascular por circunferencia de cintura (OMS,
+# personalizado por sexo del paciente).
+_CINTURA_LIMITE_OMS = {"Femenino": 80, "Masculino": 90}
 
 
 def _fila_metricas(fila: pd.Series, campos: list[tuple[str, str]], unidad: str, por_fila: int = 4):
@@ -490,9 +493,11 @@ def _fila_metricas(fila: pd.Series, campos: list[tuple[str, str]], unidad: str, 
             col.metric(etiqueta, f"{valor:.1f} {unidad}" if pd.notna(valor) else "—")
 
 
-def render_antropometria_section(historial: pd.DataFrame):
+def render_antropometria_section(historial: pd.DataFrame, sexo: str | None = None):
     """historial: DataFrame con las columnas de antropometria_store.ENCABEZADOS,
-    ya filtrado a un solo paciente."""
+    ya filtrado a un solo paciente. sexo: "Femenino"/"Masculino" (del
+    InBody más reciente, si hay) -- para mostrar el límite de riesgo
+    cardiovascular de la OMS junto a la cintura."""
     if historial.empty:
         st.info(
             "Todavía no hay ninguna medición antropométrica guardada para este paciente. "
@@ -518,6 +523,23 @@ def render_antropometria_section(historial: pd.DataFrame):
     _fila_metricas(ultimo, _PLIEGUES, "mm")
 
     st.markdown("**Circunferencias**")
+    cintura = ultimo.get("Circ_Cintura_cm")
+    limite_oms = _CINTURA_LIMITE_OMS.get(sexo)
+    col_cintura = st.columns(4)[0]
+    if pd.notna(cintura):
+        if limite_oms is not None:
+            col_cintura.metric(
+                "Cintura", f"{cintura:.1f} cm",
+                delta=f"{cintura - limite_oms:+.1f} cm vs. límite OMS ({limite_oms} cm, {sexo})",
+                delta_color="inverse",
+            )
+        else:
+            col_cintura.metric(
+                "Cintura", f"{cintura:.1f} cm",
+                help="Falta el sexo del paciente (InBody) para mostrar el límite de riesgo cardiovascular de la OMS.",
+            )
+    else:
+        col_cintura.metric("Cintura", "—")
     _fila_metricas(ultimo, _CIRCUNFERENCIAS, "cm")
 
     if len(historial) < 2:
@@ -574,7 +596,7 @@ def render_dashboard_body(
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
     analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
     estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
-    cruces_clinicos_renderer=None, cruces_alertas_renderer=None,
+    cruces_clinicos_renderer=None, cruces_alertas_renderer=None, perfil: dict | None = None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -616,7 +638,11 @@ def render_dashboard_body(
     dibuja solo los paneles de cruces clínicos con una bandera roja
     activa (mismo cálculo que cruces_clinicos_renderer, pero filtrado) --
     si se pasa, se agrega dentro de la pestaña 🚦 Alertas, junto con los
-    demás indicadores unificados."""
+    demás indicadores unificados.
+
+    perfil: {"enfoque", "meta_grasa_pct", "dias_plan_mes"} de
+    enfoque_store.leer_perfil() -- para la barra de grasa corporal vs.
+    meta y el formato "Ejercitados: X días (de Y en plan)"."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -715,6 +741,39 @@ def render_dashboard_body(
             b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", delta=delta_mme_str)
             b4.metric("Hidratación (agua total)", f"{agua_val:.1f} L" if pd.notna(agua_val) else "—")
             st.caption(f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en 🧬 Composición corporal.")
+
+            meta_grasa_pct = (perfil or {}).get("meta_grasa_pct")
+            pgc_actual = inbody_resumen.get("PGC_pct")
+            if meta_grasa_pct and pd.notna(pgc_actual):
+                pgc_inicial = _historial_valido.iloc[0].get("PGC_pct")
+                if pd.notna(pgc_inicial) and pgc_inicial > meta_grasa_pct:
+                    avance = max(0.0, min(1.0, (pgc_inicial - pgc_actual) / (pgc_inicial - meta_grasa_pct)))
+                else:
+                    avance = 1.0 if pgc_actual <= meta_grasa_pct else 0.0
+                st.markdown(f"**% de grasa corporal -- actual vs. meta ({meta_grasa_pct:.1f}%)**")
+                st.progress(
+                    avance,
+                    text=f"{pgc_actual:.1f}% actual · meta {meta_grasa_pct:.1f}%"
+                    + (" · ¡meta alcanzada! 🎉" if pgc_actual <= meta_grasa_pct else ""),
+                )
+
+            peso_inicial = _historial_valido.iloc[0].get("Peso_kg")
+            if pd.notna(peso_inicial) and pd.notna(peso_val) and peso_inicial > peso_val:
+                total_perdido = peso_inicial - peso_val
+                hitos = int(total_perdido // 2.5)
+                if hitos >= 1:
+                    hitos_prev = 0
+                    if inbody_penultimo is not None:
+                        peso_prev_hito = inbody_penultimo.get("Peso_kg")
+                        if pd.notna(peso_prev_hito) and peso_inicial > peso_prev_hito:
+                            hitos_prev = int((peso_inicial - peso_prev_hito) // 2.5)
+                    nuevo_hito = hitos > hitos_prev
+                    medallas = "🏅" * min(hitos, 5) + ("…" if hitos > 5 else "")
+                    texto_hito = f"{medallas} Ha bajado **{total_perdido:.1f} kg** desde su primer registro -- {hitos} hito(s) de 2.5 kg alcanzado(s)."
+                    if nuevo_hito:
+                        st.success(f"🎉 ¡Nuevo hito! {texto_hito}")
+                    else:
+                        st.info(texto_hito)
             st.divider()
 
         edad_fisica = data.get("edad_fisica")
@@ -739,6 +798,21 @@ def render_dashboard_body(
                 "Nivel de estrés", f"{nivel_estres:.0f}/100" if nivel_estres is not None else "—",
                 help="Nivel de estrés de hoy que reporta el reloj (0-100).",
             )
+            if gasto_total_avg is not None:
+                g2.caption(
+                    "Lo que su cuerpo gasta en promedio al día (reposo + actividad) -- referencia para el "
+                    "balance calórico, no una cifra exacta a seguir al pie de la letra."
+                )
+            if nivel_estres is not None:
+                if nivel_estres < 25:
+                    texto_estres = "Nivel bajo -- buena señal de recuperación general."
+                elif nivel_estres < 50:
+                    texto_estres = "Nivel manejable -- dentro de lo esperado para un día normal."
+                elif nivel_estres < 75:
+                    texto_estres = "Nivel elevado -- vale la pena vigilar sueño y carga de entrenamiento estos días."
+                else:
+                    texto_estres = "Nivel alto -- prioriza descanso/recuperación antes de sumar más carga."
+                g3.caption(texto_estres)
             st.divider()
 
         pasos_promedio_dia = data.get("pasos_promedio_dia")
@@ -841,7 +915,15 @@ def render_dashboard_body(
             num_dias_sin_actividad = resumen_mes["dias_sin_actividad"]
             dias_inactivos_fmt = ", ".join(_fmt_dia_es(pd.Timestamp(d)) for d in resumen_mes["dias_inactivos"])
 
-            st.markdown(f"**Días con actividad física** (de los últimos {total_dias} días)")
+            dias_plan_mes = (perfil or {}).get("dias_plan_mes")
+            if dias_plan_mes:
+                st.markdown(f"**Días con actividad física** -- Ejercitados: {num_dias_activos} días (de {dias_plan_mes} en plan)")
+                st.progress(
+                    max(0.0, min(1.0, num_dias_activos / dias_plan_mes)),
+                    text=f"{num_dias_activos} de {dias_plan_mes} días planeados ({num_dias_activos / dias_plan_mes * 100:.0f}%)",
+                )
+            else:
+                st.markdown(f"**Días con actividad física** (de los últimos {total_dias} días)")
             d1, d2 = st.columns(2)
             d1.metric("Días con actividad", str(num_dias_activos), help=f"{num_dias_activos / total_dias * 100:.0f}% de los días")
             d2.metric(
