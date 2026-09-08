@@ -703,19 +703,40 @@ def _render_analisis_ia(data: dict):
         "diagnóstico."
     )
 
+    paneles_cruces = _calcular_paneles_cruces(data)
+
     mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(
         paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual, historial_estudios,
+        paneles_cruces,
     )
-    st.download_button(
-        "📄 Descargar para pegar en Claude (gratis)",
-        data=mensaje_para_pegar,
-        file_name=f"analisis_{paciente.replace(' ', '_')}.txt",
-        mime="text/plain",
-        key=f"descargar_contexto_{paciente}",
-        help='Ya trae incluidas las "Notas del paciente" que hayas guardado arriba, en su historial '
-             'completo. Descarga este archivo, cópialo todo, y pégalo en una conversación nueva con '
-             'Claude (claude.ai) -- no hace falta escribir nada más.',
-    )
+    col_pegar, col_todo = st.columns(2)
+    with col_pegar:
+        st.download_button(
+            "📄 Descargar resumen para pegar en Claude (gratis)",
+            data=mensaje_para_pegar,
+            file_name=f"analisis_{paciente.replace(' ', '_')}.txt",
+            mime="text/plain",
+            key=f"descargar_contexto_{paciente}",
+            help='Versión resumida (lo más reciente de cada sección) con instrucciones ya incluidas '
+                 'para que Claude te dé una lectura -- pégalo tal cual en una conversación nueva con '
+                 'Claude (claude.ai).',
+        )
+    with col_todo:
+        exportacion_completa = ai_analisis.armar_exportacion_completa(
+            paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
+            historial_estudios, paneles_cruces, historial_calorias,
+        )
+        st.download_button(
+            "📦 Descargar TODO el historial completo",
+            data=exportacion_completa,
+            file_name=f"historial_completo_{paciente.replace(' ', '_')}.txt",
+            mime="text/plain",
+            key=f"descargar_todo_{paciente}",
+            help="Todas las secciones completas, sin resumir: todo InBody, toda Antropometría, todos "
+                 "los estudios con todas sus pruebas, las series diarias del wearable, los 10 paneles de "
+                 "cruces clínicos completos y todo el historial de notas -- para cuando quieras que "
+                 "Claude vea el detalle completo, no solo lo más reciente.",
+        )
 
     with st.expander("O generar automático aquí mismo (tiene un costo mínimo de API)"):
         cache_key = f"analisis_ia_{paciente}"
@@ -724,7 +745,7 @@ def _render_analisis_ia(data: dict):
                 try:
                     st.session_state[cache_key] = ai_analisis.generar_analisis(
                         paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
-                        historial_estudios,
+                        historial_estudios, paneles_cruces,
                     )
                 except Exception as e:
                     st.error(f"No se pudo generar el análisis: {e}")

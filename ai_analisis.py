@@ -148,6 +148,22 @@ def _resumen_estudios(historial: list[dict] | None) -> str:
     return "\n".join(lineas)
 
 
+def _resumen_cruces(paneles: list[dict] | None) -> str:
+    """Los 10 paneles de cruces clínicos (cruces_clinicos.py) ya traen su
+    propio diagnóstico/alerta/pauta calculados -- aquí solo se listan tal
+    cual, no se vuelven a interpretar."""
+    if not paneles:
+        return "Sin cruces clínicos calculados (sin estudios/InBody/wearable suficientes todavía)."
+    lineas = []
+    for panel in paneles:
+        resumen = panel.get("resumen") or {}
+        linea = f"{panel.get('titulo')}: {resumen.get('diagnostico') or 'sin datos suficientes'}"
+        if resumen.get("alerta"):
+            linea += f" [ALERTA: {resumen['alerta']} -- Pauta sugerida: {resumen.get('pauta')}]"
+        lineas.append(linea)
+    return "\n".join(lineas)
+
+
 def _resumen_enfoque(enfoque: str | None) -> str:
     return enfoque or "Sin enfoque principal declarado -- trátalo como un caso general."
 
@@ -166,12 +182,13 @@ def _resumen_notas(historial: pd.DataFrame | None) -> str:
 _SYSTEM_PROMPT = """Eres un asistente de apoyo clínico para un nutriólogo. Te van a dar el \
 "Enfoque principal" del paciente (pérdida de peso, atleta, control de una condición médica, etc.), \
 datos de composición corporal (InBody), mediciones antropométricas, estudios clínicos de \
-laboratorio (sangre, orina, etc.), métricas de un reloj/anillo wearable y notas cualitativas \
-guardadas del paciente. Tu trabajo es cruzar TODO eso -- números, estudios, enfoque y notas por \
-igual -- para darle al nutriólogo el mejor borrador posible de lectura, enfoque \
-nutriológico e ideas de alimentos como punto de partida para armar el plan de alimentación en \
-Avena. NUNCA un diagnóstico médico ni una prescripción cerrada, siempre un apoyo a lo que el \
-nutriólogo va a revisar, ajustar y decidir él mismo.
+laboratorio (sangre, orina, etc.), métricas de un reloj/anillo wearable, 10 "Cruces clínicos" ya \
+calculados (cada uno cruza labs + InBody + wearable con su propio diagnóstico/alerta/pauta) y \
+notas cualitativas guardadas del paciente. Tu trabajo es cruzar TODO eso -- números, estudios, \
+cruces clínicos, enfoque y notas por igual -- para darle al nutriólogo el mejor borrador posible \
+de lectura, enfoque nutriológico e ideas de alimentos como punto de partida para armar el plan de \
+alimentación en Avena. NUNCA un diagnóstico médico ni una prescripción cerrada, siempre un apoyo a \
+lo que el nutriólogo va a revisar, ajustar y decidir él mismo.
 
 El "Enfoque principal" cambia todo lo que sigue: no es lo mismo alguien que quiere bajar de peso, \
 que un atleta buscando rendimiento, que alguien controlando una condición médica, que alguien en \
@@ -227,7 +244,7 @@ actividad" como si nada."""
 
 def _armar_contexto(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None, estudios_historial=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
 ) -> str:
     return (
         f"Paciente: {paciente_nombre}\n\n"
@@ -236,6 +253,7 @@ def _armar_contexto(
         f"--- Mediciones antropométricas ---\n{_resumen_antropometria(antro_historial)}\n\n"
         f"--- Estudios clínicos de laboratorio ---\n{_resumen_estudios(estudios_historial)}\n\n"
         f"--- Wearable (últimos {data.get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}\n\n"
+        f"--- Cruces clínicos (10 paneles: labs + InBody + wearable) ---\n{_resumen_cruces(paneles_cruces)}\n\n"
         f"--- Notas del nutriólogo (historial, la más reciente al final) ---\n{_resumen_notas(notas_historial)}"
     )
 
@@ -251,7 +269,7 @@ _NOTAS_PLACEHOLDER = (
 
 def armar_mensaje_para_pegar(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None, estudios_historial=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
 ) -> str:
     """Mismo contenido que se le manda a la API, pero como un solo texto
     listo para pegar directo en una conversación normal de Claude (la app
@@ -262,13 +280,129 @@ def armar_mensaje_para_pegar(
     escribir ningún prompt aparte."""
     contexto = _armar_contexto(
         paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque, estudios_historial,
+        paneles_cruces,
     )
     return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}{_NOTAS_PLACEHOLDER}"
 
 
+def _tabla_historial(df: pd.DataFrame | None) -> str:
+    """Historial completo tal cual (todas las filas, todas las columnas)
+    en CSV -- a diferencia de _resumen_inbody/_resumen_antropometria, que
+    solo dan lo más reciente."""
+    if df is None or df.empty:
+        return "Sin datos."
+    return df.to_csv(index=False)
+
+
+def _tabla_estudios_completa(historial: list[dict] | None) -> str:
+    """TODOS los estudios guardados, con TODAS sus pruebas -- a
+    diferencia de _resumen_estudios, que solo da el más reciente y solo
+    lo fuera de rango."""
+    if not historial:
+        return "Sin estudios clínicos registrados."
+    filas = []
+    for estudio in historial:
+        for r in estudio.get("resultados") or []:
+            filas.append({
+                "Fecha": estudio.get("fecha"), "Laboratorio": estudio.get("laboratorio"),
+                "Prueba": r.get("prueba"), "Resultado": r.get("resultado"), "Unidad": r.get("unidad"),
+                "RangoMin": r.get("rango_min"), "RangoMax": r.get("rango_max"), "Estado": r.get("estado"),
+            })
+    if not filas:
+        return "Sin resultados guardados en los estudios de este paciente."
+    return pd.DataFrame(filas).to_csv(index=False)
+
+
+def _tabla_cruces_completa(paneles: list[dict] | None) -> str:
+    """Los 10 paneles completos -- diagnóstico/alerta/pauta Y todas sus
+    métricas -- a diferencia de _resumen_cruces, que solo da el
+    diagnóstico corto de cada uno."""
+    if not paneles:
+        return "Sin cruces clínicos calculados (sin estudios/InBody/wearable suficientes todavía)."
+    bloques = []
+    for panel in paneles:
+        resumen = panel.get("resumen") or {}
+        lineas = [
+            f"### {panel.get('icono', '')} {panel.get('titulo')}",
+            f"Diagnóstico integrado: {resumen.get('diagnostico') or 'sin datos suficientes'}",
+            f"Bandera roja / alerta: {resumen.get('alerta') or 'sin hallazgos prioritarios'}",
+            f"Pauta sugerida: {resumen.get('pauta') or 'sin pauta'}",
+        ]
+        for m in panel.get("metricas") or []:
+            if m.get("pendiente"):
+                lineas.append(f"- {m['etiqueta']}: pendiente (no se captura todavía)")
+                continue
+            valor = m.get("valor")
+            unidad = m.get("unidad") or ""
+            lineas.append(f"- {m['etiqueta']}: {'sin dato' if valor is None else f'{valor} {unidad}'.rstrip()}")
+        if panel.get("nota"):
+            lineas.append(f"Nota: {panel['nota']}")
+        bloques.append("\n".join(lineas))
+    return "\n\n".join(bloques)
+
+
+def _tabla_wearable_diaria(data: dict) -> str:
+    """Series día por día del wearable (RHR, carga, sueño, hidratación,
+    Body Battery, calorías, ACWR, HRV) en una sola tabla CSV -- el
+    resumen del mes ya lo da _resumen_wearable, esto es el detalle
+    crudo detrás de ese resumen."""
+    piezas = []
+    for clave in [
+        "rhr_series", "load_series", "readiness_series", "acwr_df", "hrv_df",
+        "sleep_df", "hydration_df", "battery_df", "calories_df",
+    ]:
+        obj = data.get(clave)
+        if obj is None:
+            continue
+        if isinstance(obj, pd.Series):
+            if obj.dropna().empty:
+                continue
+            piezas.append(obj.rename(clave.replace("_series", "")))
+        elif isinstance(obj, pd.DataFrame):
+            if obj.dropna(how="all").empty:
+                continue
+            piezas.append(obj.add_prefix(f"{clave.replace('_df', '')}_"))
+    if not piezas:
+        return "Sin series diarias del wearable disponibles."
+    tabla = pd.concat(piezas, axis=1).sort_index()
+    tabla.index.name = "Fecha"
+    return tabla.reset_index().to_csv(index=False)
+
+
+def armar_exportacion_completa(
+    paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None, calorias_historial=None,
+) -> str:
+    """A diferencia de armar_mensaje_para_pegar (que RESUME cada sección
+    a lo más reciente/relevante para pedirle una lectura a Claude), esto
+    exporta el historial COMPLETO de cada sección del dashboard -- todas
+    las filas de InBody/Antropometría/Calorías, todos los estudios con
+    todas sus pruebas, los 10 paneles de cruces clínicos completos, las
+    series diarias del wearable y el historial completo de notas. Pensado
+    para pegarlo en una conversación de Claude cuando se quiere que vea
+    el detalle completo, no un resumen ya recortado."""
+    partes = [
+        f"EXPORTACIÓN COMPLETA -- {paciente_nombre}",
+        "(Historial completo de todas las secciones del dashboard, sin resumir. Pégalo tal cual en una "
+        "conversación nueva de Claude y pídele lo que necesites -- una lectura, comparar fechas, un plan, etc.)",
+        f"\n=== ENFOQUE PRINCIPAL ===\n{_resumen_enfoque(enfoque)}",
+        f"\n=== INBODY (historial completo) ===\n{_tabla_historial(inbody_historial)}",
+        f"\n=== MEDICIONES ANTROPOMÉTRICAS (historial completo) ===\n{_tabla_historial(antro_historial)}",
+        f"\n=== ESTUDIOS CLÍNICOS DE LABORATORIO (todos los estudios, todas las pruebas) ===\n"
+        f"{_tabla_estudios_completa(estudios_historial)}",
+        f"\n=== CALORÍAS COMIDAS -- captura manual (historial completo) ===\n{_tabla_historial(calorias_historial)}",
+        f"\n=== WEARABLE -- resumen del mes ===\n{_resumen_wearable(data)}",
+        f"\n=== WEARABLE -- series diarias (últimos {data.get('wellness_days', 30)} días) ===\n"
+        f"{_tabla_wearable_diaria(data)}",
+        f"\n=== CRUCES CLÍNICOS -- 10 paneles completos ===\n{_tabla_cruces_completa(paneles_cruces)}",
+        f"\n=== NOTAS DEL NUTRIÓLOGO (historial completo) ===\n{_resumen_notas(notas_historial)}",
+    ]
+    return "\n".join(partes)
+
+
 def generar_analisis(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None, estudios_historial=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
 ) -> str:
     """Arma el contexto del paciente y le pide a Claude una lectura rápida +
     recomendaciones vía la API (tiene costo, requiere el Secret
@@ -288,6 +422,7 @@ def generar_analisis(
 
     contexto = _armar_contexto(
         paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque, estudios_historial,
+        paneles_cruces,
     )
 
     client = anthropic.Anthropic(api_key=api_key)
