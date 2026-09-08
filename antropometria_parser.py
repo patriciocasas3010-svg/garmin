@@ -1,31 +1,28 @@
 """Lee un reporte de mediciones antropométricas (ej. exportado desde Avena)
 en PDF -- a diferencia de InBody, este PDF sí trae texto real (no es una
-foto), así que se extrae directo con `pdftotext` (parte de poppler-utils,
-ya requerido en packages.txt para InBody) y no hace falta OCR.
+foto), así que se extrae directo con `pdfplumber` (paquete normal de
+Python, se instala con pip vía requirements.txt) y no hace falta OCR ni
+ninguna herramienta del sistema -- así no depende de `apt-get`, que en
+Streamlit Cloud a veces se rompe por completo fuera de nuestro control
+(pasó en septiembre 2026 con el repositorio bullseye-security de Debian).
 
 Aun así, el formato de estos reportes puede variar entre software o entre
 plantillas -- por eso el nutriólogo siempre revisa y corrige los valores
 en un formulario antes de guardarlos (ver dashboard_pacientes.py), igual
 que con InBody."""
 
+import io
 import re
-import subprocess
-import tempfile
-from pathlib import Path
+
+import pdfplumber
 
 
 def extract_text(file_bytes: bytes) -> str:
     """Extrae el texto de un PDF con texto real, conservando el orden por
-    columnas/renglones (-layout) para que cada etiqueta quede junto a su
-    valor "Actual: ..." tal como aparece impreso."""
-    with tempfile.TemporaryDirectory() as tmp:
-        pdf_path = Path(tmp) / "input.pdf"
-        pdf_path.write_bytes(file_bytes)
-        resultado = subprocess.run(
-            ["pdftotext", "-layout", str(pdf_path), "-"],
-            check=True, capture_output=True,
-        )
-        return resultado.stdout.decode("utf-8", errors="replace")
+    columnas/renglones (layout=True) para que cada etiqueta quede junto a
+    su valor "Actual: ..." tal como aparece impreso."""
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        return "\n".join(pagina.extract_text(layout=True) or "" for pagina in pdf.pages)
 
 
 def _a_float(s: str | None) -> float | None:

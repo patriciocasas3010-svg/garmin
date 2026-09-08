@@ -15,23 +15,19 @@ columna de color del PDF -- se calcula comparando el resultado contra
 el rango de referencia impreso, que es lo mismo que hace el laboratorio
 para poner su propio ícono, así que da el mismo resultado."""
 
+import io
 import re
-import subprocess
-import tempfile
-from pathlib import Path
+
+import pdfplumber
 
 
 def extract_text(pdf_bytes: bytes) -> str:
     """Extrae el texto de un PDF con texto real, conservando el orden por
-    columnas/renglones (-layout) -- mismo mecanismo que antropometria_parser.py."""
-    with tempfile.TemporaryDirectory() as tmp:
-        pdf_path = Path(tmp) / "input.pdf"
-        pdf_path.write_bytes(pdf_bytes)
-        resultado = subprocess.run(
-            ["pdftotext", "-layout", str(pdf_path), "-"],
-            check=True, capture_output=True,
-        )
-        return resultado.stdout.decode("utf-8", errors="replace")
+    columnas/renglones (layout=True) -- usa pdfplumber (paquete de Python
+    normal vía pip), no la herramienta pdftotext del sistema, para no
+    depender de apt-get -- mismo mecanismo que antropometria_parser.py."""
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        return "\n".join(pagina.extract_text(layout=True) or "" for pagina in pdf.pages)
 
 
 def _a_float(s: str | None) -> float | None:
