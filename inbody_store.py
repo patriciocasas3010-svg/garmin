@@ -15,18 +15,26 @@ HOJA_NOMBRE = "InBody"
 ENCABEZADOS = [
     "Nombre", "Fecha", "Modelo", "Altura_cm", "Edad", "Sexo",
     "Peso_kg", "MasaGrasa_kg", "MME_kg", "GrasaVisceral",
-    "AguaTotal_L", "AguaIntra_L", "AguaExtra_L", "IMC", "PGC_pct",
+    "AguaTotal_L", "AguaIntra_L", "AguaExtra_L", "IMC", "PGC_pct", "BMR_kcal",
 ]
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
     sh = sheet_cache.abrir_hoja(gc, sheet_id)
     try:
-        return sh.worksheet(HOJA_NOMBRE)
+        ws = sh.worksheet(HOJA_NOMBRE)
     except gspread.exceptions.WorksheetNotFound:
         ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=200, cols=len(ENCABEZADOS))
         ws.append_row(ENCABEZADOS)
         return ws
+    # Hoja creada con una versión anterior de este archivo, a la que le
+    # falta alguna columna nueva (ej. "BMR_kcal") -- se repara el
+    # encabezado sin tocar ninguna fila de datos ya guardada.
+    encabezado_actual = ws.row_values(1)
+    if encabezado_actual != ENCABEZADOS:
+        ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
+        ws.update(f"A1:{ultima_col}1", [ENCABEZADOS])
+    return ws
 
 
 def guardar_registro(gc: gspread.Client, sheet_id: str, nombre: str, campos: dict) -> None:
@@ -50,13 +58,14 @@ def guardar_registro(gc: gspread.Client, sheet_id: str, nombre: str, campos: dic
         campos.get("agua_extra_l"),
         campos.get("imc"),
         campos.get("pgc_pct"),
+        campos.get("bmr_kcal"),
     ]
     ws.append_row(fila)
 
 
 _COLUMNAS_NUMERICAS = [
     "Altura_cm", "Edad", "Peso_kg", "MasaGrasa_kg", "MME_kg", "GrasaVisceral",
-    "AguaTotal_L", "AguaIntra_L", "AguaExtra_L", "IMC", "PGC_pct",
+    "AguaTotal_L", "AguaIntra_L", "AguaExtra_L", "IMC", "PGC_pct", "BMR_kcal",
 ]
 
 

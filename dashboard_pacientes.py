@@ -33,6 +33,7 @@ import antropometria_parser
 import antropometria_store
 import apple_health
 import calorias_store
+import cruces_clinicos
 import enfoque_store
 import estudios_parser
 import estudios_store
@@ -476,6 +477,33 @@ def _render_estudios_clinicos():
                     st.caption("Sin resultados guardados en este estudio.")
 
 
+def _render_cruces_clinicos(data: dict | None):
+    """10 paneles que cruzan Estudios clínicos + InBody + wearable --
+    apoyo a la lectura clínica, nunca un diagnóstico ni una sustitución
+    del criterio del nutriólogo."""
+    st.caption(
+        "Cada panel junta señales de laboratorio, InBody y del reloj que por separado no dicen tanto. "
+        "Si un dato falta (no se ha subido ese estudio, InBody no lo trae, o el wearable no lo mide), "
+        "se muestra como \"sin dato\" -- nunca se inventa."
+    )
+    paneles = cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
+    for panel in paneles:
+        with st.expander(f"{panel['icono']} {panel['titulo']}"):
+            for m in panel["metricas"]:
+                etiqueta = m["etiqueta"]
+                if m.get("pendiente"):
+                    st.markdown(f"**{etiqueta}:** ⏳ pendiente (todavía no se captura en el sistema)")
+                    continue
+                valor = m["valor"]
+                unidad = m.get("unidad") or ""
+                if valor is None:
+                    st.markdown(f"**{etiqueta}:** sin dato")
+                else:
+                    st.markdown(f"**{etiqueta}:** {valor} {unidad}".rstrip())
+            if panel.get("nota"):
+                st.caption(panel["nota"])
+
+
 def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
     sea dentro de la pestaña "Composición corporal" del dashboard completo
@@ -528,6 +556,12 @@ def _render_composicion_corporal(data: dict | None):
                 agua_extra = col12.number_input("Agua extracelular (L)", value=float(draft.get("agua_extra_l") or 0), step=0.1)
                 imc = col13.number_input("IMC", value=float(draft.get("imc") or 0), step=0.1)
 
+                col14, _col15, _col16, _col17 = st.columns(4)
+                bmr = col14.number_input(
+                    "BMR -- metabolismo basal (kcal)", value=float(draft.get("bmr_kcal") or 0), step=10.0,
+                    help="No todos los reportes de InBody lo traen legible -- revisa contra el PDF si quedó en 0.",
+                )
+
                 if st.form_submit_button("Guardar en el historial", type="primary"):
                     campos_final = {
                         "fecha": fecha, "modelo": modelo, "sexo": sexo,
@@ -536,7 +570,7 @@ def _render_composicion_corporal(data: dict | None):
                         "mme_kg": mme or None, "grasa_visceral": int(grasa_visceral) or None,
                         "agua_total_l": agua_total or None, "agua_intra_l": agua_intra or None,
                         "agua_extra_l": agua_extra or None, "imc": imc or None,
-                        "pgc_pct": draft.get("pgc_pct"),
+                        "pgc_pct": draft.get("pgc_pct"), "bmr_kcal": bmr or None,
                     }
                     inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
                     st.session_state.pop(f"inbody_draft_{paciente}", None)
@@ -677,6 +711,9 @@ if not datos_json:
     st.divider()
     st.subheader("🔬 Estudios clínicos")
     _render_estudios_clinicos()
+    st.divider()
+    st.subheader("🔀 Cruces clínicos")
+    _render_cruces_clinicos(None)
     st.stop()
 
 try:
@@ -692,4 +729,5 @@ render_dashboard_body(
     analisis_ia_renderer=_render_analisis_ia, calorias_comidas_historial=historial_calorias,
     estudios_clinicos_renderer=_render_estudios_clinicos,
     calorias_renderer=_render_calorias_comidas, glucosa_renderer=_render_glucosa_libre,
+    cruces_clinicos_renderer=_render_cruces_clinicos,
 )

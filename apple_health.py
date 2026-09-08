@@ -465,6 +465,11 @@ def build_runtime_data(export_path: str, lookback_days: int = 90, wellness_days:
         "pasos_promedio_dia": pasos_promedio_dia,
         "minutos_ejercicio_promedio_dia": minutos_ejercicio_promedio_dia,
         "vo2max": vo2max,
+        # SpO2 y Training Status son propios de Garmin (por ahora) -- Apple
+        # Health sí trae SpO2 en algunos casos, pero todavía no se lee aquí.
+        "spo2_promedio": None,
+        "spo2_minimo": None,
+        "training_status": None,
     }
 
 

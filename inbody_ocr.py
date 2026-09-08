@@ -147,6 +147,7 @@ _RANGOS_PLAUSIBLES = {
     "agua_extra_l": (2, 30),
     "imc": (10, 70),
     "pgc_pct": (2, 70),
+    "bmr_kcal": (400, 5000),
 }
 
 
@@ -275,6 +276,19 @@ def parse_inbody_text(texto: str) -> dict:
             else _valor_de_fila(lineas, r"Agua\s*Extracelular|Extracellular\s*Water", primero=True)
         )
     imc = _valor_de_fila(lineas, r"^(IMC|BMI)\b")
+
+    # Tasa Metabólica Basal (BMR) -- NOTA: sin poder probarlo contra un
+    # reporte real que la traiga (los que se usaron para armar este lector
+    # no la incluían), así que se busca de forma flexible (etiqueta +
+    # número + "kcal" en cualquier parte del texto) en vez de asumir una
+    # posición fija -- si no calza con el formato real, se queda en None
+    # (nunca inventa un valor) y se revisa/corrige a mano como todo lo demás.
+    bmr_m = re.search(
+        r"(?:Tasa\s*Metab[oó]lica\s*Basal|Metabolismo\s*Basal|Basal\s*Metabolic\s*Rate|BMR)"
+        r"\D*?(\d{3,4}(?:[.,]\d+)?)\s*kcal",
+        texto, re.IGNORECASE,
+    )
+    bmr_kcal = _a_float(bmr_m.group(1)) if bmr_m else None
     # primero=True: cuando la línea del valor viene contaminada con la
     # sección de al lado (Grasa Segmental), el valor de PGC queda primero,
     # no al final.
@@ -331,6 +345,7 @@ def parse_inbody_text(texto: str) -> dict:
         "agua_extra_l": agua_extra,
         "imc": imc,
         "pgc_pct": pgc,
+        "bmr_kcal": bmr_kcal,
     }
 
     # Última red de seguridad: un valor físicamente imposible (IMC de 1,

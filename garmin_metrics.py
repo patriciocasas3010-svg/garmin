@@ -182,6 +182,91 @@ def fetch_nivel_estres(client, day: date) -> float | None:
     return None
 
 
+def _buscar_valor_recursivo(obj, *claves_contienen) -> float | None:
+    """Busca el primer número en cualquier nivel de un dict/list anidado
+    cuya llave contenga alguno de los textos dados (sin importar
+    mayúsculas) -- para endpoints de Garmin cuya forma exacta no está
+    documentada públicamente, en vez de asumir una ruta fija que puede
+    no coincidir con lo que regresa la cuenta real."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                if any(c.lower() in k.lower() for c in claves_contienen):
+                    return float(v)
+        for v in obj.values():
+            resultado = _buscar_valor_recursivo(v, *claves_contienen)
+            if resultado is not None:
+                return resultado
+    elif isinstance(obj, list):
+        for item in obj:
+            resultado = _buscar_valor_recursivo(item, *claves_contienen)
+            if resultado is not None:
+                return resultado
+    return None
+
+
+def _buscar_texto_recursivo(obj, *claves_contienen) -> str | None:
+    """Como _buscar_valor_recursivo pero para el primer texto (no
+    número) -- ej. la frase de Training Status ("PRODUCTIVE", etc.)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, str) and v.strip() and any(c.lower() in k.lower() for c in claves_contienen):
+                return v.strip()
+        for v in obj.values():
+            resultado = _buscar_texto_recursivo(v, *claves_contienen)
+            if resultado is not None:
+                return resultado
+    elif isinstance(obj, list):
+        for item in obj:
+            resultado = _buscar_texto_recursivo(item, *claves_contienen)
+            if resultado is not None:
+                return resultado
+    return None
+
+
+def fetch_vo2max(client, day: date) -> float | None:
+    """VO2 Max estimado por Garmin, si el reloj lo calcula (no todos lo
+    hacen) -- NOTA: sin poder probar esto contra una cuenta real de
+    Garmin, se busca el valor de forma flexible (cualquier llave que
+    contenga "vo2Max") en vez de asumir una ruta fija exacta, para no
+    tronar si el nombre del campo no es exactamente el esperado."""
+    try:
+        datos = client.get_max_metrics(day.isoformat())
+    except Exception:
+        return None
+    return _buscar_valor_recursivo(datos, "vo2max")
+
+
+def fetch_spo2(client, day: date) -> tuple[float | None, float | None]:
+    """(promedio, mínimo) de SpO2 (oxígeno en sangre) del día, medido
+    principalmente durante el sueño -- no todos los relojes lo miden.
+    NOTA: sin poder probar esto contra una cuenta real, busca de forma
+    flexible en vez de asumir una ruta fija exacta."""
+    try:
+        datos = client.get_spo2_data(day.isoformat())
+    except Exception:
+        return None, None
+    if not datos:
+        return None, None
+    promedio = _buscar_valor_recursivo(datos, "averagespo2", "avgspo2", "average_spo2")
+    minimo = _buscar_valor_recursivo(datos, "lowestspo2", "minspo2", "lowest_spo2")
+    return promedio, minimo
+
+
+def fetch_training_status(client, day: date) -> str | None:
+    """Frase de Training Status de Garmin (ej. "PRODUCTIVE", "PEAKING",
+    "RECOVERY") si el reloj lo calcula. NOTA: sin poder probar esto
+    contra una cuenta real, busca de forma flexible en vez de asumir una
+    ruta fija exacta."""
+    try:
+        datos = client.get_training_status(day.isoformat())
+    except Exception:
+        return None
+    if not datos:
+        return None
+    return _buscar_texto_recursivo(datos, "trainingstatusfeedbackphrase", "trainingstatus")
+
+
 # ---------------------------------------------------------------------------
 # Sueño, hidratación, desgaste físico (Body Battery) y recuperación
 # ---------------------------------------------------------------------------
@@ -713,6 +798,9 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
     calories_df = fetch_calories_series(client, start30, end)
     edad_fisica = fetch_fitness_age(client, end)
     nivel_estres = fetch_nivel_estres(client, end)
+    vo2max = fetch_vo2max(client, end)
+    spo2_promedio, spo2_minimo = fetch_spo2(client, end)
+    training_status = fetch_training_status(client, end)
 
     week_ago = pd.Timestamp(end - timedelta(days=7))
     wellness_window_start = pd.Timestamp(start30)
@@ -800,12 +888,15 @@ def build_runtime_data(client, lookback_days: int = 90, wellness_days: int = WEL
         "hidratacion_diaria": hidratacion_diaria,
         "edad_fisica": edad_fisica,
         "nivel_estres": nivel_estres,
-        # Pasos, minutos de ejercicio y VO2 Max son propios de Apple Health
-        # (por ahora) -- Garmin sí los tiene disponibles en Connect, pero
+        # Pasos y minutos de ejercicio son propios de Apple Health (por
+        # ahora) -- Garmin sí los tiene disponibles en Connect, pero
         # todavía no se leen aquí, quedan en None mientras tanto.
         "pasos_promedio_dia": None,
         "minutos_ejercicio_promedio_dia": None,
-        "vo2max": None,
+        "vo2max": vo2max,
+        "spo2_promedio": spo2_promedio,
+        "spo2_minimo": spo2_minimo,
+        "training_status": training_status,
     }
 
 
@@ -867,6 +958,7 @@ _SCALAR_KEYS = [
     "rhr_baseline", "rhr_today", "max_hr", "peor_caida_min",
     "edad_fisica", "nivel_estres",
     "pasos_promedio_dia", "minutos_ejercicio_promedio_dia", "vo2max",
+    "spo2_promedio", "spo2_minimo",
 ]
 
 _RESUMEN_MES_NUM_KEYS = [
@@ -896,7 +988,7 @@ def snapshot_to_json(data: dict) -> dict:
     out["rhr_series"] = _series_to_json(data["rhr_series"])
     out["hrv_series"] = _series_to_json(data["hrv_series"])
     out["readiness_series"] = _series_to_json(data["readiness_series"])
-    out["sleep_df"] = _df_to_json(data["sleep_df"], cols=["hours", "score"])
+    out["sleep_df"] = _df_to_json(data["sleep_df"], cols=["hours", "score", "deep_min", "rem_min"])
     out["hydration_df"] = _df_to_json(data["hydration_df"], cols=["value_l"])
     out["battery_df"] = _df_to_json(data["battery_df"])
     out["calories_df"] = _df_to_json(data["calories_df"])

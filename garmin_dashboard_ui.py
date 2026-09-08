@@ -539,6 +539,7 @@ def render_dashboard_body(
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
     analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
     estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
+    cruces_clinicos_renderer=None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -569,7 +570,12 @@ def render_dashboard_body(
 
     glucosa_renderer: función sin argumentos que dibuja la sección de
     Glucosa (FreeStyle Libre) -- si se pasa, se agrega dentro de la
-    pestaña 🚦 Alertas."""
+    pestaña 🚦 Alertas.
+
+    cruces_clinicos_renderer: función que recibe este mismo `data` y
+    dibuja los 10 paneles de cruces clínicos (labs + InBody + wearable,
+    definida en dashboard_pacientes.py) -- si se pasa, se agrega como su
+    propia pestaña 🔀, después de Estudios clínicos."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -610,6 +616,8 @@ def render_dashboard_body(
         etiquetas.append("🧬 Composición corporal")
     if estudios_clinicos_renderer is not None:
         etiquetas.append("🔬 Estudios clínicos")
+    if cruces_clinicos_renderer is not None:
+        etiquetas.append("🔀 Cruces clínicos")
     etiquetas += ["⚖️ Carga y Preparación", "🎯 Eficiencia y Zonas", "😴 Sueño y Bienestar", "🔥 Calorías", "🚦 Alertas"]
     tabs = st.tabs(etiquetas)
     tab_resumen = tabs[0]
@@ -622,6 +630,10 @@ def render_dashboard_body(
     if estudios_clinicos_renderer is not None:
         tab_estudios = tabs[idx]
         idx += 1
+    tab_cruces = None
+    if cruces_clinicos_renderer is not None:
+        tab_cruces = tabs[idx]
+        idx += 1
     tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas = tabs[idx:idx + 5]
 
     if tab_composicion is not None:
@@ -631,6 +643,10 @@ def render_dashboard_body(
     if tab_estudios is not None:
         with tab_estudios:
             estudios_clinicos_renderer()
+
+    if tab_cruces is not None:
+        with tab_cruces:
+            cruces_clinicos_renderer(data)
 
     # --- Resumen ---
     with tab_resumen:

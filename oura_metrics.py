@@ -441,4 +441,7 @@ def build_runtime_data(token: str, lookback_days: int = 90, wellness_days: int =
         "pasos_promedio_dia": None,
         "minutos_ejercicio_promedio_dia": None,
         "vo2max": None,
+        "spo2_promedio": None,
+        "spo2_minimo": None,
+        "training_status": None,
     }
