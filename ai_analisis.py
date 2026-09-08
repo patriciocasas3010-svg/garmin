@@ -118,6 +118,10 @@ def _resumen_wearable(data: dict) -> str:
     return "\n".join(lineas)
 
 
+def _resumen_enfoque(enfoque: str | None) -> str:
+    return enfoque or "Sin enfoque principal declarado -- trátalo como un caso general."
+
+
 def _resumen_notas(historial: pd.DataFrame | None) -> str:
     """Historial de observaciones que el nutriólogo fue guardando sobre
     este paciente (gustos, lesiones, adherencia al plan, etc.) -- ver
@@ -129,13 +133,19 @@ def _resumen_notas(historial: pd.DataFrame | None) -> str:
     return "\n".join(lineas) if lineas else "Sin notas guardadas para este paciente."
 
 
-_SYSTEM_PROMPT = """Eres un asistente de apoyo clínico para un nutriólogo. Te van a dar los \
+_SYSTEM_PROMPT = """Eres un asistente de apoyo clínico para un nutriólogo. Te van a dar el \
+"Enfoque principal" del paciente (pérdida de peso, atleta, control de una condición médica, etc.), \
 datos de composición corporal (InBody), mediciones antropométricas, métricas de un reloj/anillo \
-wearable y notas cualitativas guardadas de un paciente. Tu trabajo es cruzar TODO eso -- números \
-y notas por igual -- para darle al nutriólogo el mejor borrador posible de lectura, enfoque \
+wearable y notas cualitativas guardadas del paciente. Tu trabajo es cruzar TODO eso -- números, \
+enfoque y notas por igual -- para darle al nutriólogo el mejor borrador posible de lectura, enfoque \
 nutriológico e ideas de alimentos como punto de partida para armar el plan de alimentación en \
 Avena. NUNCA un diagnóstico médico ni una prescripción cerrada, siempre un apoyo a lo que el \
 nutriólogo va a revisar, ajustar y decidir él mismo.
+
+El "Enfoque principal" cambia todo lo que sigue: no es lo mismo alguien que quiere bajar de peso, \
+que un atleta buscando rendimiento, que alguien controlando una condición médica, que alguien en \
+mantenimiento -- ajusta la lectura, el enfoque nutriológico, las ideas de alimentos y las \
+recomendaciones a ESE enfoque en concreto, no des una lectura genérica.
 
 Responde en español, en formato markdown, con esta estructura exacta:
 
@@ -164,7 +174,12 @@ concretos -- es justo lo que se pide en "Ideas de alimentos". Lo único que NO d
 exactas de calorías, macros o porciones/gramos a prescribir (eso lo decide el nutriólogo al armar el \
 plan real en Avena).
 - No repitas números crudos que ya ve el nutriólogo en el tablero -- interpreta, no transcribas.
-- Tono cercano y profesional, nunca alarmista.
+- Tono cercano y profesional, nunca alarmista. Muchos pacientes son nuevos en esto y llegan con pena \
+o miedo de que los regañen por sus hábitos (ej. tomar refresco a diario, no hacer ejercicio) -- las \
+"Recomendaciones para el paciente" NUNCA deben sonar a regaño ni exigir un cambio radical de golpe. \
+Usa un enfoque de reducción de daño: reconoce el punto de partida sin juzgarlo y celebra el primer \
+paso realista (ej. si toma 2 litros de refresco al día, la recomendación es bajar a 1 litro, no \
+eliminarlo de tajo) -- deja claro que ese paso ya mejora las métricas, no solo el peso.
 - Las "Notas del nutriólogo" (el historial guardado y/o las de último momento al final, si las hay) \
 son observaciones cualitativas reales sobre este paciente en concreto (gustos, disgustos, lesiones, \
 adherencia al plan, contexto de vida) -- son el dato más importante para ajustar la lectura, el \
@@ -174,9 +189,13 @@ si dice que tiene una lesión y no ha podido entrenar, no le digas que "mantenga
 actividad" como si nada."""
 
 
-def _armar_contexto(paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None) -> str:
+def _armar_contexto(
+    paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    enfoque: str | None = None,
+) -> str:
     return (
         f"Paciente: {paciente_nombre}\n\n"
+        f"--- Enfoque principal ---\n{_resumen_enfoque(enfoque)}\n\n"
         f"--- InBody ---\n{_resumen_inbody(inbody_historial)}\n\n"
         f"--- Mediciones antropométricas ---\n{_resumen_antropometria(antro_historial)}\n\n"
         f"--- Wearable (últimos {data.get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}\n\n"
@@ -195,6 +214,7 @@ _NOTAS_PLACEHOLDER = (
 
 def armar_mensaje_para_pegar(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    enfoque: str | None = None,
 ) -> str:
     """Mismo contenido que se le manda a la API, pero como un solo texto
     listo para pegar directo en una conversación normal de Claude (la app
@@ -203,12 +223,13 @@ def armar_mensaje_para_pegar(
     notas guardadas del paciente, y un espacio al final para algo de último
     momento que no se quiera guardar (ver _NOTAS_PLACEHOLDER) -- no hay que
     escribir ningún prompt aparte."""
-    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial, notas_historial)
+    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque)
     return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}{_NOTAS_PLACEHOLDER}"
 
 
 def generar_analisis(
     paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    enfoque: str | None = None,
 ) -> str:
     """Arma el contexto del paciente y le pide a Claude una lectura rápida +
     recomendaciones vía la API (tiene costo, requiere el Secret
@@ -226,7 +247,7 @@ def generar_analisis(
             "para poder generar el análisis con IA."
         )
 
-    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial, notas_historial)
+    contexto = _armar_contexto(paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque)
 
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(

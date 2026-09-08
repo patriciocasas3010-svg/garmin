@@ -31,6 +31,7 @@ import ai_analisis
 import antropometria_parser
 import antropometria_store
 import apple_health
+import enfoque_store
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
@@ -177,6 +178,7 @@ fuente = fila.get("Fuente") or "Garmin"
 historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+enfoque_actual = enfoque_store.leer_enfoque(_gc(), st.secrets["SHEET_ID"], paciente)
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
@@ -207,6 +209,21 @@ col_notas, col_wearable = st.columns(2)
 
 with col_notas:
     with st.expander("📝 Notas del paciente"):
+        opciones_enfoque = enfoque_store.OPCIONES
+        indice_actual = opciones_enfoque.index(enfoque_actual) if enfoque_actual in opciones_enfoque else 0
+        enfoque_elegido = st.selectbox(
+            "Enfoque principal", opciones_enfoque, index=indice_actual, key=f"enfoque_select_{paciente}",
+            help="Ajusta el tono y las recomendaciones del análisis con IA a lo que de verdad importa "
+            "para este paciente (no es lo mismo alguien bajando de peso que un atleta o alguien "
+            "controlando una condición médica).",
+        )
+        if enfoque_elegido != enfoque_actual and st.button("Guardar enfoque", key=f"guardar_enfoque_{paciente}"):
+            enfoque_store.guardar_enfoque(_gc(), st.secrets["SHEET_ID"], paciente, enfoque_elegido)
+            st.cache_data.clear()
+            st.success("Enfoque guardado.")
+            st.rerun()
+
+        st.divider()
         st.caption(
             "Gustos, disgustos, lesiones, adherencia al plan, lo que sea -- se guardan con fecha y se "
             "incluyen solas en el análisis con IA."
@@ -410,7 +427,7 @@ def _render_analisis_ia(data: dict):
     )
 
     mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(
-        paciente, data, historial_inbody, historial_antro, historial_notas,
+        paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
     )
     st.download_button(
         "📄 Descargar para pegar en Claude (gratis)",
@@ -429,7 +446,7 @@ def _render_analisis_ia(data: dict):
             with st.spinner("Cruzando los datos del paciente..."):
                 try:
                     st.session_state[cache_key] = ai_analisis.generar_analisis(
-                        paciente, data, historial_inbody, historial_antro, historial_notas,
+                        paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
                     )
                 except Exception as e:
                     st.error(f"No se pudo generar el análisis: {e}")
