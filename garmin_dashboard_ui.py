@@ -537,7 +537,7 @@ def _riesgo_lesion(acwr, hrv_z):
 def render_dashboard_body(
     data: dict, composicion_corporal_renderer=None,
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
-    analisis_ia_renderer=None,
+    analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -1071,6 +1071,36 @@ def render_dashboard_body(
             st.metric(f"Total por actividades ({wellness_days}d)", f"{cal_activity_df['Calorías'].sum():.0f} kcal")
         else:
             st.info(f"No hay actividades con calorías registradas en los últimos {wellness_days} días.")
+
+        if calorias_comidas_historial is not None:
+            st.divider()
+            st.markdown("**Balance calórico (comidas vs. gastadas)**")
+            st.caption(
+                "Calorías comidas (captura manual) contra el total gastado ese día (reposo + "
+                "actividad) -- positivo es superávit, negativo es déficit."
+            )
+            if calorias_comidas_historial.empty:
+                st.info(
+                    "Todavía no se ha capturado ninguna caloría comida para este paciente "
+                    "(sección \"🍽️ Calorías comidas\" arriba del tablero)."
+                )
+            else:
+                df_bal = calorias_comidas_historial.copy()
+                df_bal["_fecha"] = pd.to_datetime(df_bal["Fecha"], dayfirst=True, errors="coerce")
+                df_bal = df_bal.dropna(subset=["_fecha"]).sort_values("_fecha")
+                df_bal["Gastadas"] = df_bal["_fecha"].map(calories_df["total_kcal"])
+                df_bal["Balance"] = df_bal["CaloriasComidas"] - df_bal["Gastadas"]
+                tabla = df_bal[["Fecha", "CaloriasComidas", "Gastadas", "Balance"]].rename(
+                    columns={"CaloriasComidas": "Comidas"}
+                ).iloc[::-1]
+                st.dataframe(tabla, width="stretch", hide_index=True)
+                balance_valido = df_bal["Balance"].dropna()
+                if not balance_valido.empty:
+                    st.metric(
+                        "Balance promedio", f"{balance_valido.mean():+.0f} kcal/día",
+                        help="Superávit (positivo) favorece ganar peso/músculo; déficit (negativo) "
+                        "favorece bajar de peso.",
+                    )
 
     # --- Alertas ---
     with tab_alertas:

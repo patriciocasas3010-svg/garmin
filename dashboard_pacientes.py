@@ -20,6 +20,7 @@ Ver PUBLICAR_DASHBOARD_PACIENTES.md para la guía paso a paso completa.
 
 import json
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import gspread
@@ -31,6 +32,7 @@ import ai_analisis
 import antropometria_parser
 import antropometria_store
 import apple_health
+import calorias_store
 import enfoque_store
 import garmin_metrics as gm
 import inbody_ocr
@@ -179,6 +181,7 @@ historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], pa
 historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 enfoque_actual = enfoque_store.leer_enfoque(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_calorias = calorias_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
@@ -266,6 +269,35 @@ with col_wearable:
                     st.rerun()
                 except Exception as e:
                     st.error(f"No se pudo leer o guardar el archivo: {e}")
+
+with st.expander("🍽️ Calorías comidas (captura manual)"):
+    st.caption(
+        "Ningún reloj/anillo mide cuánto comes -- captúralo tú o que te lo mande el paciente, un "
+        "número total por día. Con eso, en la pestaña 🔥 Calorías se ve el balance real (comidas "
+        "menos gastadas) día por día, no solo lo que gastó."
+    )
+    col_cal1, col_cal2, col_cal3 = st.columns([2, 2, 1])
+    with col_cal1:
+        fecha_calorias = st.date_input("Fecha", value=date.today(), key=f"fecha_calorias_{paciente}")
+    with col_cal2:
+        calorias_valor = st.number_input(
+            "Calorías comidas ese día", min_value=0, step=50, key=f"calorias_valor_{paciente}",
+        )
+    with col_cal3:
+        st.write("")
+        st.write("")
+        if st.button("Guardar", key=f"guardar_calorias_{paciente}", disabled=not calorias_valor):
+            calorias_store.guardar_calorias(_gc(), st.secrets["SHEET_ID"], paciente, fecha_calorias, calorias_valor)
+            st.cache_data.clear()
+            st.success("Calorías guardadas.")
+            st.rerun()
+
+    if not historial_calorias.empty:
+        with st.expander(f"Ver historial ({len(historial_calorias)})"):
+            st.dataframe(
+                historial_calorias.iloc[::-1].rename(columns={"Fecha": "Fecha", "CaloriasComidas": "Calorías comidas"}),
+                width="stretch", hide_index=True,
+            )
 
 def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
@@ -476,5 +508,5 @@ except Exception as e:
 render_dashboard_body(
     data, composicion_corporal_renderer=_render_composicion_corporal,
     inbody_historial=historial_inbody, paciente_nombre=paciente,
-    analisis_ia_renderer=_render_analisis_ia,
+    analisis_ia_renderer=_render_analisis_ia, calorias_comidas_historial=historial_calorias,
 )
