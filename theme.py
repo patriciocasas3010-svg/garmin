@@ -1,6 +1,6 @@
 """Identidad visual del dashboard -- marca "AURA" (Human Coherence
-System): fondo claro tipo "Clinical White" con acentos Bio-Charcoal /
-Aether Blue / Anthro-Terra, tipografía Syne (títulos) / Inter (texto) /
+System): fondo oscuro Bio-Charcoal con acentos Aether Blue / Anthro-
+Terra / Vital Red, tipografía Syne (títulos) / Inter (texto) /
 JetBrains Mono (cifras), y un símbolo propio (la Hélice Integrada: una
 "A" sin trazo horizontal, con dos ondas entrelazadas sobre una
 estructura rígida) en vez de un emoji genérico.
@@ -8,7 +8,9 @@ estructura rígida) en vez de un emoji genérico.
 Se aplica en las 4 apps (dashboard.py, dashboard_apple.py,
 dashboard_oura.py, dashboard_pacientes.py) llamando a apply_theme()
 justo después de st.set_page_config(), y render_header(...) en vez de
-st.title(...)."""
+st.title(...). El fondo oscuro real lo pone .streamlit/config.toml
+([theme] base="dark") -- aquí solo van tipografías, logo y los acentos
+que Streamlit no cubre con su theming nativo (tabs, alertas)."""
 
 import streamlit as st
 
@@ -19,15 +21,15 @@ BIO_CHARCOAL = "#121417"
 CLINICAL_WHITE = "#F8F9FA"
 AETHER_BLUE = "#2C5E8A"
 ANTHRO_TERRA = "#BCA38C"
+VITAL_RED = "#E63946"
 
-# Fondo claro (no el Bio-Charcoal dominante del brief completo) -- se
-# elige así a propósito para que tablas/gráficas sigan siendo legibles
-# en jornadas largas de consulta; Bio-Charcoal/Aether Blue quedan como
-# acentos (encabezados, tabs, botones) en vez de fondo de plataforma.
-INK = BIO_CHARCOAL
-INK_SOFT = "#5B6169"
-CREAM = CLINICAL_WHITE
-LINE = "#E3E5E8"
+# Fondo oscuro (Bio-Charcoal, puesto en .streamlit/config.toml) -- estos
+# son los colores de TEXTO/trazo que se ven bien sobre ese fondo, no los
+# hex "de marca" tal cual (ej. Aether Blue en texto pequeño se aclara un
+# poco para que se siga leyendo bien sobre Bio-Charcoal).
+INK = CLINICAL_WHITE
+INK_SOFT = "#9AA1AB"
+AETHER_BLUE_TEXT = "#5B9BD1"
 
 _LOGO_TEMPLATE = (
     '<svg viewBox="0 0 34 34" width="{size}" height="{size}" fill="none" '
@@ -50,8 +52,8 @@ def logo_svg(color: str = INK, size: int = 34) -> str:
 
 
 def apply_theme() -> None:
-    """Carga las tipografías de marca y recolorea tabs/acentos -- llamar una
-    sola vez, justo después de st.set_page_config()."""
+    """Carga las tipografías de marca y recolorea tabs/alertas/acentos --
+    llamar una sola vez, justo después de st.set_page_config()."""
     st.markdown(
         f"""
         <style>
@@ -63,10 +65,19 @@ def apply_theme() -> None:
         [data-testid="stMetricLabel"] {{ font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .04em; font-size: 0.75rem; }}
 
         .stTabs [data-baseweb="tab"], [data-testid="stTab"] {{ font-family: 'Inter', sans-serif; font-weight: 600; color: {INK_SOFT}; }}
-        .stTabs [aria-selected="true"], [data-testid="stTab"][aria-selected="true"] {{ color: {AETHER_BLUE} !important; }}
-        .stTabs [data-baseweb="tab-highlight"], .react-aria-SelectionIndicator {{ background-color: {AETHER_BLUE} !important; }}
+        .stTabs [aria-selected="true"], [data-testid="stTab"][aria-selected="true"] {{ color: {AETHER_BLUE_TEXT} !important; }}
+        .stTabs [data-baseweb="tab-highlight"], .react-aria-SelectionIndicator {{ background-color: {AETHER_BLUE_TEXT} !important; }}
 
         .stButton > button[kind="primary"] {{ background-color: {AETHER_BLUE}; border-color: {AETHER_BLUE}; }}
+
+        /* Vital Red -- rojo oficial de alerta/crítico (reemplaza el rojo
+        genérico de Streamlit en todo st.error, incluidas las banderas
+        rojas de Cruces clínicos y la tabla de Alertas). */
+        [data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {{
+            background-color: {VITAL_RED}26;
+            border-left: 3px solid {VITAL_RED};
+        }}
+        [data-testid="stAlertContentError"] {{ color: {VITAL_RED} !important; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -86,7 +97,7 @@ def render_header(titulo: str, subtitulo: str = "") -> None:
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
             {logo_svg(size=36)}
             <div>
-                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:{AETHER_BLUE};">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:{AETHER_BLUE_TEXT};">
                     {BRAND_NAME} &middot; {BRAND_TAGLINE}
                 </div>
                 <div style="font-family:'Syne',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.01em; color:{INK};">{titulo}</div>

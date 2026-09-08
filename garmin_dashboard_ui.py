@@ -16,20 +16,24 @@ import metabolic_calc as mc
 from resumen_pdf import build_resumen_pdf
 
 # ---------------------------------------------------------------------------
-# Paleta de marca "AURA" (Bio-Charcoal / Aether Blue / Anthro-Terra) --
-# BLUE (Aether Blue) es el acento primario/default; ORANGE (Anthro-Terra)
-# el acento cálido/humano; AQUA y VIOLET son dos tonos más de la misma
-# familia (azul claro y violeta espectral, de "Synthesis Luminescence")
-# para diferenciar series -- solo BLUE+ORANGE se combinan en la misma
-# gráfica (Body Battery, Calorías), y ese par ya tiene buen contraste de
-# luminancia para daltonismo.
+# Paleta de marca "AURA" sobre fondo oscuro Bio-Charcoal (ver theme.py /
+# .streamlit/config.toml) -- BLUE (Aether Blue) es el acento primario/
+# default; ORANGE (Anthro-Terra) el acento cálido/humano; AQUA y VIOLET
+# son dos tonos más de la misma familia (azul claro y violeta espectral,
+# de "Synthesis Luminescence") para diferenciar series -- solo BLUE+
+# ORANGE se combinan en la misma gráfica (Body Battery, Calorías), y ese
+# par ya tiene buen contraste de luminancia para daltonismo. Los grises
+# de texto/rejilla y el ZONE_RAMP están aclarados para leerse bien sobre
+# el fondo oscuro (nada queda tan tenue que se pierda contra #121417).
 # ---------------------------------------------------------------------------
 
-BLUE, ORANGE, AQUA, VIOLET = "#2C5E8A", "#BCA38C", "#5B8FB9", "#6B5CA5"
-STATUS_GOOD, STATUS_CRITICAL = "#2E7D46", "#C0392B"
-INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#121417", "#4B5157", "#8A9099"
-GRID_COLOR = "#E3E5E8"
-ZONE_RAMP = ["#D6E4EE", "#9FBFD6", "#5B8FB9", "#2C5E8A", "#173E5B"]  # Z1 (suave) -> Z5 (intenso)
+BLUE, ORANGE, AQUA, VIOLET = "#4A8FC2", "#BCA38C", "#5B8FB9", "#8C7BC4"
+VITAL_RED = "#E63946"
+STATUS_GOOD, STATUS_CRITICAL = "#3DAA6B", VITAL_RED
+INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#F8F9FA", "#B7BEC7", "#6E7580"
+GRID_COLOR = "#2A2E34"
+CHART_BG = "transparent"
+ZONE_RAMP = ["#3A5978", "#3F72A0", "#4A8FC2", "#63B3E0", "#9AD4F0"]  # Z1 (suave) -> Z5 (intenso)
 
 alt.themes.enable("none")
 
@@ -69,8 +73,9 @@ def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float 
     return (
         alt.layer(*layers)
         .properties(height=height)
+        .configure(background=CHART_BG)
         .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-        .configure_view(strokeWidth=0)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
     )
 
 
@@ -99,8 +104,9 @@ def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, hei
     return (
         alt.layer(bars, rule)
         .properties(height=height)
+        .configure(background=CHART_BG)
         .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-        .configure_view(strokeWidth=0)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
     )
 
 
@@ -120,8 +126,9 @@ def ranked_bar_chart(labels: list[str], values: list[float], value_title: str, c
             tooltip=[alt.Tooltip("categoria:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=max(120, height_per_bar * len(labels_sorted)))
+        .configure(background=CHART_BG)
         .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-        .configure_view(strokeWidth=0)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
     )
     return chart
 
@@ -138,8 +145,9 @@ def ordinal_bar_chart(labels: list[str], values: list[float], value_title: str, 
             tooltip=[alt.Tooltip("zona:N", title="Zona"), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=height)
+        .configure(background=CHART_BG)
         .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-        .configure_view(strokeWidth=0)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
     )
     return chart
 
@@ -169,8 +177,9 @@ def grouped_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("serie:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=height)
+        .configure(background=CHART_BG)
         .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-        .configure_view(strokeWidth=0)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
     )
     return chart
 
@@ -192,8 +201,9 @@ def stacked_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("serie:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=height)
+        .configure(background=CHART_BG)
         .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-        .configure_view(strokeWidth=0)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
     )
     return chart
 
