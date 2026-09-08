@@ -284,11 +284,14 @@ with col_wearable:
                 except Exception as e:
                     st.error(f"No se pudo leer o guardar el archivo: {e}")
 
-with st.expander("🍽️ Calorías comidas (captura manual)"):
+def _render_calorias_comidas():
+    """Captura manual de calorías comidas por día -- vive dentro de la
+    pestaña 🔥 Calorías (junto al balance comidas/gastadas), no como
+    sección aparte."""
     st.caption(
         "Ningún reloj/anillo mide cuánto comes -- captúralo tú o que te lo mande el paciente, un "
-        "número total por día. Con eso, en la pestaña 🔥 Calorías se ve el balance real (comidas "
-        "menos gastadas) día por día, no solo lo que gastó."
+        "número total por día. Con eso, abajo se ve el balance real (comidas menos gastadas) día "
+        "por día, no solo lo que gastó."
     )
     col_cal1, col_cal2, col_cal3 = st.columns([2, 2, 1])
     with col_cal1:
@@ -313,77 +316,164 @@ with st.expander("🍽️ Calorías comidas (captura manual)"):
                 width="stretch", hide_index=True,
             )
 
-with st.expander("🩸 Glucosa (FreeStyle Libre)"):
+
+def _render_glucosa_libre():
+    """Glucosa de FreeStyle Libre (vía LibreLinkUp) -- vive dentro de la
+    pestaña 🚦 Alertas, no como sección aparte."""
     if not st.secrets.get("LIBRE_EMAIL") or not st.secrets.get("LIBRE_PASSWORD"):
         st.info(
             "Para usar esto, el paciente primero te agrega como \"seguidor\" en la app LibreLinkUp "
             "(con tu correo), y tú configuras los Secrets `LIBRE_EMAIL`/`LIBRE_PASSWORD` en Streamlit "
             "Cloud (Settings -> Secrets) con TU cuenta de LibreLinkUp -- no la del paciente."
         )
-    else:
-        vinculo_actual = libre_store.leer_vinculo(_gc(), st.secrets["SHEET_ID"], paciente)
-        try:
-            libre_pacientes = libre_metrics.listar_pacientes(_libre_client())
-        except Exception as e:
-            libre_pacientes = []
-            st.error(f"No se pudo conectar con LibreLinkUp: {e}")
+        return
 
-        if libre_pacientes:
-            nombres_libre = [p["nombre"] for p in libre_pacientes]
-            indice_actual = 0
-            if vinculo_actual:
-                for i, p in enumerate(libre_pacientes):
-                    if str(p["id"]) == str(vinculo_actual["id"]):
-                        indice_actual = i
-                        break
-            elegido = st.selectbox(
-                "¿Cuál paciente de LibreLinkUp es este paciente?", nombres_libre, index=indice_actual,
-                key=f"libre_select_{paciente}",
+    vinculo_actual = libre_store.leer_vinculo(_gc(), st.secrets["SHEET_ID"], paciente)
+    try:
+        libre_pacientes = libre_metrics.listar_pacientes(_libre_client())
+    except Exception as e:
+        libre_pacientes = []
+        st.error(f"No se pudo conectar con LibreLinkUp: {e}")
+
+    if not libre_pacientes:
+        st.info("No se encontró ningún paciente compartiendo su glucosa contigo todavía en LibreLinkUp.")
+        return
+
+    nombres_libre = [p["nombre"] for p in libre_pacientes]
+    indice_actual = 0
+    if vinculo_actual:
+        for i, p in enumerate(libre_pacientes):
+            if str(p["id"]) == str(vinculo_actual["id"]):
+                indice_actual = i
+                break
+    elegido = st.selectbox(
+        "¿Cuál paciente de LibreLinkUp es este paciente?", nombres_libre, index=indice_actual,
+        key=f"libre_select_{paciente}",
+    )
+    libre_elegido = libre_pacientes[nombres_libre.index(elegido)]
+    if not vinculo_actual or str(vinculo_actual["id"]) != str(libre_elegido["id"]):
+        if st.button("Vincular", key=f"libre_vincular_{paciente}"):
+            libre_store.guardar_vinculo(
+                _gc(), st.secrets["SHEET_ID"], paciente, libre_elegido["id"], libre_elegido["nombre"],
             )
-            libre_elegido = libre_pacientes[nombres_libre.index(elegido)]
-            if not vinculo_actual or str(vinculo_actual["id"]) != str(libre_elegido["id"]):
-                if st.button("Vincular", key=f"libre_vincular_{paciente}"):
-                    libre_store.guardar_vinculo(
-                        _gc(), st.secrets["SHEET_ID"], paciente, libre_elegido["id"], libre_elegido["nombre"],
-                    )
-                    st.cache_data.clear()
-                    st.success("Vinculado.")
-                    st.rerun()
-            else:
+            st.cache_data.clear()
+            st.success("Vinculado.")
+            st.rerun()
+        return
+
+    try:
+        glucosa = libre_metrics.build_glucosa_data(_libre_client(), libre_elegido["id"])
+    except Exception as e:
+        glucosa = None
+        st.error(f"No se pudo leer la glucosa de este paciente: {e}")
+
+    if glucosa:
+        g1, g2, g3 = st.columns(3)
+        g1.metric(
+            "Glucosa actual",
+            f"{glucosa['glucosa_actual']:.0f} mg/dL" if glucosa.get("glucosa_actual") is not None else "N/D",
+        )
+        g2.metric(
+            "Promedio (12h)",
+            f"{glucosa['glucosa_promedio_12h']:.0f} mg/dL" if glucosa.get("glucosa_promedio_12h") is not None else "N/D",
+        )
+        g3.metric(
+            "Tiempo en rango (70-180)",
+            f"{glucosa['pct_tiempo_en_rango_12h']:.0f}%" if glucosa.get("pct_tiempo_en_rango_12h") is not None else "N/D",
+        )
+        st.caption(
+            f"Picos altos (>180): {glucosa.get('picos_altos_12h', 0)} -- "
+            f"Picos bajos (<70): {glucosa.get('picos_bajos_12h', 0)} -- "
+            f"últimas {glucosa.get('num_lecturas_12h', 0)} lecturas."
+        )
+        serie_12h = glucosa.get("serie_12h") or {}
+        if serie_12h:
+            serie = pd.Series(serie_12h, name="mg/dL")
+            serie.index = pd.to_datetime(serie.index)
+            st.line_chart(serie.sort_index())
+
+
+def _render_estudios_clinicos():
+    """Estudios clínicos (sangre, orina, etc.) -- sección propia,
+    independiente de Composición corporal."""
+    st.caption(
+        "Sube el PDF del laboratorio -- por ahora lee automático SYNLAB/MédicaSur y Chopo (los más "
+        "comunes). Si llega uno de otro laboratorio, avisa para agregarlo. Es gratis, no usa ninguna API de pago."
+    )
+
+    with st.expander("Subir nuevo estudio"):
+        archivo_estudio = st.file_uploader(
+            "PDF del estudio", type=["pdf"], key=f"estudio_upload_{paciente}",
+        )
+        if archivo_estudio is not None and st.button("Leer estudio", key=f"estudio_leer_{paciente}"):
+            with st.spinner("Leyendo el estudio..."):
                 try:
-                    glucosa = libre_metrics.build_glucosa_data(_libre_client(), libre_elegido["id"])
+                    datos = estudios_parser.extraer_estudio(archivo_estudio.getvalue())
+                    st.session_state[f"estudio_draft_{paciente}"] = datos
                 except Exception as e:
-                    glucosa = None
-                    st.error(f"No se pudo leer la glucosa de este paciente: {e}")
+                    st.error(f"No se pudo leer el estudio: {e}")
 
-                if glucosa:
-                    g1, g2, g3 = st.columns(3)
-                    g1.metric(
-                        "Glucosa actual",
-                        f"{glucosa['glucosa_actual']:.0f} mg/dL" if glucosa.get("glucosa_actual") is not None else "N/D",
-                    )
-                    g2.metric(
-                        "Promedio (12h)",
-                        f"{glucosa['glucosa_promedio_12h']:.0f} mg/dL" if glucosa.get("glucosa_promedio_12h") is not None else "N/D",
-                    )
-                    g3.metric(
-                        "Tiempo en rango (70-180)",
-                        f"{glucosa['pct_tiempo_en_rango_12h']:.0f}%" if glucosa.get("pct_tiempo_en_rango_12h") is not None else "N/D",
-                    )
-                    st.caption(
-                        f"Picos altos (>180): {glucosa.get('picos_altos_12h', 0)} -- "
-                        f"Picos bajos (<70): {glucosa.get('picos_bajos_12h', 0)} -- "
-                        f"últimas {glucosa.get('num_lecturas_12h', 0)} lecturas."
-                    )
-                    serie_12h = glucosa.get("serie_12h") or {}
-                    if serie_12h:
-                        serie = pd.Series(serie_12h, name="mg/dL")
-                        serie.index = pd.to_datetime(serie.index)
-                        st.line_chart(serie.sort_index())
-        else:
-            st.info(
-                "No se encontró ningún paciente compartiendo su glucosa contigo todavía en LibreLinkUp."
+        draft_estudio = st.session_state.get(f"estudio_draft_{paciente}")
+        if draft_estudio is not None:
+            st.caption("Revisa y corrige antes de guardar -- la lectura automática puede tener errores.")
+            col_fecha, col_lab = st.columns(2)
+            fecha_estudio = col_fecha.text_input(
+                "Fecha (DD.MM.AAAA)", value=draft_estudio.get("fecha") or "", key=f"estudio_fecha_{paciente}",
             )
+            laboratorio_estudio = col_lab.text_input(
+                "Laboratorio", value=draft_estudio.get("laboratorio") or "", key=f"estudio_lab_{paciente}",
+            )
+
+            df_resultados = pd.DataFrame(draft_estudio.get("resultados") or [])
+            for col in ["prueba", "resultado", "unidad", "rango_min", "rango_max", "estado"]:
+                if col not in df_resultados.columns:
+                    df_resultados[col] = None
+
+            df_editado = st.data_editor(
+                df_resultados[["prueba", "resultado", "unidad", "rango_min", "rango_max", "estado"]],
+                num_rows="dynamic", width="stretch", key=f"estudio_editor_{paciente}",
+                column_config={
+                    "prueba": "Prueba", "resultado": "Resultado", "unidad": "Unidad",
+                    "rango_min": "Rango mín.", "rango_max": "Rango máx.",
+                    "estado": st.column_config.SelectboxColumn(
+                        "Estado", options=["bajo", "normal", "alto", "sin_dato"],
+                    ),
+                },
+            )
+
+            if st.button("Guardar estudio", key=f"estudio_guardar_{paciente}", type="primary"):
+                estudio_final = {
+                    "fecha": fecha_estudio,
+                    "laboratorio": laboratorio_estudio,
+                    "resultados": df_editado.to_dict("records"),
+                }
+                estudios_store.guardar_estudio(_gc(), st.secrets["SHEET_ID"], paciente, estudio_final)
+                st.session_state.pop(f"estudio_draft_{paciente}", None)
+                st.cache_data.clear()
+                st.success("Estudio guardado -- se agregó al historial de este paciente.")
+                st.rerun()
+
+    if not historial_estudios:
+        st.info("Este paciente todavía no tiene estudios clínicos guardados.")
+    else:
+        _ICONO_ESTADO = {"bajo": "🔵 Bajo", "alto": "🔴 Alto", "normal": "🟢 Normal", "sin_dato": "—"}
+        for estudio in reversed(historial_estudios):
+            resultados = estudio.get("resultados") or []
+            etiqueta = f"{estudio.get('fecha') or 'sin fecha'} -- {estudio.get('laboratorio') or 'laboratorio sin especificar'} ({len(resultados)} pruebas)"
+            with st.expander(etiqueta):
+                if resultados:
+                    df_mostrar = pd.DataFrame(resultados)
+                    df_mostrar["Estado"] = df_mostrar.get("estado", pd.Series(dtype=str)).map(
+                        lambda e: _ICONO_ESTADO.get(e, "—")
+                    )
+                    columnas = [c for c in ["prueba", "resultado", "unidad", "Estado"] if c in df_mostrar.columns or c == "Estado"]
+                    st.dataframe(
+                        df_mostrar[columnas].rename(columns={"prueba": "Prueba", "resultado": "Resultado", "unidad": "Unidad"}),
+                        width="stretch", hide_index=True,
+                    )
+                else:
+                    st.caption("Sin resultados guardados en este estudio.")
+
 
 def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
@@ -525,86 +615,6 @@ def _render_composicion_corporal(data: dict | None):
 
     render_antropometria_section(historial_antro)
 
-    st.divider()
-    st.subheader("🩺 Estudios clínicos (sangre, orina, etc.)")
-    st.caption(
-        "Sube el PDF del laboratorio -- por ahora lee automático SYNLAB/MédicaSur y Chopo (los más "
-        "comunes). Si llega uno de otro laboratorio, avisa para agregarlo. Es gratis, no usa ninguna API de pago."
-    )
-
-    with st.expander("Subir nuevo estudio"):
-        archivo_estudio = st.file_uploader(
-            "PDF del estudio", type=["pdf"], key=f"estudio_upload_{paciente}",
-        )
-        if archivo_estudio is not None and st.button("Leer estudio", key=f"estudio_leer_{paciente}"):
-            with st.spinner("Leyendo el estudio..."):
-                try:
-                    datos = estudios_parser.extraer_estudio(archivo_estudio.getvalue())
-                    st.session_state[f"estudio_draft_{paciente}"] = datos
-                except Exception as e:
-                    st.error(f"No se pudo leer el estudio: {e}")
-
-        draft_estudio = st.session_state.get(f"estudio_draft_{paciente}")
-        if draft_estudio is not None:
-            st.caption("Revisa y corrige antes de guardar -- la lectura automática puede tener errores.")
-            col_fecha, col_lab = st.columns(2)
-            fecha_estudio = col_fecha.text_input(
-                "Fecha (DD.MM.AAAA)", value=draft_estudio.get("fecha") or "", key=f"estudio_fecha_{paciente}",
-            )
-            laboratorio_estudio = col_lab.text_input(
-                "Laboratorio", value=draft_estudio.get("laboratorio") or "", key=f"estudio_lab_{paciente}",
-            )
-
-            df_resultados = pd.DataFrame(draft_estudio.get("resultados") or [])
-            for col in ["prueba", "resultado", "unidad", "rango_min", "rango_max", "estado"]:
-                if col not in df_resultados.columns:
-                    df_resultados[col] = None
-
-            df_editado = st.data_editor(
-                df_resultados[["prueba", "resultado", "unidad", "rango_min", "rango_max", "estado"]],
-                num_rows="dynamic", width="stretch", key=f"estudio_editor_{paciente}",
-                column_config={
-                    "prueba": "Prueba", "resultado": "Resultado", "unidad": "Unidad",
-                    "rango_min": "Rango mín.", "rango_max": "Rango máx.",
-                    "estado": st.column_config.SelectboxColumn(
-                        "Estado", options=["bajo", "normal", "alto", "sin_dato"],
-                    ),
-                },
-            )
-
-            if st.button("Guardar estudio", key=f"estudio_guardar_{paciente}", type="primary"):
-                estudio_final = {
-                    "fecha": fecha_estudio,
-                    "laboratorio": laboratorio_estudio,
-                    "resultados": df_editado.to_dict("records"),
-                }
-                estudios_store.guardar_estudio(_gc(), st.secrets["SHEET_ID"], paciente, estudio_final)
-                st.session_state.pop(f"estudio_draft_{paciente}", None)
-                st.cache_data.clear()
-                st.success("Estudio guardado -- se agregó al historial de este paciente.")
-                st.rerun()
-
-    if not historial_estudios:
-        st.info("Este paciente todavía no tiene estudios clínicos guardados.")
-    else:
-        _ICONO_ESTADO = {"bajo": "🔵 Bajo", "alto": "🔴 Alto", "normal": "🟢 Normal", "sin_dato": "—"}
-        for estudio in reversed(historial_estudios):
-            resultados = estudio.get("resultados") or []
-            etiqueta = f"{estudio.get('fecha') or 'sin fecha'} -- {estudio.get('laboratorio') or 'laboratorio sin especificar'} ({len(resultados)} pruebas)"
-            with st.expander(etiqueta):
-                if resultados:
-                    df_mostrar = pd.DataFrame(resultados)
-                    df_mostrar["Estado"] = df_mostrar.get("estado", pd.Series(dtype=str)).map(
-                        lambda e: _ICONO_ESTADO.get(e, "—")
-                    )
-                    columnas = [c for c in ["prueba", "resultado", "unidad", "Estado"] if c in df_mostrar.columns or c == "Estado"]
-                    st.dataframe(
-                        df_mostrar[columnas].rename(columns={"prueba": "Prueba", "resultado": "Resultado", "unidad": "Unidad"}),
-                        width="stretch", hide_index=True,
-                    )
-                else:
-                    st.caption("Sin resultados guardados en este estudio.")
-
 
 def _render_analisis_ia(data: dict):
     """Lectura rápida + recomendaciones cruzando InBody, Antropometría y
@@ -663,6 +673,9 @@ if not datos_json:
     )
     st.divider()
     _render_composicion_corporal(None)
+    st.divider()
+    st.subheader("🔬 Estudios clínicos")
+    _render_estudios_clinicos()
     st.stop()
 
 try:
@@ -676,4 +689,6 @@ render_dashboard_body(
     data, composicion_corporal_renderer=_render_composicion_corporal,
     inbody_historial=historial_inbody, paciente_nombre=paciente,
     analisis_ia_renderer=_render_analisis_ia, calorias_comidas_historial=historial_calorias,
+    estudios_clinicos_renderer=_render_estudios_clinicos,
+    calorias_renderer=_render_calorias_comidas, glucosa_renderer=_render_glucosa_libre,
 )

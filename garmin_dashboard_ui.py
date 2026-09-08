@@ -538,6 +538,7 @@ def render_dashboard_body(
     data: dict, composicion_corporal_renderer=None,
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
     analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
+    estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -555,7 +556,20 @@ def render_dashboard_body(
     análisis/recomendaciones generados con IA (definida en
     dashboard_pacientes.py, que es quien tiene acceso a InBody/Antropometría
     y al Secret de la API de Claude) -- si se pasa, se agrega al final de
-    la pestaña Resumen."""
+    la pestaña Resumen.
+
+    estudios_clinicos_renderer: función sin argumentos que dibuja la
+    sección de Estudios clínicos (definida en dashboard_pacientes.py) --
+    si se pasa, se agrega como su propia pestaña 🔬, independiente de
+    Composición corporal.
+
+    calorias_renderer: función sin argumentos que dibuja la captura manual
+    de calorías comidas -- si se pasa, se agrega dentro de la pestaña
+    🔥 Calorías (antes del balance comidas/gastadas).
+
+    glucosa_renderer: función sin argumentos que dibuja la sección de
+    Glucosa (FreeStyle Libre) -- si se pasa, se agrega dentro de la
+    pestaña 🚦 Alertas."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -594,6 +608,8 @@ def render_dashboard_body(
     etiquetas = ["📋 Resumen"]
     if composicion_corporal_renderer is not None:
         etiquetas.append("🧬 Composición corporal")
+    if estudios_clinicos_renderer is not None:
+        etiquetas.append("🔬 Estudios clínicos")
     etiquetas += ["⚖️ Carga y Preparación", "🎯 Eficiencia y Zonas", "😴 Sueño y Bienestar", "🔥 Calorías", "🚦 Alertas"]
     tabs = st.tabs(etiquetas)
     tab_resumen = tabs[0]
@@ -602,11 +618,19 @@ def render_dashboard_body(
     if composicion_corporal_renderer is not None:
         tab_composicion = tabs[idx]
         idx += 1
+    tab_estudios = None
+    if estudios_clinicos_renderer is not None:
+        tab_estudios = tabs[idx]
+        idx += 1
     tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas = tabs[idx:idx + 5]
 
     if tab_composicion is not None:
         with tab_composicion:
             composicion_corporal_renderer(data)
+
+    if tab_estudios is not None:
+        with tab_estudios:
+            estudios_clinicos_renderer()
 
     # --- Resumen ---
     with tab_resumen:
@@ -1072,18 +1096,20 @@ def render_dashboard_body(
         else:
             st.info(f"No hay actividades con calorías registradas en los últimos {wellness_days} días.")
 
+        if calorias_renderer is not None:
+            st.divider()
+            st.markdown("**🍽️ Calorías comidas**")
+            calorias_renderer()
+
         if calorias_comidas_historial is not None:
             st.divider()
             st.markdown("**Balance calórico (comidas vs. gastadas)**")
             st.caption(
-                "Calorías comidas (captura manual) contra el total gastado ese día (reposo + "
-                "actividad) -- positivo es superávit, negativo es déficit."
+                "Calorías comidas contra el total gastado ese día (reposo + actividad) -- "
+                "positivo es superávit, negativo es déficit."
             )
             if calorias_comidas_historial.empty:
-                st.info(
-                    "Todavía no se ha capturado ninguna caloría comida para este paciente "
-                    "(sección \"🍽️ Calorías comidas\" arriba del tablero)."
-                )
+                st.info("Todavía no se ha capturado ninguna caloría comida para este paciente (arriba).")
             else:
                 df_bal = calorias_comidas_historial.copy()
                 df_bal["_fecha"] = pd.to_datetime(df_bal["Fecha"], dayfirst=True, errors="coerce")
@@ -1137,3 +1163,8 @@ def render_dashboard_body(
             "El umbral del Estatus de Tono Vagal usa 'caída FC < 20 lpm/min' interpretado como una caída "
             "promedio menor a 20 lpm por minuto en los primeros 2 minutos post-esfuerzo."
         )
+
+        if glucosa_renderer is not None:
+            st.divider()
+            st.subheader("🩸 Glucosa (FreeStyle Libre)")
+            glucosa_renderer()
