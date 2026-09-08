@@ -490,6 +490,15 @@ def _render_cruces_clinicos(data: dict | None):
     _COLS_POR_FILA = 3
     for panel in paneles:
         with st.expander(f"{panel['icono']} {panel['titulo']}"):
+            resumen = panel.get("resumen")
+            if resumen:
+                st.markdown(f"**🧭 Diagnóstico integrado:** {resumen['diagnostico']}")
+                if resumen.get("alerta"):
+                    st.error(f"🚩 **Bandera roja / alerta:** {resumen['alerta']}")
+                else:
+                    st.success("✅ **Bandera roja / alerta:** sin hallazgos prioritarios con los datos disponibles.")
+                st.info(f"🎯 **Pauta sugerida:** {resumen['pauta']}")
+                st.divider()
             metricas = panel["metricas"]
             for inicio in range(0, len(metricas), _COLS_POR_FILA):
                 fila = metricas[inicio:inicio + _COLS_POR_FILA]
