@@ -13,25 +13,33 @@
       <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="silverBevel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#E4E7EB"/>
+      <stop offset="55%" stop-color="#9CA3AD"/>
+      <stop offset="100%" stop-color="#DEE1E5"/>
+    </linearGradient>
   </defs>
 
-  <!-- Isotipo: "A" sin travesaño recto; 3 ondas iridiscentes forman la
-       barra horizontal, con un destello sutil sobre el vértice. Triángulo
-       ancho y de esquinas rectas (miter/square), no redondeado. -->
+  <!-- Isotipo: "A" sin travesaño recto; ondas gruesas tipo cinta forman
+       la barra horizontal, con un destello sutil sobre el vértice.
+       Triángulo ancho, robusto, de esquinas rectas (miter/square). -->
   <g>
-    <path d="M2,112 L58,22 L114,112" fill="none" stroke="url(#silver)"
-          stroke-width="7.5" stroke-linecap="square" stroke-linejoin="miter"/>
+    <path d="M2,112 L58,22 L114,112" fill="none" stroke="url(#silverBevel)"
+          stroke-width="16" stroke-linecap="square" stroke-linejoin="miter"/>
 
-    <circle cx="58" cy="18" r="11" fill="url(#flare)"/>
-    <path d="M49,14 Q58,5 67,14" fill="none" stroke="#FFFFFF" stroke-width="1.6"
+    <circle cx="58" cy="18" r="12" fill="url(#flare)"/>
+    <path d="M47,13 Q58,2 69,13" fill="none" stroke="#FFFFFF" stroke-width="2"
           stroke-linecap="round" opacity="0.85"/>
 
-    <path d="M31,64 Q45,51 58,62 Q71,73 85,60" fill="none" stroke="url(#iridescent)"
-          stroke-width="3.4" stroke-linecap="round"/>
-    <path d="M29,73 Q44,62 58,72 Q72,82 87,69" fill="none" stroke="url(#iridescent)"
-          stroke-width="3.4" stroke-linecap="round" opacity="0.75"/>
-    <path d="M27,82 Q43,73 58,81 Q73,89 89,77" fill="none" stroke="url(#iridescent)"
-          stroke-width="3.4" stroke-linecap="round" opacity="0.5"/>
+    <path d="M22,63 Q42,45 58,60 Q74,75 94,57" fill="none" stroke="url(#iridescent)"
+          stroke-width="10" stroke-linecap="round"/>
+    <path d="M25,60 Q45,42 61,57" fill="none" stroke="#FFFFFF" stroke-width="2.5"
+          stroke-linecap="round" opacity="0.35"/>
+    <path d="M19,75 Q40,59 58,73 Q76,87 97,69" fill="none" stroke="url(#iridescent)"
+          stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+    <path d="M16,87 Q38,73 58,86 Q78,99 100,81" fill="none" stroke="url(#iridescent)"
+          stroke-width="10" stroke-linecap="round" opacity="0.7"/>
   </g>
 
   <!-- Wordmark + tagline -->
