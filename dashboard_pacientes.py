@@ -37,6 +37,8 @@ import enfoque_store
 import garmin_metrics as gm
 import inbody_ocr
 import inbody_store
+import libre_metrics
+import libre_store
 import notas_store
 from garmin_dashboard_ui import (
     render_antropometria_section,
@@ -93,6 +95,15 @@ def _gc() -> gspread.Client:
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
+
+
+@st.cache_resource(ttl=3600)
+def _libre_client():
+    """Una sola sesión de LibreLinkUp por hora para toda la app -- es TU
+    cuenta (la que sigue a tus pacientes), no una por paciente, así que
+    no hace falta iniciar sesión de nuevo cada vez que cambias de
+    paciente en el dashboard."""
+    return libre_metrics.conectar(st.secrets.get("LIBRE_EMAIL"), st.secrets.get("LIBRE_PASSWORD"))
 
 
 def _worksheet():
@@ -297,6 +308,78 @@ with st.expander("🍽️ Calorías comidas (captura manual)"):
             st.dataframe(
                 historial_calorias.iloc[::-1].rename(columns={"Fecha": "Fecha", "CaloriasComidas": "Calorías comidas"}),
                 width="stretch", hide_index=True,
+            )
+
+with st.expander("🩸 Glucosa (FreeStyle Libre)"):
+    if not st.secrets.get("LIBRE_EMAIL") or not st.secrets.get("LIBRE_PASSWORD"):
+        st.info(
+            "Para usar esto, el paciente primero te agrega como \"seguidor\" en la app LibreLinkUp "
+            "(con tu correo), y tú configuras los Secrets `LIBRE_EMAIL`/`LIBRE_PASSWORD` en Streamlit "
+            "Cloud (Settings -> Secrets) con TU cuenta de LibreLinkUp -- no la del paciente."
+        )
+    else:
+        vinculo_actual = libre_store.leer_vinculo(_gc(), st.secrets["SHEET_ID"], paciente)
+        try:
+            libre_pacientes = libre_metrics.listar_pacientes(_libre_client())
+        except Exception as e:
+            libre_pacientes = []
+            st.error(f"No se pudo conectar con LibreLinkUp: {e}")
+
+        if libre_pacientes:
+            nombres_libre = [p["nombre"] for p in libre_pacientes]
+            indice_actual = 0
+            if vinculo_actual:
+                for i, p in enumerate(libre_pacientes):
+                    if str(p["id"]) == str(vinculo_actual["id"]):
+                        indice_actual = i
+                        break
+            elegido = st.selectbox(
+                "¿Cuál paciente de LibreLinkUp es este paciente?", nombres_libre, index=indice_actual,
+                key=f"libre_select_{paciente}",
+            )
+            libre_elegido = libre_pacientes[nombres_libre.index(elegido)]
+            if not vinculo_actual or str(vinculo_actual["id"]) != str(libre_elegido["id"]):
+                if st.button("Vincular", key=f"libre_vincular_{paciente}"):
+                    libre_store.guardar_vinculo(
+                        _gc(), st.secrets["SHEET_ID"], paciente, libre_elegido["id"], libre_elegido["nombre"],
+                    )
+                    st.cache_data.clear()
+                    st.success("Vinculado.")
+                    st.rerun()
+            else:
+                try:
+                    glucosa = libre_metrics.build_glucosa_data(_libre_client(), libre_elegido["id"])
+                except Exception as e:
+                    glucosa = None
+                    st.error(f"No se pudo leer la glucosa de este paciente: {e}")
+
+                if glucosa:
+                    g1, g2, g3 = st.columns(3)
+                    g1.metric(
+                        "Glucosa actual",
+                        f"{glucosa['glucosa_actual']:.0f} mg/dL" if glucosa.get("glucosa_actual") is not None else "N/D",
+                    )
+                    g2.metric(
+                        "Promedio (12h)",
+                        f"{glucosa['glucosa_promedio_12h']:.0f} mg/dL" if glucosa.get("glucosa_promedio_12h") is not None else "N/D",
+                    )
+                    g3.metric(
+                        "Tiempo en rango (70-180)",
+                        f"{glucosa['pct_tiempo_en_rango_12h']:.0f}%" if glucosa.get("pct_tiempo_en_rango_12h") is not None else "N/D",
+                    )
+                    st.caption(
+                        f"Picos altos (>180): {glucosa.get('picos_altos_12h', 0)} -- "
+                        f"Picos bajos (<70): {glucosa.get('picos_bajos_12h', 0)} -- "
+                        f"últimas {glucosa.get('num_lecturas_12h', 0)} lecturas."
+                    )
+                    serie_12h = glucosa.get("serie_12h") or {}
+                    if serie_12h:
+                        serie = pd.Series(serie_12h, name="mg/dL")
+                        serie.index = pd.to_datetime(serie.index)
+                        st.line_chart(serie.sort_index())
+        else:
+            st.info(
+                "No se encontró ningún paciente compartiendo su glucosa contigo todavía en LibreLinkUp."
             )
 
 def _render_composicion_corporal(data: dict | None):
