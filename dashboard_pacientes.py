@@ -477,6 +477,24 @@ def _render_estudios_clinicos():
                     st.caption("Sin resultados guardados en este estudio.")
 
 
+def _calcular_paneles_cruces(data: dict | None):
+    return cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
+
+
+def _render_alertas_cruces(data: dict | None):
+    """Solo las banderas rojas activas de los 10 paneles de Cruces
+    clínicos -- para que salten a la vista en Alertas sin tener que
+    abrir la pestaña de Cruces clínicos panel por panel."""
+    paneles = _calcular_paneles_cruces(data)
+    con_bandera = [p for p in paneles if p.get("resumen") and p["resumen"].get("alerta")]
+    if not con_bandera:
+        st.success("✅ Sin banderas rojas activas en los cruces clínicos por ahora.")
+        return
+    for panel in con_bandera:
+        st.error(f"{panel['icono']} **{panel['titulo']}** -- {panel['resumen']['alerta']}")
+        st.caption(f"Pauta sugerida: {panel['resumen']['pauta']}")
+
+
 def _render_cruces_clinicos(data: dict | None):
     """10 paneles que cruzan Estudios clínicos + InBody + wearable --
     apoyo a la lectura clínica, nunca un diagnóstico ni una sustitución
@@ -486,7 +504,7 @@ def _render_cruces_clinicos(data: dict | None):
         "Si un dato falta (no se ha subido ese estudio, InBody no lo trae, o el wearable no lo mide), "
         "se muestra como \"sin dato\" -- nunca se inventa."
     )
-    paneles = cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
+    paneles = _calcular_paneles_cruces(data)
     _COLS_POR_FILA = 3
     for panel in paneles:
         with st.expander(f"{panel['icono']} {panel['titulo']}"):
@@ -745,5 +763,5 @@ render_dashboard_body(
     analisis_ia_renderer=_render_analisis_ia, calorias_comidas_historial=historial_calorias,
     estudios_clinicos_renderer=_render_estudios_clinicos,
     calorias_renderer=_render_calorias_comidas, glucosa_renderer=_render_glucosa_libre,
-    cruces_clinicos_renderer=_render_cruces_clinicos,
+    cruces_clinicos_renderer=_render_cruces_clinicos, cruces_alertas_renderer=_render_alertas_cruces,
 )

@@ -539,7 +539,7 @@ def render_dashboard_body(
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
     analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
     estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
-    cruces_clinicos_renderer=None,
+    cruces_clinicos_renderer=None, cruces_alertas_renderer=None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -575,7 +575,13 @@ def render_dashboard_body(
     cruces_clinicos_renderer: función que recibe este mismo `data` y
     dibuja los 10 paneles de cruces clínicos (labs + InBody + wearable,
     definida en dashboard_pacientes.py) -- si se pasa, se agrega como su
-    propia pestaña 🔀, después de Estudios clínicos."""
+    propia pestaña 🔀, después de Estudios clínicos.
+
+    cruces_alertas_renderer: función que recibe este mismo `data` y
+    dibuja solo los paneles de cruces clínicos con una bandera roja
+    activa (mismo cálculo que cruces_clinicos_renderer, pero filtrado) --
+    si se pasa, se agrega dentro de la pestaña 🚦 Alertas, junto con los
+    demás indicadores unificados."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -1179,6 +1185,12 @@ def render_dashboard_body(
             "El umbral del Estatus de Tono Vagal usa 'caída FC < 20 lpm/min' interpretado como una caída "
             "promedio menor a 20 lpm por minuto en los primeros 2 minutos post-esfuerzo."
         )
+
+        if cruces_alertas_renderer is not None:
+            st.divider()
+            st.subheader("🔀 Banderas rojas de Cruces clínicos")
+            st.caption("Detalle completo (diagnóstico y pauta) en la pestaña 🔀 Cruces clínicos.")
+            cruces_alertas_renderer(data)
 
         if glucosa_renderer is not None:
             st.divider()
