@@ -131,10 +131,15 @@ def _resumen_estudios(historial: list[dict] | None) -> str:
         f"{ultimo.get('laboratorio') or 'laboratorio sin especificar'}): {len(resultados)} pruebas."
     ]
     if anormales:
-        partes = [
-            f"{r.get('prueba')} {r.get('resultado')}{(' ' + r['unidad']) if r.get('unidad') else ''} ({r.get('estado')})"
-            for r in anormales
-        ]
+        partes = []
+        for r in anormales:
+            unidad = r.get("unidad")
+            # Después de editar la tabla en el dashboard, una celda vacía de
+            # "Unidad" puede llegar como NaN (float) en vez de None/"" --
+            # pd.notna() lo detecta bien en los dos casos, a diferencia de
+            # un simple "if unidad" (NaN es truthy en Python).
+            unidad_txt = f" {unidad}" if pd.notna(unidad) and str(unidad).strip() else ""
+            partes.append(f"{r.get('prueba')} {r.get('resultado')}{unidad_txt} ({r.get('estado')})")
         lineas.append("Fuera de rango: " + "; ".join(partes) + ".")
     elif resultados:
         lineas.append("Todo dentro de rango en este estudio.")
