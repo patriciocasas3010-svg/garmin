@@ -40,7 +40,7 @@ if [ ! -d ".venv" ]; then
 fi
 
 source .venv/bin/activate
-uv pip install -q -r requirements.txt || falla "No se pudieron instalar los componentes necesarios. Revisa tu conexión a internet e inténtalo de nuevo."
+uv pip install -q --only-binary=:all: -r requirements.txt || falla "No se pudieron instalar los componentes necesarios. Revisa tu conexión a internet e inténtalo de nuevo."
 
 python pedir_nombre.py || falla "No se pudo guardar tu nombre. Revisa el mensaje de arriba."
 

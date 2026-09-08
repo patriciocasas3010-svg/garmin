@@ -35,7 +35,7 @@ if not exist .venv (
 )
 
 call .venv\Scripts\activate.bat
-uv pip install -q -r requirements.txt
+uv pip install -q --only-binary=:all: -r requirements.txt
 if errorlevel 1 goto :falla_pip
 
 python pedir_nombre.py
