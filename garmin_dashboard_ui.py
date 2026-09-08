@@ -74,8 +74,12 @@ def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float 
         alt.layer(*layers)
         .properties(height=height)
         .configure(background=CHART_BG)
-        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
+        )
         .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
 
 
@@ -105,8 +109,12 @@ def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, hei
         alt.layer(bars, rule)
         .properties(height=height)
         .configure(background=CHART_BG)
-        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
+        )
         .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
 
 
@@ -127,8 +135,12 @@ def ranked_bar_chart(labels: list[str], values: list[float], value_title: str, c
         )
         .properties(height=max(120, height_per_bar * len(labels_sorted)))
         .configure(background=CHART_BG)
-        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
+        )
         .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
     return chart
 
@@ -146,8 +158,12 @@ def ordinal_bar_chart(labels: list[str], values: list[float], value_title: str, 
         )
         .properties(height=height)
         .configure(background=CHART_BG)
-        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
+        )
         .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
     return chart
 
@@ -178,8 +194,12 @@ def grouped_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
         )
         .properties(height=height)
         .configure(background=CHART_BG)
-        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
+        )
         .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
     return chart
 
@@ -202,8 +222,12 @@ def stacked_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
         )
         .properties(height=height)
         .configure(background=CHART_BG)
-        .configure_axis(gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
+        )
         .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
     return chart
 

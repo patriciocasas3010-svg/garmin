@@ -1,7 +1,8 @@
 """Identidad visual del dashboard -- marca "AURA" (Human Coherence
 System): fondo oscuro Bio-Charcoal con acentos Aether Blue / Anthro-
-Terra / Vital Red, tipografía Syne (títulos) / Inter (texto) /
-JetBrains Mono (cifras), y un símbolo propio (la Hélice Integrada: una
+Terra / Vital Red, tipografía Syne (titulares H1/H2, mayúsculas con
+tracking) / Plus Jakarta Sans (UI y cuerpo de texto) / JetBrains Mono
+(cifras, datos y tablas), y un símbolo propio (la Hélice Integrada: una
 "A" sin trazo horizontal, con dos ondas entrelazadas sobre una
 estructura rígida) en vez de un emoji genérico.
 
@@ -57,17 +58,29 @@ def apply_theme() -> None:
     st.markdown(
         f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-        html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
-        h1, h2, h3 {{ font-family: 'Syne', sans-serif !important; font-weight: 700 !important; letter-spacing: -0.01em; }}
-        [data-testid="stMetricValue"] {{ font-family: 'JetBrains Mono', monospace; }}
-        [data-testid="stMetricLabel"] {{ font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .04em; font-size: 0.75rem; }}
+        html, body, [class*="css"] {{ font-family: 'Plus Jakarta Sans', sans-serif; }}
 
-        .stTabs [data-baseweb="tab"], [data-testid="stTab"] {{ font-family: 'Inter', sans-serif; font-weight: 600; color: {INK_SOFT}; }}
+        /* Titulares (H1/H2): Syne Extra Bold, mayúsculas fijas, tracking
+        técnico +3px -- logotipo, encabezados principales, tarjetas de
+        bienvenida/nombre del paciente (ver render_header). */
+        h1, h2 {{ font-family: 'Syne', sans-serif !important; font-weight: 800 !important; text-transform: uppercase; letter-spacing: 3px; }}
+        /* Nombres de sección (H3): Syne SemiBold, sin forzar mayúsculas. */
+        h3 {{ font-family: 'Syne', sans-serif !important; font-weight: 600 !important; letter-spacing: 0.02em; }}
+
+        /* Cifras/KPIs destacados: JetBrains Mono Bold -- no "saltan" al
+        cambiar de valor, quedan perfectamente alineados. */
+        [data-testid="stMetricValue"] {{ font-family: 'JetBrains Mono', monospace; font-weight: 700; }}
+        /* La etiqueta del métrico (ej. "PESO") es un label de UI, no un
+        dato -- Plus Jakarta Sans Medium. */
+        [data-testid="stMetricLabel"] {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; font-size: 0.75rem; }}
+
+        .stTabs [data-baseweb="tab"], [data-testid="stTab"] {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; color: {INK_SOFT}; }}
         .stTabs [aria-selected="true"], [data-testid="stTab"][aria-selected="true"] {{ color: {AETHER_BLUE_TEXT} !important; }}
         .stTabs [data-baseweb="tab-highlight"], .react-aria-SelectionIndicator {{ background-color: {AETHER_BLUE_TEXT} !important; }}
 
+        .stButton > button {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; }}
         .stButton > button[kind="primary"] {{ background-color: {AETHER_BLUE}; border-color: {AETHER_BLUE}; }}
 
         /* Vital Red -- rojo oficial de alerta/crítico (reemplaza el rojo
@@ -100,7 +113,7 @@ def render_header(titulo: str, subtitulo: str = "") -> None:
                 <div style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:{AETHER_BLUE_TEXT};">
                     {BRAND_NAME} &middot; {BRAND_TAGLINE}
                 </div>
-                <div style="font-family:'Syne',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.01em; color:{INK};">{titulo}</div>
+                <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:24px; text-transform:uppercase; letter-spacing:3px; color:{INK};">{titulo}</div>
                 {sub_html}
             </div>
         </div>
