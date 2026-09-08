@@ -487,19 +487,26 @@ def _render_cruces_clinicos(data: dict | None):
         "se muestra como \"sin dato\" -- nunca se inventa."
     )
     paneles = cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
+    _COLS_POR_FILA = 3
     for panel in paneles:
         with st.expander(f"{panel['icono']} {panel['titulo']}"):
-            for m in panel["metricas"]:
-                etiqueta = m["etiqueta"]
-                if m.get("pendiente"):
-                    st.markdown(f"**{etiqueta}:** ⏳ pendiente (todavía no se captura en el sistema)")
-                    continue
-                valor = m["valor"]
-                unidad = m.get("unidad") or ""
-                if valor is None:
-                    st.markdown(f"**{etiqueta}:** sin dato")
-                else:
-                    st.markdown(f"**{etiqueta}:** {valor} {unidad}".rstrip())
+            metricas = panel["metricas"]
+            for inicio in range(0, len(metricas), _COLS_POR_FILA):
+                fila = metricas[inicio:inicio + _COLS_POR_FILA]
+                cols = st.columns(_COLS_POR_FILA)
+                for col, m in zip(cols, fila):
+                    etiqueta = m["etiqueta"]
+                    if m.get("pendiente"):
+                        col.metric(etiqueta, "⏳ pendiente")
+                        continue
+                    valor = m["valor"]
+                    unidad = m.get("unidad") or ""
+                    if valor is None:
+                        col.metric(etiqueta, "sin dato")
+                    elif isinstance(valor, str):
+                        col.metric(etiqueta, valor)
+                    else:
+                        col.metric(etiqueta, f"{valor} {unidad}".rstrip())
             if panel.get("nota"):
                 st.caption(panel["nota"])
 
