@@ -15,7 +15,7 @@ que Streamlit no cubre con su theming nativo (tabs, alertas)."""
 
 import streamlit as st
 
-BRAND_NAME = "AURA"
+BRAND_NAME = "AURA FLOW"
 BRAND_TAGLINE = "Human Coherence System"
 
 BIO_CHARCOAL = "#121417"

@@ -53,7 +53,7 @@ from garmin_dashboard_ui import (
 from push_resumen import crear_paciente_vacio, write_snapshot_to_worksheet
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA · Resumen de pacientes", layout="wide", page_icon="🩺")
+st.set_page_config(page_title="AURA FLOW · Resumen de pacientes", layout="wide", page_icon="🩺")
 apply_theme()
 
 

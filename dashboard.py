@@ -18,7 +18,7 @@ from garmin_dashboard_ui import render_dashboard_body
 from garmin_session import get_client
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA · Tablero Maestro de Rendimiento", layout="wide", page_icon="🏃")
+st.set_page_config(page_title="AURA FLOW · Tablero Maestro de Rendimiento", layout="wide", page_icon="🏃")
 apply_theme()
 
 
