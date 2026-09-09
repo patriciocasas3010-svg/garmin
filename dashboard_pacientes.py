@@ -19,6 +19,7 @@ Ver PUBLICAR_DASHBOARD_PACIENTES.md para la guía paso a paso completa.
 """
 
 import json
+import re
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -639,16 +640,26 @@ def _render_cruces_clinicos(data: dict | None):
     )
     paneles = _calcular_paneles_cruces(data)
 
+    # Streamlit convierte cualquier key a una clase CSS "st-key-<key>",
+    # pero sanea espacios/paréntesis a su manera (ej. "Patricio Casas"
+    # termina en "Patricio-Casas") -- si el nombre del paciente los trae
+    # (la mayoría), el selector que escribimos abajo ya no coincide con
+    # esa clase y los chips se quedan sin color. Por eso los keys que
+    # alimentan CSS usan este slug ya saneado por nosotros mismos, no el
+    # nombre crudo.
+    paciente_slug = re.sub(r"[^a-zA-Z0-9_]", "_", paciente)
+
     key_abierto = f"cruces_panel_abierto_{paciente}"
     if key_abierto not in st.session_state:
         st.session_state[key_abierto] = None
     idx_abierto = st.session_state[key_abierto]
 
-    # Streamlit le pone la clase "st-key-<key>" al contenedor/botón que
-    # tenga ese key -- así se le da estilo de chip de color a cada botón
-    # (y flex-wrap al renglón completo) sin necesitar JavaScript.
+    # Con el key ya saneado, la clase que le pone Streamlit al
+    # contenedor/botón coincide exacto con el selector -- así se le da
+    # estilo de chip de color a cada botón (y flex-wrap al renglón
+    # completo) sin necesitar JavaScript.
     reglas_css = [
-        f'.st-key-cruces_chips_{paciente} {{ display:flex !important; flex-direction:row !important; '
+        f'.st-key-cruces_chips_{paciente_slug} {{ display:flex !important; flex-direction:row !important; '
         f'flex-wrap:wrap !important; align-items:center !important; gap:6px !important; margin-bottom:4px !important; }}'
     ]
     for idx, panel in enumerate(paneles):
@@ -658,17 +669,17 @@ def _render_cruces_clinicos(data: dict | None):
         fondo = f"{color}40" if activo else f"{color}26"
         grosor = "2.5px" if activo else "1.5px"
         reglas_css.append(
-            f'.st-key-chip_cruce_{paciente}_{idx} button {{ background:{fondo} !important; '
+            f'.st-key-chip_cruce_{paciente_slug}_{idx} button {{ background:{fondo} !important; '
             f'border:{grosor} solid {color} !important; border-radius:999px !important; '
             f'padding:4px 14px !important; font-size:12.5px !important; font-weight:600 !important; '
             f'color:inherit !important; box-shadow:none !important; min-height:0 !important; }}'
         )
     st.markdown(f"<style>{' '.join(reglas_css)}</style>", unsafe_allow_html=True)
 
-    with st.container(key=f"cruces_chips_{paciente}"):
+    with st.container(key=f"cruces_chips_{paciente_slug}"):
         for idx, panel in enumerate(paneles):
             titulo_corto = panel["titulo"].split(". ", 1)[-1]
-            if st.button(f"{panel['icono']} {titulo_corto}", key=f"chip_cruce_{paciente}_{idx}"):
+            if st.button(f"{panel['icono']} {titulo_corto}", key=f"chip_cruce_{paciente_slug}_{idx}"):
                 st.session_state[key_abierto] = None if idx_abierto == idx else idx
                 st.rerun()
 
