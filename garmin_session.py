@@ -38,6 +38,19 @@ def _token_from_streamlit_secrets() -> str | None:
         return None
 
 
+def client_from_token(token: str) -> Garmin:
+    """Cliente de Garmin ya conectado a partir de un token de sesión ya
+    guardado (ver export_token.py) -- para cuando el token no es el de
+    TU sesión sino el de un paciente que activó la sincronización
+    automática diaria (ver token_store.py/sync_diario.py). A diferencia
+    de get_client(), aquí un login fallido (token vencido, etc.) deja
+    que el error de garminconnect suba tal cual -- quien llama decide
+    cómo mostrarlo, en vez de tronar todo el proceso con sys.exit()."""
+    client = Garmin()
+    client.login(token)
+    return client
+
+
 def get_client() -> Garmin:
     """Devuelve un cliente Garmin ya autenticado, reutilizando la sesión guardada.
 

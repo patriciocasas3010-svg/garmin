@@ -2,8 +2,9 @@ name: Sincronización diaria de Garmin
 
 on:
   schedule:
-    # 12:00 UTC = 6:00 am en Ciudad de México (7:00 am en horario de verano).
-    - cron: "0 12 * * *"
+    # 16:30 UTC = 10:30 am en Ciudad de México (México ya no cambia de
+    # horario de verano/invierno desde 2022, así que es fijo todo el año).
+    - cron: "30 16 * * *"
   workflow_dispatch: {}
 
 jobs:
