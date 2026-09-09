@@ -60,7 +60,7 @@ from garmin_dashboard_ui import (
 from push_resumen import crear_paciente_vacio, write_snapshot_to_worksheet
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="wide", page_icon="🩺")
+st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="wide", page_icon=":material/stethoscope:")
 apply_theme()
 
 
@@ -75,9 +75,10 @@ def _check_password() -> bool:
         expected = None
     if not expected:
         st.warning(
-            "⚠️ Este dashboard reúne los datos de todos tus pacientes y no tiene contraseña "
+            "Este dashboard reúne los datos de todos tus pacientes y no tiene contraseña "
             "configurada -- cualquiera con este link puede verlo. Configura el Secret "
-            "APP_PASSWORD en Streamlit Cloud (Settings → Secrets) lo antes posible."
+            "APP_PASSWORD en Streamlit Cloud (Settings → Secrets) lo antes posible.",
+            icon=":material/warning:",
         )
         return True
 
@@ -159,7 +160,7 @@ if st.session_state["paciente_actual"] is None:
             "por primera vez, o puedes crear uno nuevo abajo para empezar a subirle InBody/mediciones ya."
         )
 
-    with st.expander("➕ Agregar paciente nuevo (sin Garmin/Apple/Oura todavía)"):
+    with st.expander(":material/person_add: Agregar paciente nuevo (sin Garmin/Apple/Oura todavía)"):
         st.caption(
             "Úsalo cuando quieras empezar a subirle InBody o mediciones antropométricas a un "
             "paciente antes de (o sin que nunca) conecte un reloj, anillo o iPhone. En cuanto ese "
@@ -188,7 +189,7 @@ paciente = st.session_state["paciente_actual"]
 filas_paciente = df[df["Nombre"] == paciente]
 if filas_paciente.empty:
     st.warning("No hay datos para este paciente todavía.")
-    if st.button("← Elegir otro nombre"):
+    if st.button(":material/arrow_back: Elegir otro nombre"):
         st.session_state["paciente_actual"] = None
         st.rerun()
     st.stop()
@@ -212,11 +213,11 @@ with top_col1:
     render_header(paciente, subtitulo=fuente)
     st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')}")
 with top_col2:
-    if st.button("🔄 Actualizar", width="stretch"):
+    if st.button(":material/refresh: Actualizar", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 with top_col3:
-    if st.button("🚪 Salir", type="secondary", width="stretch"):
+    if st.button(":material/logout: Salir", type="secondary", width="stretch"):
         st.session_state["paciente_actual"] = None
         st.rerun()
 
@@ -235,7 +236,7 @@ _TEXTO_ACTUALIZACION = {
 col_notas, col_wearable = st.columns(2)
 
 with col_notas:
-    with st.expander("📝 Notas del paciente"):
+    with st.expander(":material/edit_note: Notas del paciente"):
         opciones_enfoque = enfoque_store.OPCIONES
         indice_actual = opciones_enfoque.index(enfoque_actual) if enfoque_actual in opciones_enfoque else 0
         enfoque_elegido = st.selectbox(
@@ -306,17 +307,17 @@ with col_notas:
                     st.markdown(f"**{fila_nota.get('Fecha')}** — {fila_nota.get('Nota')}")
 
 with col_wearable:
-    with st.expander("⌚ Wearable"):
+    with st.expander(":material/watch: Wearable"):
         st.caption(_TEXTO_ACTUALIZACION)
 
         if fuente == "Garmin":
             st.divider()
             token_actual = token_store.leer_token(_gc(), st.secrets["SHEET_ID"], paciente)
             if token_actual:
-                st.caption(f"✅ Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
+                st.caption(f":material/check_circle: Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
                 col_forzar, col_quitar = st.columns(2)
                 with col_forzar:
-                    if st.button("🔄 Forzar actualización ahora", key=f"forzar_sync_{paciente}"):
+                    if st.button(":material/refresh: Forzar actualización ahora", key=f"forzar_sync_{paciente}"):
                         with st.spinner("Conectando con Garmin y actualizando (puede tardar un poco)..."):
                             try:
                                 client = garmin_session.client_from_token(token_actual["token"])
@@ -374,7 +375,7 @@ with col_wearable:
 
 def _render_calorias_comidas():
     """Captura manual de calorías comidas por día -- vive dentro de la
-    pestaña 🔥 Calorías (junto al balance comidas/gastadas), no como
+    pestaña Calorías (junto al balance comidas/gastadas), no como
     sección aparte."""
     st.caption(
         "Ningún reloj/anillo mide cuánto comes -- captúralo tú o que te lo mande el paciente, un "
@@ -407,7 +408,7 @@ def _render_calorias_comidas():
 
 def _render_glucosa_libre():
     """Glucosa de FreeStyle Libre (vía LibreLinkUp) -- vive dentro de la
-    pestaña 🚦 Alertas, no como sección aparte."""
+    pestaña Alertas, no como sección aparte."""
     if not st.secrets.get("LIBRE_EMAIL") or not st.secrets.get("LIBRE_PASSWORD"):
         st.info(
             "Para usar esto, el paciente primero te agrega como \"seguidor\" en la app LibreLinkUp "
@@ -579,30 +580,31 @@ def _render_alertas_cruces(data: dict | None):
     paneles = _calcular_paneles_cruces(data)
     por_atender = [p for p in paneles if (p.get("resumen") or {}).get("estado") in ("alerta", "riesgo")]
     if not por_atender:
-        st.success("✅ Todos los cruces clínicos están en verde (óptimo) por ahora.")
+        st.success("Todos los cruces clínicos están en verde (óptimo) por ahora.", icon=":material/check_circle:")
         return
     for panel in por_atender:
         resumen = panel["resumen"]
-        aviso = st.error if resumen["estado"] == "alerta" else st.warning
-        icono_estado = "🔴" if resumen["estado"] == "alerta" else "🟡"
-        aviso(f"{icono_estado} {panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}")
+        if resumen["estado"] == "alerta":
+            st.error(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/error:")
+        else:
+            st.warning(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/warning:")
         st.caption(f"Pauta sugerida: {resumen['pauta']}")
 
 
 def _render_detalle_panel_cruce(panel: dict) -> None:
     resumen = panel.get("resumen")
     if resumen:
-        st.markdown(f"**🧭 Diagnóstico integrado:** {resumen['diagnostico']}")
+        st.markdown(f"**:material/explore: Diagnóstico integrado:** {resumen['diagnostico']}")
         estado = resumen["estado"]
         if estado == "alerta":
-            st.error(f"🔴 **Alerta:** {resumen['hallazgo']}")
+            st.error(f"**Alerta:** {resumen['hallazgo']}", icon=":material/error:")
         elif estado == "riesgo":
-            st.warning(f"🟡 **Riesgo:** {resumen['hallazgo']}")
+            st.warning(f"**Riesgo:** {resumen['hallazgo']}", icon=":material/warning:")
         elif estado == "optimo":
-            st.success("🟢 **Óptimo:** sin hallazgos prioritarios con los datos disponibles.")
+            st.success("**Óptimo:** sin hallazgos prioritarios con los datos disponibles.", icon=":material/check_circle:")
         else:
-            st.caption("⚪ Sin datos suficientes todavía para clasificar este panel.")
-        st.info(f"🎯 **Pauta sugerida:** {resumen['pauta']}")
+            st.caption(":material/help: Sin datos suficientes todavía para clasificar este panel.")
+        st.info(f":material/track_changes: **Pauta sugerida:** {resumen['pauta']}")
         st.divider()
     metricas = panel["metricas"]
     _COLS_POR_FILA = 3
@@ -612,7 +614,7 @@ def _render_detalle_panel_cruce(panel: dict) -> None:
         for col, m in zip(cols, fila):
             etiqueta = m["etiqueta"]
             if m.get("pendiente"):
-                col.metric(etiqueta, "⏳ pendiente")
+                col.metric(etiqueta, ":material/hourglass_empty: pendiente")
                 continue
             valor = m["valor"]
             unidad = m.get("unidad") or ""
@@ -703,7 +705,7 @@ def _render_composicion_corporal(data: dict | None):
     sea dentro de la pestaña "Composición corporal" del dashboard completo
     (con `data` del wearable ya cargado), o directo cuando el paciente
     todavía no tiene dashboard de wearable (data=None)."""
-    st.subheader("🧬 Composición corporal (InBody)")
+    st.subheader(":material/monitor_weight: Composición corporal (InBody)")
 
     with st.expander("Subir nuevo resultado de InBody"):
         archivo = st.file_uploader(
@@ -775,7 +777,7 @@ def _render_composicion_corporal(data: dict | None):
     render_composicion_avanzada(historial_inbody, data=data)
 
     st.divider()
-    st.subheader("📏 Mediciones antropométricas")
+    st.subheader(":material/straighten: Mediciones antropométricas")
 
     with st.expander("Subir nuevo reporte de mediciones (ej. Avena)"):
         archivo_antro = st.file_uploader(
@@ -858,7 +860,7 @@ def _render_analisis_ia(data: dict):
         ANTHROPIC_API_KEY -- si no está configurado, no truena, solo no
         hace nada útil hasta que se configure."""
     st.divider()
-    st.subheader("🧠 Análisis y recomendaciones")
+    st.subheader(":material/psychology: Análisis y recomendaciones")
     st.caption(
         "Lectura rápida cruzando InBody, mediciones antropométricas y los datos del wearable de "
         "este paciente -- revísala antes de compartirla, es un apoyo a tu criterio clínico, no un "
@@ -874,7 +876,7 @@ def _render_analisis_ia(data: dict):
     col_pegar, col_todo = st.columns(2)
     with col_pegar:
         st.download_button(
-            "📄 Descargar resumen para pegar en Claude (gratis)",
+            ":material/description: Descargar resumen para pegar en Claude (gratis)",
             data=mensaje_para_pegar,
             file_name=f"analisis_{paciente.replace(' ', '_')}.txt",
             mime="text/plain",
@@ -889,7 +891,7 @@ def _render_analisis_ia(data: dict):
             historial_estudios, paneles_cruces, historial_calorias,
         )
         st.download_button(
-            "📦 Descargar TODO el historial completo",
+            ":material/inventory_2: Descargar TODO el historial completo",
             data=exportacion_completa,
             file_name=f"historial_completo_{paciente.replace(' ', '_')}.txt",
             mime="text/plain",
@@ -926,10 +928,10 @@ if not datos_json:
     st.divider()
     _render_composicion_corporal(None)
     st.divider()
-    st.subheader("🔬 Estudios clínicos")
+    st.subheader(":material/biotech: Estudios clínicos")
     _render_estudios_clinicos()
     st.divider()
-    st.subheader("🔀 Cruces clínicos")
+    st.subheader(":material/call_merge: Cruces clínicos")
     _render_cruces_clinicos(None)
     st.stop()
 

@@ -20,7 +20,7 @@ import apple_health as ah
 from garmin_dashboard_ui import render_dashboard_body
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon="🍎")
+st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon=":material/favorite:")
 apply_theme()
 
 
@@ -51,7 +51,7 @@ if not _check_password():
 LOOKBACK_DAYS = 90
 WELLNESS_DAYS = 30
 
-st.title("🍎 Tablero Maestro de Rendimiento")
+st.title(":material/favorite: Tablero Maestro de Rendimiento")
 
 export_zip = ah.find_export_zip()
 if not export_zip:
@@ -78,7 +78,7 @@ with header_col:
         "desde tu iPhone, reemplaza ese archivo en esta carpeta y dale a \"Actualizar datos\"."
     )
 with button_col:
-    if st.button("🔄 Actualizar datos", width="stretch"):
+    if st.button(":material/refresh: Actualizar datos", width="stretch"):
         st.cache_data.clear()
 
 with st.spinner("Leyendo tu archivo de Salud (puede tardar si tienes mucho historial)..."):

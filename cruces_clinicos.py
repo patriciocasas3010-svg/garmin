@@ -636,7 +636,7 @@ def calcular_paneles(
     paneles = [
         {
             "titulo": "1. Sensibilidad a la Insulina y Flexibilidad Metabólica",
-            "icono": "🍬",
+            "icono": ":material/opacity:",
             "metricas": [
                 {"etiqueta": "Glucosa en ayunas", "valor": glucosa, "unidad": "mg/dL"},
                 {"etiqueta": "Insulina basal", "valor": insulina, "unidad": "µUI/mL"},
@@ -656,7 +656,7 @@ def calcular_paneles(
         },
         {
             "titulo": "2. Protección Muscular vs. Estrés Catabólico",
-            "icono": "💪",
+            "icono": ":material/fitness_center:",
             "metricas": [
                 {"etiqueta": "Nitrógeno ureico (BUN)", "valor": _valor(filas, "bun"), "unidad": "mg/dL"},
                 {"etiqueta": "Urea", "valor": _valor(filas, "urea"), "unidad": "mg/dL"},
@@ -673,7 +673,7 @@ def calcular_paneles(
         },
         {
             "titulo": "3. Eje Tiroideo, Ratio Metabólico y Adaptación",
-            "icono": "🦋",
+            "icono": ":material/thermostat:",
             "metricas": [
                 {"etiqueta": "TSH", "valor": _valor(filas, "tsh"), "unidad": "µUI/mL"},
                 {"etiqueta": "T4 Libre", "valor": _valor(filas, "t4_libre"), "unidad": ""},
@@ -689,7 +689,7 @@ def calcular_paneles(
         },
         {
             "titulo": "4. Inflamación, Retención de Agua y Pérdida \"Oculta\" de Grasa",
-            "icono": "💧",
+            "icono": ":material/water:",
             "metricas": [
                 {"etiqueta": "PCR ultrasensible", "valor": _valor(filas, "pcr"), "unidad": "mg/L"},
                 {"etiqueta": "Sodio", "valor": _valor(filas, "sodio"), "unidad": "mmol/L"},
@@ -708,7 +708,7 @@ def calcular_paneles(
         },
         {
             "titulo": "5. Carga Renal, Balance Hídrico y Osmolalidad",
-            "icono": "🫘",
+            "icono": ":material/filter_alt:",
             "metricas": [
                 {"etiqueta": "Creatinina", "valor": _valor(filas, "creatinina"), "unidad": "mg/dL"},
                 {"etiqueta": "BUN", "valor": _valor(filas, "bun"), "unidad": "mg/dL"},
@@ -731,7 +731,7 @@ def calcular_paneles(
         },
         {
             "titulo": "6. Flexibilidad Lipídica y Eficiencia Cardiovascular",
-            "icono": "❤️",
+            "icono": ":material/favorite:",
             "metricas": [
                 {"etiqueta": "Colesterol Total", "valor": colesterol_total, "unidad": "mg/dL"},
                 {"etiqueta": "Colesterol HDL", "valor": hdl, "unidad": "mg/dL"},
@@ -750,7 +750,7 @@ def calcular_paneles(
         },
         {
             "titulo": "7. Procesamiento Hepático y Carga Metabólica",
-            "icono": "🫀",
+            "icono": ":material/factory:",
             "metricas": [
                 {"etiqueta": "TGO (AST)", "valor": _valor(filas, "ast"), "unidad": "U/L"},
                 {"etiqueta": "TGP (ALT)", "valor": _valor(filas, "alt"), "unidad": "U/L"},
@@ -769,7 +769,7 @@ def calcular_paneles(
         },
         {
             "titulo": "8. Recuperación Tisular y Función Neuromuscular",
-            "icono": "🩹",
+            "icono": ":material/healing:",
             "metricas": [
                 {"etiqueta": "Creatina Quinasa (CPK)", "valor": _valor(filas, "cpk"), "unidad": "U/L"},
                 {"etiqueta": "Deshidrogenasa Láctica (LDH)", "valor": _valor(filas, "ldh"), "unidad": "U/L"},
@@ -785,7 +785,7 @@ def calcular_paneles(
         },
         {
             "titulo": "9. Capacidad Hematológica y Transporte de Oxígeno",
-            "icono": "🩸",
+            "icono": ":material/bloodtype:",
             "metricas": [
                 {"etiqueta": "Eritrocitos", "valor": _valor(filas, "eritrocitos"), "unidad": ""},
                 {"etiqueta": "Hemoglobina", "valor": _valor(filas, "hemoglobina"), "unidad": "g/dL"},
@@ -804,7 +804,7 @@ def calcular_paneles(
         },
         {
             "titulo": "10. Respuesta Inmune y Tolerancia al Entrenamiento",
-            "icono": "🛡️",
+            "icono": ":material/shield:",
             "metricas": [
                 {"etiqueta": "Leucocitos totales", "valor": _valor(filas, "leucocitos"), "unidad": ""},
                 {"etiqueta": "Neutrófilos", "valor": neutrofilos, "unidad": "%"},

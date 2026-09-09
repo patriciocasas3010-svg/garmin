@@ -379,7 +379,7 @@ def render_composicion_avanzada(historial: pd.DataFrame, data: dict | None = Non
     historial = inbody_historial_valido(historial)
 
     st.divider()
-    st.subheader("📈 TDEE real y proyección de peso")
+    st.subheader(":material/trending_up: TDEE real y proyección de peso")
 
     if len(historial) < 2:
         st.info(
@@ -611,12 +611,12 @@ def _riesgo_lesion(acwr, hrv_z):
     hrv_baja = hrv_z is not None and hrv_z < -1.5
     hrv_algo_baja = hrv_z is not None and hrv_z < -1.0
     if acwr > 1.5 or (acwr > 1.3 and hrv_baja):
-        return "Alto", "🔴"
+        return "Alto", ":material/error:"
     if acwr > 1.3 or (acwr > 1.1 and hrv_algo_baja):
-        return "Moderado", "🟠"
+        return "Moderado", ":material/warning:"
     if acwr < 0.8:
-        return "Bajo (posible destrenamiento)", "🟡"
-    return "Bajo", "🟢"
+        return "Bajo (posible destrenamiento)", ":material/trending_down:"
+    return "Bajo", ":material/check_circle:"
 
 
 # ---------------------------------------------------------------------------
@@ -651,26 +651,26 @@ def render_dashboard_body(
 
     estudios_clinicos_renderer: función sin argumentos que dibuja la
     sección de Estudios clínicos (definida en dashboard_pacientes.py) --
-    si se pasa, se agrega como su propia pestaña 🔬, independiente de
+    si se pasa, se agrega como su propia pestaña :material/biotech:, independiente de
     Composición corporal.
 
     calorias_renderer: función sin argumentos que dibuja la captura manual
     de calorías comidas -- si se pasa, se agrega dentro de la pestaña
-    🔥 Calorías (antes del balance comidas/gastadas).
+    Calorías (antes del balance comidas/gastadas).
 
     glucosa_renderer: función sin argumentos que dibuja la sección de
     Glucosa (FreeStyle Libre) -- si se pasa, se agrega dentro de la
-    pestaña 🚦 Alertas.
+    pestaña Alertas.
 
     cruces_clinicos_renderer: función que recibe este mismo `data` y
     dibuja los 10 paneles de cruces clínicos (labs + InBody + wearable,
     definida en dashboard_pacientes.py) -- si se pasa, se agrega como su
-    propia pestaña 🔀, después de Estudios clínicos.
+    propia pestaña :material/call_merge:, después de Estudios clínicos.
 
     cruces_alertas_renderer: función que recibe este mismo `data` y
     dibuja solo los paneles de cruces clínicos con una bandera roja
     activa (mismo cálculo que cruces_clinicos_renderer, pero filtrado) --
-    si se pasa, se agrega dentro de la pestaña 🚦 Alertas, junto con los
+    si se pasa, se agrega dentro de la pestaña Alertas, junto con los
     demás indicadores unificados.
 
     perfil: {"enfoque", "meta_grasa_pct", "dias_plan_mes"} de
@@ -711,14 +711,14 @@ def render_dashboard_body(
     resumen_mes = data["resumen_mes"]
     wellness_days = data["wellness_days"]
 
-    etiquetas = ["📋 Resumen"]
+    etiquetas = [":material/summarize: Resumen"]
     if composicion_corporal_renderer is not None:
-        etiquetas.append("🧬 Composición corporal")
+        etiquetas.append(":material/monitor_weight: Composición corporal")
     if estudios_clinicos_renderer is not None:
-        etiquetas.append("🔬 Estudios clínicos")
+        etiquetas.append(":material/biotech: Estudios clínicos")
     if cruces_clinicos_renderer is not None:
-        etiquetas.append("🔀 Cruces clínicos")
-    etiquetas += ["⚖️ Carga y Preparación", "🎯 Eficiencia y Zonas", "😴 Sueño y Bienestar", "🔥 Calorías", "🚦 Alertas"]
+        etiquetas.append(":material/call_merge: Cruces clínicos")
+    etiquetas += [":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas", ":material/bedtime: Sueño y Bienestar", "Calorías", "Alertas"]
     tabs = st.tabs(etiquetas)
     tab_resumen = tabs[0]
     idx = 1
@@ -773,7 +773,7 @@ def render_dashboard_body(
             )
             b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", delta=delta_mme_str)
             b4.metric("Hidratación (agua total)", f"{agua_val:.1f} L" if pd.notna(agua_val) else "—")
-            st.caption(f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en 🧬 Composición corporal.")
+            st.caption(f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en :material/monitor_weight: Composición corporal.")
 
             meta_grasa_pct = (perfil or {}).get("meta_grasa_pct")
             pgc_actual = inbody_resumen.get("PGC_pct")
@@ -787,7 +787,7 @@ def render_dashboard_body(
                 st.progress(
                     avance,
                     text=f"{pgc_actual:.1f}% actual · meta {meta_grasa_pct:.1f}%"
-                    + (" · ¡meta alcanzada! 🎉" if pgc_actual <= meta_grasa_pct else ""),
+                    + (" · ¡meta alcanzada! :material/celebration:" if pgc_actual <= meta_grasa_pct else ""),
                 )
 
             peso_inicial = _historial_valido.iloc[0].get("Peso_kg")
@@ -801,10 +801,10 @@ def render_dashboard_body(
                         if pd.notna(peso_prev_hito) and peso_inicial > peso_prev_hito:
                             hitos_prev = int((peso_inicial - peso_prev_hito) // 2.5)
                     nuevo_hito = hitos > hitos_prev
-                    medallas = "🏅" * min(hitos, 5) + ("…" if hitos > 5 else "")
+                    medallas = ":material/military_tech:" * min(hitos, 5) + ("…" if hitos > 5 else "")
                     texto_hito = f"{medallas} Ha bajado **{total_perdido:.1f} kg** desde su primer registro -- {hitos} hito(s) de 2.5 kg alcanzado(s)."
                     if nuevo_hito:
-                        st.success(f"🎉 ¡Nuevo hito! {texto_hito}")
+                        st.success(f":material/celebration: ¡Nuevo hito! {texto_hito}")
                     else:
                         st.info(texto_hito)
             st.divider()
@@ -888,7 +888,7 @@ def render_dashboard_body(
         c6.metric("Alertas activas", str(alertas_activas), delta=None)
 
         if alertas_activas:
-            st.error(f"Hay {alertas_activas} indicador(es) en alerta esta semana — revisa la pestaña 🚦 Alertas.")
+            st.error(f"Hay {alertas_activas} indicador(es) en alerta esta semana — revisa la pestaña Alertas.")
         else:
             st.success("Sin alertas activas esta semana. Todo dentro de rango.")
 
@@ -906,10 +906,13 @@ def render_dashboard_body(
             st.info("No hay suficientes datos de recuperación, sueño o calorías en el periodo para calcular una calificación.")
         else:
             etiqueta = gm.score_label(overall_score)
-            emoji = {"Excelente": "🟢", "Buena": "🟢", "Regular": "🟡", "Baja": "🔴"}[etiqueta]
+            color_etiqueta = {
+                "Excelente": OPTIMUM_GREEN, "Buena": OPTIMUM_GREEN, "Regular": WARNING_AMBER, "Baja": CRITICAL_CORAL,
+            }[etiqueta]
+            punto = f'<span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:{color_etiqueta};"></span>'
             st.markdown(
                 f'<div style="font-size:56px; font-weight:700; line-height:1.1;">{overall_score:.0f}'
-                f'<span style="font-size:22px; color:{INK_MUTED}; font-weight:500;"> /100 &nbsp;·&nbsp; {emoji} {etiqueta}</span></div>',
+                f'<span style="font-size:22px; color:{INK_MUTED}; font-weight:500;"> /100 &nbsp;·&nbsp; {punto} {etiqueta}</span></div>',
                 unsafe_allow_html=True,
             )
             st.caption(
@@ -979,7 +982,7 @@ def render_dashboard_body(
             minutos_ejercicio_promedio_dia=minutos_ejercicio_promedio_dia, vo2max=vo2max,
         )
         st.download_button(
-            "🖨️ Descargar resumen (PDF)", data=pdf_bytes,
+            ":material/print: Descargar resumen (PDF)", data=pdf_bytes,
             file_name=f"resumen_{(paciente_nombre or 'paciente').replace(' ', '_')}.pdf",
             mime="application/pdf",
         )
@@ -1020,13 +1023,13 @@ def render_dashboard_body(
         if nivel_riesgo is None:
             st.info("Sin datos suficientes de carga de entrenamiento todavía para estimar el riesgo.")
         else:
-            texto_riesgo = f"{icono_riesgo} Riesgo de lesión: **{nivel_riesgo}**"
+            texto_riesgo = f"Riesgo de lesión: **{nivel_riesgo}**"
             if nivel_riesgo == "Alto":
-                st.error(texto_riesgo)
+                st.error(texto_riesgo, icon=icono_riesgo)
             elif nivel_riesgo == "Moderado":
-                st.warning(texto_riesgo)
+                st.warning(texto_riesgo, icon=icono_riesgo)
             else:
-                st.success(texto_riesgo)
+                st.success(texto_riesgo, icon=icono_riesgo)
         st.caption(
             "Cruza tu carga de entrenamiento (ACWR) con tu recuperación (HRV) en un solo resultado -- "
             "no es un diagnóstico, es una señal para decidir si toca bajarle a la intensidad estos días "
@@ -1270,7 +1273,7 @@ def render_dashboard_body(
 
         if calorias_renderer is not None:
             st.divider()
-            st.markdown("**🍽️ Calorías comidas**")
+            st.markdown("**:material/restaurant: Calorías comidas**")
             calorias_renderer()
 
         if calorias_comidas_historial is not None:
@@ -1338,11 +1341,11 @@ def render_dashboard_body(
 
         if cruces_alertas_renderer is not None:
             st.divider()
-            st.subheader("🔀 Banderas rojas de Cruces clínicos")
-            st.caption("Detalle completo (diagnóstico y pauta) en la pestaña 🔀 Cruces clínicos.")
+            st.subheader(":material/call_merge: Banderas rojas de Cruces clínicos")
+            st.caption("Detalle completo (diagnóstico y pauta) en la pestaña :material/call_merge: Cruces clínicos.")
             cruces_alertas_renderer(data)
 
         if glucosa_renderer is not None:
             st.divider()
-            st.subheader("🩸 Glucosa (FreeStyle Libre)")
+            st.subheader(":material/bloodtype: Glucosa (FreeStyle Libre)")
             glucosa_renderer()

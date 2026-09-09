@@ -20,7 +20,7 @@ from garmin_dashboard_ui import render_dashboard_body
 from oura_session import get_token
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon="💍")
+st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon=":material/bedtime:")
 apply_theme()
 
 
@@ -51,7 +51,7 @@ if not _check_password():
 LOOKBACK_DAYS = 90
 WELLNESS_DAYS = 30
 
-st.title("💍 Tablero Maestro de Rendimiento")
+st.title(":material/bedtime: Tablero Maestro de Rendimiento")
 
 token = get_token()
 if not token:
@@ -76,7 +76,7 @@ with header_col:
         f"últimos {WELLNESS_DAYS}. Datos leídos en vivo de tu cuenta de Oura, en caché por 1 hora."
     )
 with button_col:
-    if st.button("🔄 Actualizar datos", width="stretch"):
+    if st.button(":material/refresh: Actualizar datos", width="stretch"):
         st.cache_data.clear()
 
 try:

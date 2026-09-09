@@ -18,7 +18,7 @@ from garmin_dashboard_ui import render_dashboard_body
 from garmin_session import get_client
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon="🏃")
+st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon=":material/directions_run:")
 apply_theme()
 
 
@@ -65,7 +65,7 @@ def _load_runtime_data():
     return gm.build_runtime_data(_client(), lookback_days=LOOKBACK_DAYS, wellness_days=WELLNESS_DAYS)
 
 
-st.title("🏃 Tablero Maestro de Rendimiento")
+st.title(":material/directions_run: Tablero Maestro de Rendimiento")
 
 header_col, button_col = st.columns([5, 1])
 with header_col:
@@ -74,7 +74,7 @@ with header_col:
         f"últimos {WELLNESS_DAYS}. Los datos se guardan en caché por 1 hora."
     )
 with button_col:
-    if st.button("🔄 Actualizar datos", width="stretch"):
+    if st.button(":material/refresh: Actualizar datos", width="stretch"):
         st.cache_data.clear()
 
 with st.spinner("Descargando y calculando métricas de Garmin Connect..."):
