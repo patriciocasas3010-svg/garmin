@@ -655,11 +655,11 @@ def _render_cruces_clinicos(data: dict | None):
         estado = (panel.get("resumen") or {}).get("estado", "sin_datos")
         color = _COLOR_ESTADO.get(estado, _COLOR_ESTADO["sin_datos"])
         activo = idx_abierto == idx
-        fondo = f"{color}33" if activo else f"{color}1a"
-        borde = color if activo else f"{color}55"
+        fondo = f"{color}40" if activo else f"{color}26"
+        grosor = "2.5px" if activo else "1.5px"
         reglas_css.append(
             f'.st-key-chip_cruce_{paciente}_{idx} button {{ background:{fondo} !important; '
-            f'border:1.5px solid {borde} !important; border-radius:999px !important; '
+            f'border:{grosor} solid {color} !important; border-radius:999px !important; '
             f'padding:4px 14px !important; font-size:12.5px !important; font-weight:600 !important; '
             f'color:inherit !important; box-shadow:none !important; min-height:0 !important; }}'
         )
