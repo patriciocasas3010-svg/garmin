@@ -47,6 +47,9 @@ import notas_store
 import sheet_cache
 import token_store
 from garmin_dashboard_ui import (
+    CRITICAL_CORAL,
+    OPTIMUM_GREEN,
+    WARNING_AMBER,
     inbody_ultimo_registro,
     render_antropometria_section,
     render_composicion_avanzada,
@@ -563,7 +566,9 @@ def _calcular_paneles_cruces(data: dict | None):
     return cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
 
 
-_PUNTO_ESTADO = {"optimo": "🟢", "riesgo": "🟡", "alerta": "🔴", "sin_datos": "⚪"}
+_COLOR_ESTADO = {
+    "optimo": OPTIMUM_GREEN, "riesgo": WARNING_AMBER, "alerta": CRITICAL_CORAL, "sin_datos": "#9AA1AB",
+}
 
 
 def _render_alertas_cruces(data: dict | None):
@@ -583,54 +588,95 @@ def _render_alertas_cruces(data: dict | None):
         st.caption(f"Pauta sugerida: {resumen['pauta']}")
 
 
+def _render_detalle_panel_cruce(panel: dict) -> None:
+    resumen = panel.get("resumen")
+    if resumen:
+        st.markdown(f"**🧭 Diagnóstico integrado:** {resumen['diagnostico']}")
+        estado = resumen["estado"]
+        if estado == "alerta":
+            st.error(f"🔴 **Alerta:** {resumen['hallazgo']}")
+        elif estado == "riesgo":
+            st.warning(f"🟡 **Riesgo:** {resumen['hallazgo']}")
+        elif estado == "optimo":
+            st.success("🟢 **Óptimo:** sin hallazgos prioritarios con los datos disponibles.")
+        else:
+            st.caption("⚪ Sin datos suficientes todavía para clasificar este panel.")
+        st.info(f"🎯 **Pauta sugerida:** {resumen['pauta']}")
+        st.divider()
+    metricas = panel["metricas"]
+    _COLS_POR_FILA = 3
+    for inicio in range(0, len(metricas), _COLS_POR_FILA):
+        fila = metricas[inicio:inicio + _COLS_POR_FILA]
+        cols = st.columns(_COLS_POR_FILA)
+        for col, m in zip(cols, fila):
+            etiqueta = m["etiqueta"]
+            if m.get("pendiente"):
+                col.metric(etiqueta, "⏳ pendiente")
+                continue
+            valor = m["valor"]
+            unidad = m.get("unidad") or ""
+            if valor is None:
+                col.metric(etiqueta, "sin dato")
+            elif isinstance(valor, str):
+                col.metric(etiqueta, valor)
+            else:
+                col.metric(etiqueta, f"{valor} {unidad}".rstrip())
+    if panel.get("nota"):
+        st.caption(panel["nota"])
+
+
 def _render_cruces_clinicos(data: dict | None):
     """10 paneles que cruzan Estudios clínicos + InBody + wearable --
     apoyo a la lectura clínica, nunca un diagnóstico ni una sustitución
-    del criterio del nutriólogo."""
+    del criterio del nutriólogo. La fila de chips de color es la misma
+    que antes (nada más informativa) pero ahora cada chip ES el botón
+    que abre su desglose -- session_state recuerda cuál está abierto
+    para que sobreviva a los reruns de los demás widgets de la página."""
     st.caption(
         "Cada panel junta señales de laboratorio, InBody y del reloj que por separado no dicen tanto. "
         "Si un dato falta (no se ha subido ese estudio, InBody no lo trae, o el wearable no lo mide), "
-        "se muestra como \"sin dato\" -- nunca se inventa."
+        "se muestra como \"sin dato\" -- nunca se inventa. Dale clic a cualquier chip para ver su desglose."
     )
     paneles = _calcular_paneles_cruces(data)
-    _COLS_POR_FILA = 3
-    for panel in paneles:
+
+    key_abierto = f"cruces_panel_abierto_{paciente}"
+    if key_abierto not in st.session_state:
+        st.session_state[key_abierto] = None
+    idx_abierto = st.session_state[key_abierto]
+
+    # Streamlit le pone la clase "st-key-<key>" al contenedor/botón que
+    # tenga ese key -- así se le da estilo de chip de color a cada botón
+    # (y flex-wrap al renglón completo) sin necesitar JavaScript.
+    reglas_css = [
+        f'.st-key-cruces_chips_{paciente} {{ display:flex !important; flex-direction:row !important; '
+        f'flex-wrap:wrap !important; align-items:center !important; gap:6px !important; margin-bottom:4px !important; }}'
+    ]
+    for idx, panel in enumerate(paneles):
         estado = (panel.get("resumen") or {}).get("estado", "sin_datos")
-        punto = _PUNTO_ESTADO.get(estado, _PUNTO_ESTADO["sin_datos"])
-        with st.expander(f"{punto} {panel['icono']} {panel['titulo']}"):
-            resumen = panel.get("resumen")
-            if resumen:
-                st.markdown(f"**🧭 Diagnóstico integrado:** {resumen['diagnostico']}")
-                estado = resumen["estado"]
-                if estado == "alerta":
-                    st.error(f"🔴 **Alerta:** {resumen['hallazgo']}")
-                elif estado == "riesgo":
-                    st.warning(f"🟡 **Riesgo:** {resumen['hallazgo']}")
-                elif estado == "optimo":
-                    st.success("🟢 **Óptimo:** sin hallazgos prioritarios con los datos disponibles.")
-                else:
-                    st.caption("⚪ Sin datos suficientes todavía para clasificar este panel.")
-                st.info(f"🎯 **Pauta sugerida:** {resumen['pauta']}")
-                st.divider()
-            metricas = panel["metricas"]
-            for inicio in range(0, len(metricas), _COLS_POR_FILA):
-                fila = metricas[inicio:inicio + _COLS_POR_FILA]
-                cols = st.columns(_COLS_POR_FILA)
-                for col, m in zip(cols, fila):
-                    etiqueta = m["etiqueta"]
-                    if m.get("pendiente"):
-                        col.metric(etiqueta, "⏳ pendiente")
-                        continue
-                    valor = m["valor"]
-                    unidad = m.get("unidad") or ""
-                    if valor is None:
-                        col.metric(etiqueta, "sin dato")
-                    elif isinstance(valor, str):
-                        col.metric(etiqueta, valor)
-                    else:
-                        col.metric(etiqueta, f"{valor} {unidad}".rstrip())
-            if panel.get("nota"):
-                st.caption(panel["nota"])
+        color = _COLOR_ESTADO.get(estado, _COLOR_ESTADO["sin_datos"])
+        activo = idx_abierto == idx
+        fondo = f"{color}33" if activo else f"{color}1a"
+        borde = color if activo else f"{color}55"
+        reglas_css.append(
+            f'.st-key-chip_cruce_{paciente}_{idx} button {{ background:{fondo} !important; '
+            f'border:1.5px solid {borde} !important; border-radius:999px !important; '
+            f'padding:4px 14px !important; font-size:12.5px !important; font-weight:600 !important; '
+            f'color:inherit !important; box-shadow:none !important; min-height:0 !important; }}'
+        )
+    st.markdown(f"<style>{' '.join(reglas_css)}</style>", unsafe_allow_html=True)
+
+    with st.container(key=f"cruces_chips_{paciente}"):
+        for idx, panel in enumerate(paneles):
+            titulo_corto = panel["titulo"].split(". ", 1)[-1]
+            if st.button(f"{panel['icono']} {titulo_corto}", key=f"chip_cruce_{paciente}_{idx}"):
+                st.session_state[key_abierto] = None if idx_abierto == idx else idx
+                st.rerun()
+
+    if idx_abierto is not None:
+        panel = paneles[idx_abierto]
+        with st.container(border=True):
+            st.markdown(f"#### {panel['icono']} {panel['titulo']}")
+            _render_detalle_panel_cruce(panel)
 
 
 def _render_composicion_corporal(data: dict | None):
