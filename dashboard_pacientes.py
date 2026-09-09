@@ -55,7 +55,7 @@ from garmin_dashboard_ui import (
     render_inbody_section,
 )
 from push_resumen import crear_paciente_vacio, write_snapshot_to_worksheet
-from theme import apply_theme, render_header
+from theme import apply_theme, render_athlete_header, render_header
 
 st.set_page_config(page_title="AURA · Resumen de pacientes", layout="wide", page_icon="🩺")
 apply_theme()
@@ -206,7 +206,7 @@ historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"]
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
-    render_header(paciente, subtitulo=fuente)
+    render_athlete_header(paciente, subtitulo=fuente, enfoque=enfoque_actual)
     st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')}")
 with top_col2:
     if st.button("🔄 Actualizar", width="stretch"):

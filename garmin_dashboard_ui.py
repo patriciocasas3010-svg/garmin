@@ -278,48 +278,93 @@ _PGC_LIMITES = {
 }
 _PGC_LIMITES_GENERICO = (25.0, 32.0)
 
+_PGC_RANGO_IDEAL = {
+    "Femenino": (21.0, 24.0),
+    "Masculino": (14.0, 17.0),
+}
+_PGC_RANGO_IDEAL_GENERICO = (18.0, 24.0)
+_VISCERAL_RANGO_IDEAL = (1.0, 9.0)
+
+# "Plano técnico": mismo cuerpo de antes, pero con líneas de contorno
+# visibles (no un trazo casi invisible), tick marks de esquina tipo
+# viewport de escáner, y 3 líneas guía con etiqueta de segmento (TRONCO/
+# BRAZO/PIERNA) -- sigue siendo un solo color uniforme (no hay dato por
+# segmento todavía), pero ahora SE VE dividido en las 5 zonas.
 _AVATAR_SVG_TEMPLATE = (
-    '<svg viewBox="0 0 140 260" width="{width}" xmlns="http://www.w3.org/2000/svg">'
-    '<circle cx="70" cy="26" r="18" fill="{color}" stroke="#00000022"/>'
-    '<rect x="60" y="42" width="20" height="14" rx="4" fill="{color}" stroke="#00000022"/>'
-    '<path d="M40,56 Q70,46 100,56 L96,140 Q70,150 44,140 Z" fill="{color}" stroke="#00000022"/>'
-    '<rect x="14" y="58" width="20" height="95" rx="10" fill="{color}" stroke="#00000022" transform="rotate(-6 24 58)"/>'
-    '<rect x="106" y="58" width="20" height="95" rx="10" fill="{color}" stroke="#00000022" transform="rotate(6 116 58)"/>'
-    '<rect x="46" y="138" width="22" height="112" rx="10" fill="{color}" stroke="#00000022"/>'
-    '<rect x="72" y="138" width="22" height="112" rx="10" fill="{color}" stroke="#00000022"/>'
+    '<svg viewBox="0 0 210 260" width="{width}" xmlns="http://www.w3.org/2000/svg" '
+    'font-family="JetBrains Mono, monospace">'
+    '<path d="M5,15 L5,5 L15,5" stroke="#111111" stroke-width="1.5" fill="none"/>'
+    '<path d="M195,5 L205,5 L205,15" stroke="#111111" stroke-width="1.5" fill="none"/>'
+    '<path d="M5,245 L5,255 L15,255" stroke="#111111" stroke-width="1.5" fill="none"/>'
+    '<path d="M195,255 L205,255 L205,245" stroke="#111111" stroke-width="1.5" fill="none"/>'
+    '<circle cx="70" cy="26" r="18" fill="{color}" stroke="#111111" stroke-width="1.5"/>'
+    '<rect x="60" y="42" width="20" height="14" fill="{color}" stroke="#111111" stroke-width="1.5"/>'
+    '<path d="M40,56 L100,56 L96,140 L44,140 Z" fill="{color}" stroke="#111111" stroke-width="1.5"/>'
+    '<rect x="14" y="58" width="20" height="95" fill="{color}" stroke="#111111" stroke-width="1.5" transform="rotate(-6 24 58)"/>'
+    '<rect x="106" y="58" width="20" height="95" fill="{color}" stroke="#111111" stroke-width="1.5" transform="rotate(6 116 58)"/>'
+    '<rect x="46" y="138" width="22" height="112" fill="{color}" stroke="#111111" stroke-width="1.5"/>'
+    '<rect x="72" y="138" width="22" height="112" fill="{color}" stroke="#111111" stroke-width="1.5"/>'
+    '<line x1="98" y1="70" x2="145" y2="70" stroke="#111111" stroke-width="1"/>'
+    '<text x="148" y="73" font-size="9" fill="#111111">TRONCO</text>'
+    '<line x1="120" y1="100" x2="145" y2="100" stroke="#111111" stroke-width="1"/>'
+    '<text x="148" y="103" font-size="9" fill="#111111">BRAZO</text>'
+    '<line x1="90" y1="190" x2="145" y2="190" stroke="#111111" stroke-width="1"/>'
+    '<text x="148" y="193" font-size="9" fill="#111111">PIERNA</text>'
     "</svg>"
 )
 
 
-def _avatar_corporal(pgc_pct: float | None, sexo: str | None) -> None:
-    """Silueta corporal de cuerpo completo, coloreada UNIFORME según el %
-    de grasa corporal total (verde/ámbar/coral) -- no segmentada por
-    brazos/tronco/piernas todavía, porque el InBody real trae masa por
-    segmento pero nuestro OCR/formulario solo captura los totales."""
+def _barra_rango_ascii(valor: float, ideal_min: float, ideal_max: float, escala_max: float, ancho: int = 24) -> str:
+    """Barra de texto monoespaciado tipo [||||||......] -- llenado
+    proporcional a valor/escala_max (no al rango ideal, que es solo la
+    anotación de referencia al final)."""
+    frac = max(0.0, min(1.0, valor / escala_max)) if escala_max else 0.0
+    llenas = round(frac * ancho)
+    barra = "|" * llenas + "." * (ancho - llenas)
+    return f"[{barra}] {valor:.1f}  (RANGO IDEAL: {ideal_min:.1f} - {ideal_max:.1f})"
+
+
+def _avatar_corporal(pgc_pct: float | None, sexo: str | None, grasa_visceral: float | None = None) -> None:
+    """Silueta corporal de cuerpo completo ("plano técnico", ver
+    _AVATAR_SVG_TEMPLATE), coloreada UNIFORME según el % de grasa
+    corporal total (verde/ámbar/coral) -- no segmentada POR DATO todavía
+    (el InBody real trae masa por segmento, pero nuestro OCR/formulario
+    solo captura los totales); las etiquetas de segmento en el dibujo
+    son solo referencia visual, no vienen de una medición por zona."""
     if pgc_pct is None or pd.isna(pgc_pct):
         st.caption("Sin % de grasa corporal (PGC) capturado en este InBody -- no se puede colorear el avatar.")
         return
     limite_bajo, limite_alto = _PGC_LIMITES.get(sexo, _PGC_LIMITES_GENERICO)
     if pgc_pct <= limite_bajo:
-        color, etiqueta = OPTIMUM_GREEN, "En rango saludable"
+        color, etiqueta = OPTIMUM_GREEN, "EN RANGO SALUDABLE"
     elif pgc_pct <= limite_alto:
-        color, etiqueta = WARNING_AMBER, "Por encima del rango saludable"
+        color, etiqueta = WARNING_AMBER, "POR ENCIMA DEL RANGO SALUDABLE"
     else:
-        color, etiqueta = CRITICAL_CORAL, "Bastante por encima del rango saludable"
+        color, etiqueta = CRITICAL_CORAL, "BASTANTE POR ENCIMA DEL RANGO SALUDABLE"
 
     col_avatar, col_leyenda = st.columns([1, 2])
     with col_avatar:
-        st.markdown(_AVATAR_SVG_TEMPLATE.format(color=color, width=110), unsafe_allow_html=True)
+        st.markdown(_AVATAR_SVG_TEMPLATE.format(color=color, width=150), unsafe_allow_html=True)
     with col_leyenda:
-        st.markdown(f"**{pgc_pct:.1f}% de grasa corporal**")
-        st.markdown(f'<span style="color:{color}; font-weight:600;">● {etiqueta}</span>', unsafe_allow_html=True)
+        st.markdown(f'<span style="color:{color}; font-weight:700; letter-spacing:.04em;">● {etiqueta}</span>', unsafe_allow_html=True)
+        rango_ideal_pgc = _PGC_RANGO_IDEAL.get(sexo, _PGC_RANGO_IDEAL_GENERICO)
+        st.code(
+            "GRASA CORPORAL  " + _barra_rango_ascii(pgc_pct, *rango_ideal_pgc, escala_max=40, ancho=24) + " %",
+            language=None,
+        )
+        if grasa_visceral is not None and pd.notna(grasa_visceral):
+            st.code(
+                "GRASA VISCERAL  " + _barra_rango_ascii(grasa_visceral, *_VISCERAL_RANGO_IDEAL, escala_max=20, ancho=24)
+                + " NIVEL",
+                language=None,
+            )
         if sexo:
             st.caption(f"Referencia orientativa para {sexo.lower()}: hasta {limite_bajo:.0f}% saludable, "
                        f"{limite_bajo:.0f}-{limite_alto:.0f}% por encima, más de {limite_alto:.0f}% bastante por encima.")
         else:
             st.caption("Sin sexo capturado -- usando una referencia genérica, no ajustada.")
-        st.caption("⏳ Avatar sin segmentar por brazos/tronco/piernas todavía -- color uniforme según el % de "
-                   "grasa TOTAL, no por zona.")
+        st.caption("⏳ Las 5 zonas del plano son referencia visual -- el color sigue siendo uniforme según el % de "
+                   "grasa TOTAL, no hay medición real por segmento todavía.")
 
 
 def render_inbody_section(historial: pd.DataFrame):
@@ -343,7 +388,7 @@ def render_inbody_section(historial: pd.DataFrame):
         f"{ultimo.get('Altura_cm', '—')} cm · {ultimo.get('Edad', '—')} años · {ultimo.get('Sexo', '—')}"
     )
 
-    _avatar_corporal(ultimo.get("PGC_pct"), ultimo.get("Sexo"))
+    _avatar_corporal(ultimo.get("PGC_pct"), ultimo.get("Sexo"), ultimo.get("GrasaVisceral"))
     st.divider()
 
     c1, c2, c3, c4 = st.columns(4)
@@ -810,23 +855,31 @@ def render_dashboard_body(
                     + (" · ¡meta alcanzada! 🎉" if pgc_actual <= meta_grasa_pct else ""),
                 )
 
-            peso_inicial = _historial_valido.iloc[0].get("Peso_kg")
-            if pd.notna(peso_inicial) and pd.notna(peso_val) and peso_inicial > peso_val:
-                total_perdido = peso_inicial - peso_val
+            grasa_inicial = _historial_valido.iloc[0].get("MasaGrasa_kg")
+            if pd.notna(grasa_inicial) and pd.notna(grasa_val) and grasa_inicial > grasa_val:
+                total_perdido = grasa_inicial - grasa_val
                 hitos = int(total_perdido // 2.5)
                 if hitos >= 1:
                     hitos_prev = 0
                     if inbody_penultimo is not None:
-                        peso_prev_hito = inbody_penultimo.get("Peso_kg")
-                        if pd.notna(peso_prev_hito) and peso_inicial > peso_prev_hito:
-                            hitos_prev = int((peso_inicial - peso_prev_hito) // 2.5)
+                        grasa_prev_hito = inbody_penultimo.get("MasaGrasa_kg")
+                        if pd.notna(grasa_prev_hito) and grasa_inicial > grasa_prev_hito:
+                            hitos_prev = int((grasa_inicial - grasa_prev_hito) // 2.5)
                     nuevo_hito = hitos > hitos_prev
-                    medallas = "🏅" * min(hitos, 5) + ("…" if hitos > 5 else "")
-                    texto_hito = f"{medallas} Ha bajado **{total_perdido:.1f} kg** desde su primer registro -- {hitos} hito(s) de 2.5 kg alcanzado(s)."
-                    if nuevo_hito:
-                        st.success(f"🎉 ¡Nuevo hito! {texto_hito}")
-                    else:
-                        st.info(texto_hito)
+                    estado_bloque = "OBJETIVO ALCANZADO" if nuevo_hito else "PROGRESO ACUMULADO"
+                    st.markdown(
+                        f"""
+                        <div style="border-left:4px solid {OPTIMUM_GREEN}; background:{OPTIMUM_GREEN}0d; padding:14px 18px; margin-bottom:8px;">
+                            <div style="font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:{INK_PRIMARY}; line-height:1.1;">
+                                {estado_bloque}: -{total_perdido:.1f} KG MASA GRASA
+                            </div>
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.05em; color:{OPTIMUM_GREEN}; margin-top:6px; text-transform:uppercase;">
+                                DESPLIEGUE DE RECOMPENSA: ACTIVAR PROTOCOLO DE AUTOCUIDADO / HITO CUMPLIDO &middot; {hitos} HITO(S) DE 2.5 KG
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
             st.divider()
 
         edad_fisica = data.get("edad_fisica")

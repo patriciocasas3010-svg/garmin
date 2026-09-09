@@ -17,6 +17,7 @@ st.title(...). El fondo claro real lo pone .streamlit/config.toml
 ([theme] base="light") -- aquí solo van tipografías, logo y los acentos
 que Streamlit no cubre con su theming nativo (tabs, alertas)."""
 
+import hashlib
 import os
 
 import streamlit as st
@@ -135,6 +136,54 @@ def render_header(titulo: str, subtitulo: str = "") -> None:
             <div style="margin-bottom:16px;">{_FULL_LOGO_SVG}</div>
             <div style="width:36px; height:5px; background:{LAB_GREEN}; margin-bottom:8px;"></div>
             <div style="font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:38px; text-transform:uppercase; letter-spacing:1px; color:{INK}; line-height:1;">{titulo}</div>
+            {sub_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def atleta_id(nombre: str) -> str:
+    """ID de 4 dígitos estable (siempre el mismo para el mismo nombre,
+    no cambia entre sesiones ni reinicios) -- puramente cosmético para
+    la ficha, no un identificador real de expediente."""
+    return "#" + str(int(hashlib.md5(nombre.encode("utf-8")).hexdigest()[:4], 16) % 9000 + 1000)
+
+
+_ESTADO_POR_ENFOQUE = {
+    "Pérdida de peso": "EN FASE DE RECOMPOSICIÓN",
+    "Ganancia muscular": "EN FASE DE RECOMPOSICIÓN",
+    "Rendimiento deportivo / atleta": "EN FASE DE OPTIMIZACIÓN",
+    "Control de una condición médica (diabetes, hipertensión, etc.)": "EN SEGUIMIENTO CLÍNICO",
+    "Mantenimiento / bienestar general": "ÓPTIMO",
+}
+
+
+def render_athlete_header(nombre: str, subtitulo: str = "", enfoque: str | None = None) -> None:
+    """Encabezado de la ficha de un paciente en concreto -- "EXPEDIENTE
+    BIOMÉTRICO" + ID estable + franja de estado según su Enfoque
+    principal. Para el resto de pantallas (login, lista de pacientes,
+    etc.) se sigue usando render_header()."""
+    estado = _ESTADO_POR_ENFOQUE.get(enfoque, "EN SEGUIMIENTO")
+    sub_html = (
+        f'<div style="font-family:\'JetBrains Mono\',monospace; font-size:12px; '
+        f'text-transform:uppercase; letter-spacing:.06em; color:{INK_SOFT}; margin-top:4px;">{subtitulo}</div>'
+        if subtitulo else ""
+    )
+    st.markdown(
+        f"""
+        <div style="margin-bottom:14px;">
+            <div style="margin-bottom:16px;">{_FULL_LOGO_SVG}</div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <div style="width:10px; height:10px; background:{LAB_GREEN};"></div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; letter-spacing:.08em; color:{PINE_ACCENT};">
+                    ESTADO: {estado}
+                </div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.06em; color:{INK_SOFT}; text-transform:uppercase; margin-bottom:2px;">
+                Expediente biométrico &middot; ATLETA_ID: {atleta_id(nombre)}
+            </div>
+            <div style="font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:44px; text-transform:uppercase; letter-spacing:1px; color:{INK}; line-height:1;">{nombre}</div>
             {sub_html}
         </div>
         """,
