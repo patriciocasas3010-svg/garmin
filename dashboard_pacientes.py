@@ -44,6 +44,7 @@ import libre_metrics
 import libre_store
 import notas_store
 import sheet_cache
+import token_store
 from garmin_dashboard_ui import (
     render_antropometria_section,
     render_composicion_avanzada,
@@ -266,6 +267,33 @@ with col_notas:
 with col_wearable:
     with st.expander("⌚ Wearable"):
         st.caption(_TEXTO_ACTUALIZACION)
+
+        if fuente == "Garmin":
+            st.divider()
+            token_actual = token_store.leer_token(_gc(), st.secrets["SHEET_ID"], paciente)
+            if token_actual:
+                st.caption(f"✅ Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
+                if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
+                    token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], paciente)
+                    st.cache_data.clear()
+                    st.success("Listo, se quitó -- vuelve a depender de que abra su programa.")
+                    st.rerun()
+            else:
+                st.caption(
+                    "¿Que se actualice solo, todos los días, sin que tenga que abrir nada? Pídele que en "
+                    "su computadora corra una vez `python3 export_token.py` (junto con lo demás que ya "
+                    "tiene) y que te mande por WhatsApp/correo el bloque de texto que le sale. Pégalo aquí:"
+                )
+            token_pegado = st.text_area(
+                "Token de Garmin", key=f"token_pegado_{paciente}", label_visibility="collapsed",
+                placeholder="Pega aquí el bloque completo que imprimió export_token.py...",
+            )
+            if st.button("Guardar token", key=f"guardar_token_{paciente}", disabled=not token_pegado.strip()):
+                token_store.guardar_token(_gc(), st.secrets["SHEET_ID"], paciente, token_pegado)
+                st.cache_data.clear()
+                st.success("Token guardado -- desde la próxima sincronización diaria ya no depende de que abra nada.")
+                st.rerun()
+
         st.divider()
         st.caption("¿Te mandó el .zip de Apple Health (por WhatsApp, correo)? Súbelo aquí directo:")
         archivo_apple = st.file_uploader(
