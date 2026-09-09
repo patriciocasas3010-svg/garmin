@@ -38,6 +38,7 @@ import enfoque_store
 import estudios_parser
 import estudios_store
 import garmin_metrics as gm
+import garmin_session
 import inbody_ocr
 import inbody_store
 import libre_metrics
@@ -312,11 +313,28 @@ with col_wearable:
             token_actual = token_store.leer_token(_gc(), st.secrets["SHEET_ID"], paciente)
             if token_actual:
                 st.caption(f"✅ Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
-                if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
-                    token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], paciente)
-                    st.cache_data.clear()
-                    st.success("Listo, se quitó -- vuelve a depender de que abra su programa.")
-                    st.rerun()
+                col_forzar, col_quitar = st.columns(2)
+                with col_forzar:
+                    if st.button("🔄 Forzar actualización ahora", key=f"forzar_sync_{paciente}"):
+                        with st.spinner("Conectando con Garmin y actualizando (puede tardar un poco)..."):
+                            try:
+                                client = garmin_session.client_from_token(token_actual["token"])
+                                runtime_data = gm.build_runtime_data(client)
+                                write_snapshot_to_worksheet(_worksheet(), paciente, runtime_data, fuente="Garmin")
+                                st.cache_data.clear()
+                                st.success("Listo -- se actualizó con lo más reciente de Garmin.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(
+                                    f"No se pudo actualizar: {e}. Si el token ya venció, pídele que corra "
+                                    "`export_token.py` otra vez y te mande uno nuevo."
+                                )
+                with col_quitar:
+                    if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
+                        token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], paciente)
+                        st.cache_data.clear()
+                        st.success("Listo, se quitó -- vuelve a depender de que abra su programa.")
+                        st.rerun()
             else:
                 st.caption(
                     "¿Que se actualice solo, todos los días, sin que tenga que abrir nada? Pídele que en "

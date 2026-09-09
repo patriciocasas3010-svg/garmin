@@ -22,11 +22,11 @@ import json
 import os
 
 import gspread
-from garminconnect import Garmin
 from google.oauth2.service_account import Credentials
 
 import garmin_metrics as gm
 import token_store
+from garmin_session import client_from_token
 from push_resumen import write_snapshot_to_worksheet
 
 
@@ -52,8 +52,7 @@ def main() -> None:
     for p in pacientes:
         nombre, token = p["nombre"], p["token"]
         try:
-            client = Garmin()
-            client.login(token)
+            client = client_from_token(token)
             runtime_data = gm.build_runtime_data(client)
             write_snapshot_to_worksheet(ws_principal, nombre, runtime_data, fuente="Garmin")
             exitosos.append(nombre)
