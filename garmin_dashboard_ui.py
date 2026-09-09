@@ -16,23 +16,23 @@ import metabolic_calc as mc
 from resumen_pdf import build_resumen_pdf
 
 # ---------------------------------------------------------------------------
-# Paleta de marca "AURA CLINICAL" sobre fondo claro Clinical White (ver
-# theme.py / .streamlit/config.toml) -- BLUE (Warm Sage Green) es el
-# acento primario/default; ORANGE (Warning Amber) el acento cálido de
-# atención; AQUA y VIOLET son dos tonos más para diferenciar series
-# (verde azulado y malva polvo) -- solo BLUE+ORANGE se combinan en la
-# misma gráfica (Body Battery, Calorías). STATUS_GOOD/CRITICAL usan el
-# semáforo clínico (Optimum Green / Critical Coral), no los acentos de
-# marca -- son estados de salud, no branding.
+# Paleta de marca "AURA" (Clinical Performance Grid) sobre fondo claro
+# Clinical White (ver theme.py / .streamlit/config.toml) -- disciplinada
+# a propósito: tinta negra (Graphite Black) para casi todas las líneas
+# de una sola serie (lectura de telemetría, no "colorido"), Pine Accent
+# como único acento de rendimiento para el segundo color cuando una
+# gráfica combina 2 series (Body Battery, Calorías). STATUS_GOOD/
+# WARNING/CRITICAL usan el semáforo diagnóstico (Pine Accent/Signal
+# Yellow/Data Coral) -- son estados de parámetros, no branding.
 # ---------------------------------------------------------------------------
 
-BLUE, ORANGE, AQUA, VIOLET = "#6B8E78", "#DD6B20", "#4F8A8B", "#A8677D"
-OPTIMUM_GREEN, WARNING_AMBER, CRITICAL_CORAL = "#38A169", "#DD6B20", "#E53E3E"
+BLUE, ORANGE, AQUA, VIOLET = "#111111", "#00A859", "#111111", "#333333"
+OPTIMUM_GREEN, WARNING_AMBER, CRITICAL_CORAL = "#00A859", "#FFCC00", "#FF3333"
 STATUS_GOOD, STATUS_CRITICAL = OPTIMUM_GREEN, CRITICAL_CORAL
-INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#2A3439", "#5B6670", "#8B95A0"
-GRID_COLOR = "#E2DED4"
+INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#111111", "#4D4D4D", "#8C8C8C"
+GRID_COLOR = "#E5E5E5"
 CHART_BG = "transparent"
-ZONE_RAMP = ["#D7E4DC", "#A9C4B3", "#6B8E78", "#4A7059", "#2E4A3B"]  # Z1 (suave) -> Z5 (intenso)
+ZONE_RAMP = ["#D6F5E3", "#8FE0B3", "#00A859", "#00CC66", "#00FF66"]  # Z1 (suave) -> Z5 (intenso)
 
 alt.themes.enable("none")
 

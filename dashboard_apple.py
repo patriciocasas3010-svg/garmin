@@ -20,7 +20,7 @@ import apple_health as ah
 from garmin_dashboard_ui import render_dashboard_body
 from theme import apply_theme, render_header
 
-st.set_page_config(page_title="AURA CLINICAL · Tablero Maestro de Rendimiento", layout="wide", page_icon="🍎")
+st.set_page_config(page_title="AURA · Tablero Maestro de Rendimiento", layout="wide", page_icon="🍎")
 apply_theme()
 
 
