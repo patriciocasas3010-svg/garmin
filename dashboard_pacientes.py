@@ -47,9 +47,6 @@ import notas_store
 import sheet_cache
 import token_store
 from garmin_dashboard_ui import (
-    CRITICAL_CORAL,
-    OPTIMUM_GREEN,
-    WARNING_AMBER,
     inbody_ultimo_registro,
     render_antropometria_section,
     render_composicion_avanzada,
@@ -566,31 +563,7 @@ def _calcular_paneles_cruces(data: dict | None):
     return cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
 
 
-_COLOR_ESTADO = {
-    "optimo": OPTIMUM_GREEN, "riesgo": WARNING_AMBER, "alerta": CRITICAL_CORAL, "sin_datos": "#9AA1AB",
-}
-_ETIQUETA_ESTADO = {
-    "optimo": "Óptimo", "riesgo": "Riesgo", "alerta": "Alerta", "sin_datos": "Sin datos",
-}
-
-
-def _render_semaforo_cruces(paneles: list[dict]) -> None:
-    """Fila compacta con los 10 paneles como chips de color -- para que
-    la nutrióloga valide de un vistazo cuáles están en verde sin tener
-    que abrir panel por panel."""
-    chips = []
-    for panel in paneles:
-        estado = (panel.get("resumen") or {}).get("estado", "sin_datos")
-        color = _COLOR_ESTADO.get(estado, _COLOR_ESTADO["sin_datos"])
-        titulo_corto = panel["titulo"].split(". ", 1)[-1]
-        chips.append(
-            f'<div style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; '
-            f'border-radius:999px; background:{color}1a; border:1px solid {color}55; margin:3px;">'
-            f'<span style="width:8px; height:8px; border-radius:50%; background:{color};"></span>'
-            f'<span style="font-size:12.5px; font-weight:600;">{panel["icono"]} {titulo_corto}</span>'
-            f"</div>"
-        )
-    st.markdown(f'<div style="line-height:2.4;">{"".join(chips)}</div>', unsafe_allow_html=True)
+_PUNTO_ESTADO = {"optimo": "🟢", "riesgo": "🟡", "alerta": "🔴", "sin_datos": "⚪"}
 
 
 def _render_alertas_cruces(data: dict | None):
@@ -620,11 +593,11 @@ def _render_cruces_clinicos(data: dict | None):
         "se muestra como \"sin dato\" -- nunca se inventa."
     )
     paneles = _calcular_paneles_cruces(data)
-    _render_semaforo_cruces(paneles)
-    st.divider()
     _COLS_POR_FILA = 3
     for panel in paneles:
-        with st.expander(f"{panel['icono']} {panel['titulo']}"):
+        estado = (panel.get("resumen") or {}).get("estado", "sin_datos")
+        punto = _PUNTO_ESTADO.get(estado, _PUNTO_ESTADO["sin_datos"])
+        with st.expander(f"{punto} {panel['icono']} {panel['titulo']}"):
             resumen = panel.get("resumen")
             if resumen:
                 st.markdown(f"**🧭 Diagnóstico integrado:** {resumen['diagnostico']}")
