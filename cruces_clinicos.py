@@ -43,6 +43,9 @@ def _a_float(valor) -> float | None:
 _ALIASES: dict[str, tuple[list[str], list[str]]] = {
     "glucosa": (["GLUCOSA"], []),
     "insulina": (["INSULINA"], []),
+    "hba1c": (["HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLUCOSILADA", "HBA1C", "A1C"], []),
+    "lipasa": (["LIPASA"], []),
+    "amilasa": (["AMILASA"], []),
     "trigliceridos": (["TRIGLICERID"], []),
     "colesterol_hdl": (["HDL"], ["NO-HDL", "NO HDL", "NOHDL", "RELACION", "RATIO", "INDICE"]),
     "colesterol_ldl": (["LDL"], ["VLDL", "RELACION", "RATIO", "INDICE"]),
@@ -166,6 +169,21 @@ def _estado_lab(filas: list[dict], clave: str) -> str | None:
         return None
     estado = fila.get("estado")
     return estado if estado in ("bajo", "normal", "alto") else None
+
+
+def buscar_marcador(historial_estudios: list[dict] | None, clave: str) -> dict:
+    """Busca una prueba de laboratorio por su clave de alias (ver
+    _ALIASES) en TODOS los estudios guardados, la más reciente -- para
+    usarse fuera de los 10 paneles (ej. glp1_diabetes.py). Regresa
+    {"valor", "unidad", "estado"}, todo None si no se encontró."""
+    filas = _todas_las_filas(historial_estudios)
+    fila = _prueba(filas, clave)
+    if not fila:
+        return {"valor": None, "unidad": None, "estado": None}
+    return {
+        "valor": _a_float(fila.get("resultado")), "unidad": fila.get("unidad"),
+        "estado": fila.get("estado") if fila.get("estado") in ("bajo", "normal", "alto") else None,
+    }
 
 
 def _riesgo_carga(acwr: float | None, hrv_z: float | None) -> str | None:

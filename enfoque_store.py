@@ -1,8 +1,13 @@
 """Guarda y lee el "perfil" de enfoque de cada paciente -- el enfoque
 principal (pérdida de peso, rendimiento deportivo, etc.), la meta de
-% de grasa corporal, y los días de entrenamiento planeados por mes --
-en una pestaña separada ("Enfoque") dentro de la misma hoja de Google,
-igual que notas_store.py/inbody_store.py.
+% de grasa corporal, los días de entrenamiento planeados por mes, y
+la condición metabólica/GLP-1 -- en una pestaña separada ("Enfoque")
+dentro de la misma hoja de Google, igual que notas_store.py/inbody_store.py.
+
+La condición metabólica y el GLP-1 son el prerrequisito de la sección
+"GLP-1 y Diabéticos" del dashboard (ver glp1_diabetes.py): sin saber
+que el paciente tiene diabetes o toma GLP-1, no hay forma de decidir
+si mostrarle esa sección a la nutrióloga.
 
 A diferencia de las notas (que son un historial que se va acumulando),
 aquí solo importa el valor ACTUAL de cada campo -- por eso se
@@ -19,7 +24,11 @@ import sheet_cache
 
 HOJA_NOMBRE = "Enfoque"
 
-ENCABEZADOS = ["Nombre", "Enfoque", "MetaGrasaPct", "DiasPlanMes", "Fecha"]
+ENCABEZADOS = [
+    "Nombre", "Enfoque", "MetaGrasaPct", "DiasPlanMes",
+    "CondicionMetabolica", "GLP1Molecula", "GLP1Dosis", "GLP1FechaInicio",
+    "Fecha",
+]
 
 OPCIONES = [
     "Pérdida de peso",
@@ -27,6 +36,21 @@ OPCIONES = [
     "Rendimiento deportivo / atleta",
     "Control de una condición médica (diabetes, hipertensión, etc.)",
     "Mantenimiento / bienestar general",
+]
+
+OPCIONES_CONDICION_METABOLICA = [
+    "Ninguna",
+    "Prediabetes",
+    "Diabetes tipo 2",
+    "Diabetes tipo 1",
+]
+
+OPCIONES_GLP1 = [
+    "No usa",
+    "Semaglutida (Ozempic/Wegovy)",
+    "Tirzepatida (Mounjaro/Zepbound)",
+    "Liraglutida (Saxenda/Victoza)",
+    "Otro",
 ]
 
 
@@ -51,10 +75,13 @@ def _worksheet(gc: gspread.Client, sheet_id: str):
 def guardar_perfil(
     gc: gspread.Client, sheet_id: str, nombre: str,
     enfoque: str | None = None, meta_grasa_pct: float | None = None, dias_plan_mes: int | None = None,
+    condicion_metabolica: str | None = None, glp1_molecula: str | None = None,
+    glp1_dosis: str | None = None, glp1_fecha_inicio: str | None = None,
 ) -> None:
     """Actualiza solo los campos que no sean None -- así guardar el
-    enfoque no borra sin querer la meta de grasa o los días de plan que
-    ya se habían capturado antes (y viceversa)."""
+    enfoque no borra sin querer la meta de grasa, los días de plan o el
+    GLP-1/condición metabólica que ya se habían capturado antes (y
+    viceversa)."""
     ws = _worksheet(gc, sheet_id)
     registros = ws.get_all_values()
     if not registros:
@@ -69,11 +96,19 @@ def guardar_perfil(
                 enfoque if enfoque is not None else actual[1],
                 meta_grasa_pct if meta_grasa_pct is not None else actual[2],
                 dias_plan_mes if dias_plan_mes is not None else actual[3],
+                condicion_metabolica if condicion_metabolica is not None else actual[4],
+                glp1_molecula if glp1_molecula is not None else actual[5],
+                glp1_dosis if glp1_dosis is not None else actual[6],
+                glp1_fecha_inicio if glp1_fecha_inicio is not None else actual[7],
                 date.today().strftime("%d.%m.%Y"),
             ]
-            ws.update(f"A{i}:E{i}", [nueva_fila])
+            ws.update(f"A{i}:I{i}", [nueva_fila])
             return
-    ws.append_row([nombre, enfoque or "", meta_grasa_pct or "", dias_plan_mes or "", date.today().strftime("%d.%m.%Y")])
+    ws.append_row([
+        nombre, enfoque or "", meta_grasa_pct or "", dias_plan_mes or "",
+        condicion_metabolica or "", glp1_molecula or "", glp1_dosis or "", glp1_fecha_inicio or "",
+        date.today().strftime("%d.%m.%Y"),
+    ])
 
 
 def guardar_enfoque(gc: gspread.Client, sheet_id: str, nombre: str, enfoque: str) -> None:
@@ -96,8 +131,13 @@ def _a_int(v):
 
 @st.cache_data(ttl=30, show_spinner=False)
 def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
-    """{"enfoque": str|None, "meta_grasa_pct": float|None, "dias_plan_mes": int|None}."""
-    vacio = {"enfoque": None, "meta_grasa_pct": None, "dias_plan_mes": None}
+    """{"enfoque", "meta_grasa_pct", "dias_plan_mes", "condicion_metabolica",
+    "glp1_molecula", "glp1_dosis", "glp1_fecha_inicio"}."""
+    vacio = {
+        "enfoque": None, "meta_grasa_pct": None, "dias_plan_mes": None,
+        "condicion_metabolica": "Ninguna", "glp1_molecula": "No usa",
+        "glp1_dosis": None, "glp1_fecha_inicio": None,
+    }
     ws = _worksheet(_gc, sheet_id)
     registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
     df = pd.DataFrame(registros)
@@ -111,6 +151,10 @@ def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
         "enfoque": ultima.get("Enfoque") or None,
         "meta_grasa_pct": _a_float(ultima.get("MetaGrasaPct")),
         "dias_plan_mes": _a_int(ultima.get("DiasPlanMes")),
+        "condicion_metabolica": ultima.get("CondicionMetabolica") or "Ninguna",
+        "glp1_molecula": ultima.get("GLP1Molecula") or "No usa",
+        "glp1_dosis": ultima.get("GLP1Dosis") or None,
+        "glp1_fecha_inicio": ultima.get("GLP1FechaInicio") or None,
     }
 
 

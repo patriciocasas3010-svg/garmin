@@ -40,6 +40,7 @@ import estudios_parser
 import estudios_store
 import garmin_metrics as gm
 import garmin_session
+import glp1_diabetes
 import inbody_ocr
 import inbody_store
 import libre_metrics
@@ -284,6 +285,56 @@ with col_notas:
                 st.cache_data.clear()
                 st.success("Días de plan guardados.")
                 st.rerun()
+
+        st.divider()
+        st.caption(
+            "Condición metabólica y GLP-1 -- si aplica alguno, se activa la pestaña "
+            ":material/medication: GLP-1 y Diabéticos con los cruces pensados para esto "
+            "(pérdida de músculo vs. grasa, riñón/hidratación, HbA1c, pancreatitis)."
+        )
+        col_condicion, col_glp1 = st.columns(2)
+        with col_condicion:
+            opciones_condicion = enfoque_store.OPCIONES_CONDICION_METABOLICA
+            condicion_actual = perfil_actual["condicion_metabolica"]
+            indice_condicion = opciones_condicion.index(condicion_actual) if condicion_actual in opciones_condicion else 0
+            condicion_elegida = st.selectbox(
+                "Condición metabólica", opciones_condicion, index=indice_condicion, key=f"condicion_select_{paciente}",
+            )
+        with col_glp1:
+            opciones_glp1 = enfoque_store.OPCIONES_GLP1
+            glp1_actual = perfil_actual["glp1_molecula"]
+            indice_glp1 = opciones_glp1.index(glp1_actual) if glp1_actual in opciones_glp1 else 0
+            glp1_elegido = st.selectbox("GLP-1", opciones_glp1, index=indice_glp1, key=f"glp1_select_{paciente}")
+
+        mostrar_detalle_glp1 = glp1_elegido != "No usa"
+        glp1_dosis_elegida = perfil_actual["glp1_dosis"] or ""
+        glp1_fecha_elegida = perfil_actual["glp1_fecha_inicio"] or ""
+        if mostrar_detalle_glp1:
+            col_dosis, col_fecha_glp1 = st.columns(2)
+            with col_dosis:
+                glp1_dosis_elegida = st.text_input(
+                    "Dosis", value=glp1_dosis_elegida, key=f"glp1_dosis_{paciente}", placeholder="ej. 1.7 mg/semana",
+                )
+            with col_fecha_glp1:
+                glp1_fecha_elegida = st.text_input(
+                    "Fecha de inicio", value=glp1_fecha_elegida, key=f"glp1_fecha_{paciente}", placeholder="DD.MM.AAAA",
+                )
+
+        hubo_cambio_glp1 = (
+            condicion_elegida != condicion_actual or glp1_elegido != glp1_actual
+            or glp1_dosis_elegida != (perfil_actual["glp1_dosis"] or "")
+            or glp1_fecha_elegida != (perfil_actual["glp1_fecha_inicio"] or "")
+        )
+        if hubo_cambio_glp1 and st.button("Guardar condición/GLP-1", key=f"guardar_glp1_{paciente}"):
+            enfoque_store.guardar_perfil(
+                _gc(), st.secrets["SHEET_ID"], paciente,
+                condicion_metabolica=condicion_elegida, glp1_molecula=glp1_elegido,
+                glp1_dosis=glp1_dosis_elegida if mostrar_detalle_glp1 else "",
+                glp1_fecha_inicio=glp1_fecha_elegida if mostrar_detalle_glp1 else "",
+            )
+            st.cache_data.clear()
+            st.success("Guardado.")
+            st.rerun()
 
         st.divider()
         st.caption(
@@ -566,6 +617,10 @@ def _render_estudios_clinicos():
 
 def _calcular_paneles_cruces(data: dict | None):
     return cruces_clinicos.calcular_paneles(historial_estudios, historial_inbody, data or {})
+
+
+def _calcular_glp1_resumen():
+    return glp1_diabetes.resumen(historial_estudios, historial_inbody, perfil_actual)
 
 
 _COLOR_ESTADO = {
@@ -953,4 +1008,5 @@ render_dashboard_body(
     calorias_renderer=_render_calorias_comidas, glucosa_renderer=_render_glucosa_libre,
     cruces_clinicos_renderer=_render_cruces_clinicos, cruces_alertas_renderer=_render_alertas_cruces,
     paneles_cruces_fn=_calcular_paneles_cruces, perfil=perfil_actual,
+    glp1_activo=glp1_diabetes.activo(perfil_actual), glp1_resumen_fn=_calcular_glp1_resumen,
 )

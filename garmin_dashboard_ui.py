@@ -654,6 +654,93 @@ def _riesgo_lesion(acwr, hrv_z):
     return "Bajo", ":material/check_circle:"
 
 
+_ETIQUETAS_MARCADORES_GLP1 = {
+    "glucosa": ("Glucosa en ayunas", "mg/dL"),
+    "insulina": ("Insulina basal", "µUI/mL"),
+    "hba1c": ("Hemoglobina glicosilada (HbA1c)", "%"),
+    "sodio": ("Sodio", "mmol/L"),
+    "potasio": ("Potasio", "mmol/L"),
+    "creatinina": ("Creatinina", "mg/dL"),
+    "bun": ("BUN (nitrógeno ureico)", "mg/dL"),
+    "lipasa": ("Lipasa", "U/L"),
+    "amilasa": ("Amilasa", "U/L"),
+}
+
+
+def _render_glp1_diabetes(resumen: dict, glucosa_renderer=None):
+    """Pestaña GLP-1 y Diabéticos -- ver glp1_diabetes.py para el research
+    que originó estos cruces: pérdida de músculo vs. grasa (el riesgo más
+    citado en la literatura de GLP-1), riñón/hidratación, cálculos
+    biliares, pancreatitis y control glucémico de largo plazo."""
+    condicion = resumen["condicion_metabolica"]
+    glp1 = resumen["glp1_molecula"]
+    partes = []
+    if condicion != "Ninguna":
+        partes.append(condicion)
+    if glp1 != "No usa":
+        detalle_glp1 = glp1
+        if resumen.get("glp1_dosis"):
+            detalle_glp1 += f" -- {resumen['glp1_dosis']}"
+        if resumen.get("glp1_fecha_inicio"):
+            detalle_glp1 += f" (desde {resumen['glp1_fecha_inicio']})"
+        partes.append(detalle_glp1)
+    st.caption(" · ".join(partes) if partes else "Sin condición ni GLP-1 declarados en Notas del paciente.")
+    st.caption(
+        "Si un marcador falta (no se ha subido ese estudio), se muestra como \"sin dato\" -- nunca se "
+        "inventa. Esto es apoyo a tu lectura clínica, no un diagnóstico."
+    )
+
+    composicion = resumen["composicion"]
+    if composicion["kg_perdidos"] is not None:
+        st.subheader(":material/monitor_weight: Calidad de la pérdida de peso")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Peso inicial → actual", f"{composicion['peso_inicial']:.1f} → {composicion['peso_actual']:.1f} kg")
+        c2.metric("Total perdido", f"{composicion['kg_perdidos']:.1f} kg", help=f"En {composicion['semanas']:.1f} semanas.")
+        c3.metric(
+            "Velocidad", f"{composicion['velocidad_pct_semana']:.2f}%/semana",
+            help="Referencia: bajar más de ~1%/semana del peso corporal se asocia a más pérdida de "
+            "músculo y más riesgo de cálculos biliares.",
+        )
+        pct_musculo = composicion["pct_musculo_de_perdida"]
+        if pct_musculo is None:
+            c4.metric("% de lo perdido que fue músculo", "sin dato", help="Falta MME (masa muscular) en al menos 2 InBody.")
+        else:
+            c4.metric(
+                "% de lo perdido que fue músculo", f"{pct_musculo:.0f}%",
+                help="Referencia: en estudios de GLP-1 (STEP/SURMOUNT), sin proteína/fuerza suficiente "
+                "hasta 25-40% del peso perdido puede ser masa muscular.",
+            )
+            if pct_musculo > 25:
+                st.warning(
+                    f"{pct_musculo:.0f}% de lo perdido fue músculo -- por arriba del ~25% que reportan los "
+                    "estudios como el punto donde vale la pena reforzar proteína y entrenamiento de fuerza."
+                )
+    else:
+        st.info(
+            "Sube al menos 2 registros de InBody (con fecha) para ver la velocidad de pérdida de peso y "
+            "qué tanto fue músculo vs. grasa."
+        )
+
+    st.divider()
+    st.subheader(":material/science: Marcadores relevantes")
+    marcadores = resumen["marcadores"]
+    claves_orden = ["glucosa", "insulina", "hba1c", "sodio", "potasio", "creatinina", "bun", "lipasa", "amilasa"]
+    _COLS = 3
+    for inicio in range(0, len(claves_orden), _COLS):
+        cols = st.columns(_COLS)
+        for col, clave in zip(cols, claves_orden[inicio:inicio + _COLS]):
+            etiqueta, unidad = _ETIQUETAS_MARCADORES_GLP1[clave]
+            valor = marcadores[clave]["valor"]
+            col.metric(etiqueta, "sin dato" if valor is None else f"{valor} {unidad}".rstrip())
+    if resumen.get("homa_ir") is not None:
+        st.caption(f"HOMA-IR (calculado de glucosa + insulina): {resumen['homa_ir']}")
+
+    if glucosa_renderer is not None:
+        st.divider()
+        st.subheader(":material/bloodtype: Glucosa (FreeStyle Libre)")
+        glucosa_renderer()
+
+
 # ---------------------------------------------------------------------------
 # Cuerpo del dashboard (pestañas) -- toma un dict ya armado por
 # garmin_metrics.build_runtime_data() o snapshot_from_json()
@@ -665,7 +752,7 @@ def render_dashboard_body(
     analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
     estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
     cruces_clinicos_renderer=None, cruces_alertas_renderer=None, paneles_cruces_fn=None,
-    perfil: dict | None = None,
+    perfil: dict | None = None, glp1_activo: bool = False, glp1_resumen_fn=None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -714,9 +801,19 @@ def render_dashboard_body(
     los cruces clínicos con bandera roja también en el PDF descargable
     del Resumen, no solo en pantalla.
 
-    perfil: {"enfoque", "meta_grasa_pct", "dias_plan_mes"} de
+    perfil: {"enfoque", "meta_grasa_pct", "dias_plan_mes", "condicion_metabolica",
+    "glp1_molecula", "glp1_dosis", "glp1_fecha_inicio"} de
     enfoque_store.leer_perfil() -- para la barra de grasa corporal vs.
-    meta y el formato "Ejercitados: X días (de Y en plan)"."""
+    meta y el formato "Ejercitados: X días (de Y en plan)".
+
+    glp1_activo: si el paciente tiene una condición metabólica o GLP-1
+    declarados en `perfil` (ver glp1_diabetes.activo()) -- si es True,
+    se agrega la pestaña :material/medication: GLP-1 y Diabéticos.
+
+    glp1_resumen_fn: función sin argumentos que regresa el dict de
+    glp1_diabetes.resumen() (definida en dashboard_pacientes.py, que es
+    quien tiene acceso a Estudios clínicos e InBody) -- solo se llama si
+    glp1_activo es True."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -759,6 +856,8 @@ def render_dashboard_body(
         etiquetas.append(":material/biotech: Estudios clínicos")
     if cruces_clinicos_renderer is not None:
         etiquetas.append(":material/call_merge: Cruces clínicos")
+    if glp1_activo and glp1_resumen_fn is not None:
+        etiquetas.append(":material/medication: GLP-1 y Diabéticos")
     etiquetas += [":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas", ":material/bedtime: Sueño y Bienestar", "Calorías", "Alertas"]
     tabs = st.tabs(etiquetas)
     tab_resumen = tabs[0]
@@ -775,6 +874,10 @@ def render_dashboard_body(
     if cruces_clinicos_renderer is not None:
         tab_cruces = tabs[idx]
         idx += 1
+    tab_glp1 = None
+    if glp1_activo and glp1_resumen_fn is not None:
+        tab_glp1 = tabs[idx]
+        idx += 1
     tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas = tabs[idx:idx + 5]
 
     if tab_composicion is not None:
@@ -788,6 +891,10 @@ def render_dashboard_body(
     if tab_cruces is not None:
         with tab_cruces:
             cruces_clinicos_renderer(data)
+
+    if tab_glp1 is not None:
+        with tab_glp1:
+            _render_glp1_diabetes(glp1_resumen_fn(), glucosa_renderer)
 
     # --- Resumen ---
     with tab_resumen:
