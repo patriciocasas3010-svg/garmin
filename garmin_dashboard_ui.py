@@ -667,6 +667,44 @@ _ETIQUETAS_MARCADORES_GLP1 = {
 }
 
 
+def _render_calidad_perdida_peso(composicion: dict):
+    """Velocidad de pérdida de peso y qué tanto fue músculo vs. grasa --
+    ver glp1_diabetes._composicion(). Vive en su propia función porque
+    se dibuja en dos lugares: la pestaña GLP-1 y Diabéticos, y también
+    en Resumen cuando la marca del paciente es AURA Health (ver
+    marca_aura.py) -- ahí es lo que más le importa a ese doctor, no
+    tiene sentido que lo tenga que ir a buscar a otra pestaña."""
+    if composicion["kg_perdidos"] is None:
+        st.info(
+            "Sube al menos 2 registros de InBody (con fecha) para ver la velocidad de pérdida de peso y "
+            "qué tanto fue músculo vs. grasa."
+        )
+        return
+    st.subheader(":material/monitor_weight: Calidad de la pérdida de peso")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Peso inicial → actual", f"{composicion['peso_inicial']:.1f} → {composicion['peso_actual']:.1f} kg")
+    c2.metric("Total perdido", f"{composicion['kg_perdidos']:.1f} kg", help=f"En {composicion['semanas']:.1f} semanas.")
+    c3.metric(
+        "Velocidad", f"{composicion['velocidad_pct_semana']:.2f}%/semana",
+        help="Referencia: bajar más de ~1%/semana del peso corporal se asocia a más pérdida de "
+        "músculo y más riesgo de cálculos biliares.",
+    )
+    pct_musculo = composicion["pct_musculo_de_perdida"]
+    if pct_musculo is None:
+        c4.metric("% de lo perdido que fue músculo", "sin dato", help="Falta MME (masa muscular) en al menos 2 InBody.")
+    else:
+        c4.metric(
+            "% de lo perdido que fue músculo", f"{pct_musculo:.0f}%",
+            help="Referencia: en estudios de GLP-1 (STEP/SURMOUNT), sin proteína/fuerza suficiente "
+            "hasta 25-40% del peso perdido puede ser masa muscular.",
+        )
+        if pct_musculo > 25:
+            st.warning(
+                f"{pct_musculo:.0f}% de lo perdido fue músculo -- por arriba del ~25% que reportan los "
+                "estudios como el punto donde vale la pena reforzar proteína y entrenamiento de fuerza."
+            )
+
+
 def _render_glp1_diabetes(resumen: dict, glucosa_renderer=None):
     """Pestaña GLP-1 y Diabéticos -- ver glp1_diabetes.py para el research
     que originó estos cruces: pérdida de músculo vs. grasa (el riesgo más
@@ -690,36 +728,7 @@ def _render_glp1_diabetes(resumen: dict, glucosa_renderer=None):
         "inventa. Esto es apoyo a tu lectura clínica, no un diagnóstico."
     )
 
-    composicion = resumen["composicion"]
-    if composicion["kg_perdidos"] is not None:
-        st.subheader(":material/monitor_weight: Calidad de la pérdida de peso")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Peso inicial → actual", f"{composicion['peso_inicial']:.1f} → {composicion['peso_actual']:.1f} kg")
-        c2.metric("Total perdido", f"{composicion['kg_perdidos']:.1f} kg", help=f"En {composicion['semanas']:.1f} semanas.")
-        c3.metric(
-            "Velocidad", f"{composicion['velocidad_pct_semana']:.2f}%/semana",
-            help="Referencia: bajar más de ~1%/semana del peso corporal se asocia a más pérdida de "
-            "músculo y más riesgo de cálculos biliares.",
-        )
-        pct_musculo = composicion["pct_musculo_de_perdida"]
-        if pct_musculo is None:
-            c4.metric("% de lo perdido que fue músculo", "sin dato", help="Falta MME (masa muscular) en al menos 2 InBody.")
-        else:
-            c4.metric(
-                "% de lo perdido que fue músculo", f"{pct_musculo:.0f}%",
-                help="Referencia: en estudios de GLP-1 (STEP/SURMOUNT), sin proteína/fuerza suficiente "
-                "hasta 25-40% del peso perdido puede ser masa muscular.",
-            )
-            if pct_musculo > 25:
-                st.warning(
-                    f"{pct_musculo:.0f}% de lo perdido fue músculo -- por arriba del ~25% que reportan los "
-                    "estudios como el punto donde vale la pena reforzar proteína y entrenamiento de fuerza."
-                )
-    else:
-        st.info(
-            "Sube al menos 2 registros de InBody (con fecha) para ver la velocidad de pérdida de peso y "
-            "qué tanto fue músculo vs. grasa."
-        )
+    _render_calidad_perdida_peso(resumen["composicion"])
 
     st.divider()
     st.subheader(":material/science: Marcadores relevantes")
@@ -753,6 +762,7 @@ def render_dashboard_body(
     estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
     cruces_clinicos_renderer=None, cruces_alertas_renderer=None, paneles_cruces_fn=None,
     perfil: dict | None = None, glp1_activo: bool = False, glp1_resumen_fn=None,
+    marca: str = "clinical",
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -813,7 +823,15 @@ def render_dashboard_body(
     glp1_resumen_fn: función sin argumentos que regresa el dict de
     glp1_diabetes.resumen() (definida en dashboard_pacientes.py, que es
     quien tiene acceso a Estudios clínicos e InBody) -- solo se llama si
-    glp1_activo es True."""
+    glp1_activo es True.
+
+    marca: "clinical" (default) / "flow" / "health" -- ver
+    marca_aura.calcular(). Ajusta qué tanto peso le da la pestaña
+    Resumen a cada cosa: en "health" se le agrega la Calidad de la
+    pérdida de peso (el cruce que más le importa a esa población) y se
+    quitan ACWR/HRV de "¿Cómo vengo hoy?" (son de carga de
+    entrenamiento, no aplican a un paciente sedentario/bariátrico); en
+    "flow"/"clinical" el Resumen no cambia."""
     inbody_resumen = None
     inbody_penultimo = None
     if inbody_historial is not None:
@@ -1017,18 +1035,25 @@ def render_dashboard_body(
             st.divider()
 
         st.subheader("¿Cómo vengo hoy?")
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
-        c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
-        c2.metric("HRV (Z-score)", f"{ultimo_hrv_z:.2f}" if ultimo_hrv_z is not None else "—", help="Qué tan lejos está tu HRV de tu línea base de 60 días")
+        sueno_7d = sleep_df["hours"].tail(7).mean()
+        promedio_ml_dia = (data.get("hidratacion_diaria") or {}).get("promedio_ml_dia")
+        if marca == "health":
+            # ACWR/HRV son de carga de entrenamiento -- no aplican a un
+            # paciente sedentario/bariátrico, así que no se muestran aquí
+            # (siguen disponibles en Carga y Preparación si el paciente
+            # sí trae reloj con esos datos).
+            c3, c4, c5, c6 = st.columns(4)
+        else:
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
+            c1.metric("ACWR", f"{ultimo_acwr:.2f}" if ultimo_acwr is not None else "—", help="Carga aguda (7d) / crónica (28d). Zona segura: 0.8–1.3")
+            c2.metric("HRV (Z-score)", f"{ultimo_hrv_z:.2f}" if ultimo_hrv_z is not None else "—", help="Qué tan lejos está tu HRV de tu línea base de 60 días")
         c3.metric(
             "FC en reposo hoy",
             f"{rhr_today:.0f}" if rhr_today is not None else "—",
             delta=f"{rhr_today - rhr_baseline:+.0f} vs. tu media" if rhr_today is not None and rhr_baseline is not None else None,
             delta_color="inverse",
         )
-        sueno_7d = sleep_df["hours"].tail(7).mean()
         c4.metric("Sueño (7d)", f"{sueno_7d:.1f} h" if pd.notna(sueno_7d) else "—")
-        promedio_ml_dia = (data.get("hidratacion_diaria") or {}).get("promedio_ml_dia")
         c5.metric(
             "Líquido/día activo", f"{promedio_ml_dia:.0f} mL" if promedio_ml_dia is not None else "—",
             help="Promedio de pérdida de líquidos estimada en días con actividad (ver pestaña Sueño y Bienestar).",
@@ -1053,6 +1078,10 @@ def render_dashboard_body(
                 "detalle completo (marcadores y desglose) en la pestaña :material/call_merge: Cruces clínicos."
             )
             cruces_alertas_renderer(data)
+
+        if marca == "health" and glp1_resumen_fn is not None:
+            st.divider()
+            _render_calidad_perdida_peso(glp1_resumen_fn()["composicion"])
 
         st.divider()
         st.subheader(f"Calificación del mes (últimos {wellness_days} días)")

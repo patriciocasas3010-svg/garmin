@@ -1014,4 +1014,5 @@ render_dashboard_body(
     cruces_clinicos_renderer=_render_cruces_clinicos, cruces_alertas_renderer=_render_alertas_cruces,
     paneles_cruces_fn=_calcular_paneles_cruces, perfil=perfil_actual,
     glp1_activo=glp1_diabetes.activo(perfil_actual), glp1_resumen_fn=_calcular_glp1_resumen,
+    marca=marca_actual,
 )
