@@ -539,6 +539,24 @@ def _resumen_p10(filas, ratio_neu_lin, acwr, battery_recarga_prom) -> dict:
     )
 
 
+def marcadores_clave(panel: dict, maximo: int = 3) -> str:
+    """Los primeros marcadores con dato real de un panel (nunca los
+    'pendiente' ni los 'sin dato') -- se usa tanto en pantalla (Resumen y
+    Alertas) como en el PDF descargable, para que la alerta traiga el
+    valor concreto y no solo el texto del hallazgo."""
+    piezas = []
+    for m in panel.get("metricas", []):
+        if m.get("pendiente") or m.get("valor") is None:
+            continue
+        unidad = m.get("unidad") or ""
+        valor = m["valor"]
+        valor_fmt = valor if isinstance(valor, str) else f"{valor} {unidad}".rstrip()
+        piezas.append(f"{m['etiqueta']}: {valor_fmt}")
+        if len(piezas) >= maximo:
+            break
+    return " · ".join(piezas)
+
+
 def calcular_paneles(
     historial_estudios: list[dict] | None, historial_inbody: pd.DataFrame | None, data: dict,
 ) -> list[dict]:

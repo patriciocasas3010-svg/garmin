@@ -629,7 +629,8 @@ def render_dashboard_body(
     inbody_historial: pd.DataFrame | None = None, paciente_nombre: str | None = None,
     analisis_ia_renderer=None, calorias_comidas_historial: pd.DataFrame | None = None,
     estudios_clinicos_renderer=None, calorias_renderer=None, glucosa_renderer=None,
-    cruces_clinicos_renderer=None, cruces_alertas_renderer=None, perfil: dict | None = None,
+    cruces_clinicos_renderer=None, cruces_alertas_renderer=None, paneles_cruces_fn=None,
+    perfil: dict | None = None,
 ):
     """composicion_corporal_renderer: función que recibe este mismo `data` y
     dibuja el contenido de InBody/mediciones antropométricas (definida en
@@ -672,6 +673,11 @@ def render_dashboard_body(
     activa (mismo cálculo que cruces_clinicos_renderer, pero filtrado) --
     si se pasa, se agrega dentro de la pestaña Alertas, junto con los
     demás indicadores unificados.
+
+    paneles_cruces_fn: función que recibe este mismo `data` y regresa la
+    lista cruda de los 10 paneles (no un render) -- se usa para incluir
+    los cruces clínicos con bandera roja también en el PDF descargable
+    del Resumen, no solo en pantalla.
 
     perfil: {"enfoque", "meta_grasa_pct", "dias_plan_mes"} de
     enfoque_store.leer_perfil() -- para la barra de grasa corporal vs.
@@ -989,6 +995,7 @@ def render_dashboard_body(
             edad_fisica=edad_fisica, nivel_estres=nivel_estres, gasto_total_avg=gasto_total_avg,
             pasos_promedio_dia=pasos_promedio_dia,
             minutos_ejercicio_promedio_dia=minutos_ejercicio_promedio_dia, vo2max=vo2max,
+            paneles_cruces=paneles_cruces_fn(data) if paneles_cruces_fn is not None else None,
         )
         st.download_button(
             ":material/print: Descargar resumen (PDF)", data=pdf_bytes,

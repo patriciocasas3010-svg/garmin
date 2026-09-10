@@ -573,23 +573,6 @@ _COLOR_ESTADO = {
 }
 
 
-def _marcadores_clave(panel: dict, maximo: int = 3) -> str:
-    """Los primeros marcadores con dato real de este panel (nunca los
-    'pendiente' ni los 'sin dato') -- para darle punch a la alerta, en
-    vez de solo el texto del hallazgo."""
-    piezas = []
-    for m in panel.get("metricas", []):
-        if m.get("pendiente") or m.get("valor") is None:
-            continue
-        unidad = m.get("unidad") or ""
-        valor = m["valor"]
-        valor_fmt = valor if isinstance(valor, str) else f"{valor} {unidad}".rstrip()
-        piezas.append(f"{m['etiqueta']}: {valor_fmt}")
-        if len(piezas) >= maximo:
-            break
-    return " · ".join(piezas)
-
-
 def _render_alertas_cruces(data: dict | None):
     """Los paneles de Cruces clínicos que NO están en verde (riesgo o
     alerta) -- para que salten a la vista en Alertas (y en Resumen) sin
@@ -605,7 +588,7 @@ def _render_alertas_cruces(data: dict | None):
             st.error(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/error:")
         else:
             st.warning(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/warning:")
-        marcadores = _marcadores_clave(panel)
+        marcadores = cruces_clinicos.marcadores_clave(panel)
         if marcadores:
             st.caption(f"Marcadores: {marcadores}")
         st.caption(f"Pauta sugerida: {resumen['pauta']}")
@@ -969,5 +952,5 @@ render_dashboard_body(
     estudios_clinicos_renderer=_render_estudios_clinicos,
     calorias_renderer=_render_calorias_comidas, glucosa_renderer=_render_glucosa_libre,
     cruces_clinicos_renderer=_render_cruces_clinicos, cruces_alertas_renderer=_render_alertas_cruces,
-    perfil=perfil_actual,
+    paneles_cruces_fn=_calcular_paneles_cruces, perfil=perfil_actual,
 )

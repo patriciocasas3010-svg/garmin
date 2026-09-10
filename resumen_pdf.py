@@ -1,6 +1,7 @@
 """Genera un PDF de una página con el resumen del paciente (composición
-corporal, "cómo vengo hoy" y calificación del mes) para poder descargarlo
-e imprimirlo -- ver garmin_dashboard_ui.render_dashboard_body.
+corporal, "cómo vengo hoy", cruces clínicos a atender y calificación del
+mes) para poder descargarlo e imprimirlo -- ver
+garmin_dashboard_ui.render_dashboard_body.
 
 Usa fpdf2 (puro Python, sin dependencias del sistema -- funciona igual en
 Streamlit Cloud) con el estilo compartido de pdf_style.py ("Identidad
@@ -8,6 +9,7 @@ Botánica") para que el PDF se vea igual de cuidado que la app."""
 
 from datetime import date
 
+import cruces_clinicos
 import pdf_style as ps
 
 _OLIVE_RGB = ps.OLIVE_RGB
@@ -48,6 +50,7 @@ def build_resumen_pdf(
     pasos_promedio_dia=None,
     minutos_ejercicio_promedio_dia=None,
     vo2max=None,
+    paneles_cruces: list[dict] | None = None,
 ) -> bytes:
     pdf = ps.new_branded_pdf()
     ps.draw_header(
@@ -155,6 +158,29 @@ def build_resumen_pdf(
         ("Líquido/día activo", _fmt(promedio_ml_dia, " mL", 0)),
         ("Alertas activas", str(alertas_activas)),
     ])
+
+    if paneles_cruces is not None:
+        _section_title("Cruces clínicos a atender")
+        por_atender = [
+            p for p in paneles_cruces if (p.get("resumen") or {}).get("estado") in ("alerta", "riesgo")
+        ]
+        if not por_atender:
+            pdf.set_font("Karla", "", 10)
+            pdf.set_text_color(*_OLIVE_RGB)
+            pdf.multi_cell(0, 6, "Todos los cruces clínicos están en verde (óptimo) por ahora.", new_x="LMARGIN", new_y="NEXT")
+        else:
+            for panel in por_atender:
+                resumen = panel["resumen"]
+                pdf.set_font("Karla", "B", 10)
+                pdf.set_text_color(*_TERRACOTTA_RGB)
+                pdf.multi_cell(0, 5.5, f"{panel['titulo']} -- {resumen['hallazgo']}", new_x="LMARGIN", new_y="NEXT")
+                marcadores = cruces_clinicos.marcadores_clave(panel)
+                pdf.set_font("Karla", "", 9)
+                pdf.set_text_color(*_INK_SOFT)
+                if marcadores:
+                    pdf.multi_cell(0, 5, f"Marcadores: {marcadores}", new_x="LMARGIN", new_y="NEXT")
+                pdf.multi_cell(0, 5, f"Pauta sugerida: {resumen['pauta']}", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(2)
 
     _section_title(f"Calificación del mes (últimos {wellness_days} días)")
     overall_score = resumen_mes.get("overall_score")
