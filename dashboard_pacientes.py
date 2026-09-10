@@ -41,6 +41,7 @@ import estudios_store
 import garmin_metrics as gm
 import garmin_session
 import glp1_diabetes
+import marca_aura
 import inbody_ocr
 import inbody_store
 import libre_metrics
@@ -209,9 +210,13 @@ enfoque_actual = perfil_actual["enfoque"]
 historial_calorias = calorias_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
 
+marca_actual = marca_aura.calcular(perfil_actual)
+
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
-    render_header(paciente, subtitulo=fuente)
+    render_header(paciente, subtitulo=fuente, marca=marca_actual)
+    if marca_actual != "clinical":
+        st.caption(f":material/label: Este paciente vive bajo {marca_aura.MARCAS[marca_actual]['nombre']}.")
     st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')}")
 with top_col2:
     if st.button(":material/refresh: Actualizar", width="stretch"):

@@ -19,6 +19,8 @@ import os
 
 import streamlit as st
 
+from marca_aura import MARCAS
+
 BRAND_NAME = "AURA CLINICAL"
 BRAND_TAGLINE = "Human Coherence System"
 
@@ -107,11 +109,32 @@ def apply_theme() -> None:
     )
 
 
-def render_header(titulo: str, subtitulo: str = "") -> None:
+def render_header(titulo: str, subtitulo: str = "", marca: str = "clinical") -> None:
     """Encabezado de marca -- el logo completo (assets/aura_clinical_logo.svg,
     ya trae "AURA CLINICAL" + tagline) arriba, y el título de esta página
     en particular (ej. "Resumen de pacientes" o el nombre del paciente)
-    debajo, en Syne -- reemplaza a st.title("emoji Texto")."""
+    debajo, en Syne -- reemplaza a st.title("emoji Texto").
+
+    marca: "clinical" (default, sin cambios -- usa el isotipo+wordmark
+    completo de assets/aura_clinical_logo.svg) / "flow" / "health" --
+    ver marca_aura.py, quien decide cuál le toca a cada paciente. Flow
+    y Health todavía no tienen un logo propio diseñado para fondo claro
+    (el .svg de Flow que ya existe es para fondo oscuro, ilegible aquí),
+    así que por ahora se dibuja un wordmark de texto con el acento de
+    esa marca -- mismo tratamiento tipográfico, en lo que se diseña el
+    logo real de cada una."""
+    if marca == "clinical" or marca not in MARCAS:
+        wordmark_html = f'<div style="margin-bottom:16px;">{_FULL_LOGO_SVG}</div>'
+    else:
+        info = MARCAS[marca]
+        wordmark_html = (
+            f'<div style="margin-bottom:16px;">'
+            f'<span style="font-family:\'Syne\',sans-serif; font-weight:800; font-size:30px; '
+            f'letter-spacing:1px; color:{info["acento"]};">{info["nombre"]}</span><br>'
+            f'<span style="font-family:\'Plus Jakarta Sans\',sans-serif; font-size:11px; '
+            f'text-transform:uppercase; letter-spacing:.12em; color:{INK_SOFT};">{info["tagline"]}</span>'
+            f'</div>'
+        )
     sub_html = (
         f'<div style="font-family:\'Plus Jakarta Sans\',sans-serif; font-size:12px; '
         f'text-transform:uppercase; letter-spacing:.06em; color:{INK_SOFT}; margin-top:2px;">{subtitulo}</div>'
@@ -120,7 +143,7 @@ def render_header(titulo: str, subtitulo: str = "") -> None:
     st.markdown(
         f"""
         <div style="margin-bottom:14px;">
-            <div style="margin-bottom:16px;">{_FULL_LOGO_SVG}</div>
+            {wordmark_html}
             <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:26px; color:{INK};">{titulo}</div>
             {sub_html}
         </div>
