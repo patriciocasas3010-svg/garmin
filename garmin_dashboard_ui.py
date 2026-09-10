@@ -167,6 +167,41 @@ def ordinal_bar_chart(labels: list[str], values: list[float], value_title: str, 
     return chart
 
 
+def donut_cumplimiento(num_activos: int, meta_dias: int, color: str = BLUE, size: int = 170) -> alt.Chart:
+    """Dona con el % de días con actividad cumplidos sobre `meta_dias`
+    (100% = los días planeados si el nutriólogo los definió para este
+    paciente, o 30 días por default) -- con el % al centro."""
+    meta_dias = max(meta_dias, 1)
+    activos = max(0, min(num_activos, meta_dias))
+    restante = meta_dias - activos
+    pct = activos / meta_dias
+    data = pd.DataFrame({
+        "categoria": ["Activos", "Restante"], "valor": [activos, restante], "orden": [0, 1],
+        "color_hex": [color, GRID_COLOR],
+    })
+    anillo = (
+        alt.Chart(data)
+        .mark_arc(innerRadius=size * 0.34, outerRadius=size * 0.5, cornerRadius=2)
+        .encode(
+            theta=alt.Theta("valor:Q", stack=True),
+            order=alt.Order("orden:Q"),
+            color=alt.Color("color_hex:N", scale=None, legend=None),
+            tooltip=[alt.Tooltip("categoria:N", title=""), alt.Tooltip("valor:Q", title="días")],
+        )
+    )
+    centro = (
+        alt.Chart(pd.DataFrame({"texto": [f"{pct * 100:.0f}%"]}))
+        .mark_text(size=26, fontWeight=700, color=INK_PRIMARY, font="JetBrains Mono")
+        .encode(text="texto:N")
+    )
+    return (
+        (anillo + centro)
+        .properties(width=size, height=size)
+        .configure(background=CHART_BG)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
+    )
+
+
 def _melt_by_date(df: pd.DataFrame, cols: list[str], names: list[str]) -> pd.DataFrame:
     flat = df[cols].reset_index()
     flat = flat.rename(columns={flat.columns[0]: "fecha"})
@@ -967,22 +1002,26 @@ def render_dashboard_body(
             dias_inactivos_fmt = ", ".join(_fmt_dia_es(pd.Timestamp(d)) for d in resumen_mes["dias_inactivos"])
 
             dias_plan_mes = (perfil or {}).get("dias_plan_mes")
-            if dias_plan_mes:
-                st.markdown(f"**Días con actividad física** -- Ejercitados: {num_dias_activos} días (de {dias_plan_mes} en plan)")
-                st.progress(
-                    max(0.0, min(1.0, num_dias_activos / dias_plan_mes)),
-                    text=f"{num_dias_activos} de {dias_plan_mes} días planeados ({num_dias_activos / dias_plan_mes * 100:.0f}%)",
-                )
-            else:
-                st.markdown(f"**Días con actividad física** (de los últimos {total_dias} días)")
-            d1, d2 = st.columns(2)
-            d1.metric("Días con actividad", str(num_dias_activos), help=f"{num_dias_activos / total_dias * 100:.0f}% de los días")
-            d2.metric(
-                "Días sin actividad", str(num_dias_sin_actividad),
-                help=f"Sin actividad: {dias_inactivos_fmt}" if dias_inactivos_fmt else None,
+            meta_dias = dias_plan_mes or 30
+            st.markdown(
+                f"**Días con actividad física** -- {num_dias_activos} de {meta_dias} días"
+                + (" en plan" if dias_plan_mes else "")
             )
-            if num_dias_sin_actividad > total_dias / 2:
-                st.warning(f"Más de la mitad del mes sin actividad registrada ({num_dias_sin_actividad} de {total_dias} días).")
+            col_dona, col_dias = st.columns([1, 2])
+            with col_dona:
+                st.altair_chart(donut_cumplimiento(num_dias_activos, meta_dias, BLUE), width="content")
+            with col_dias:
+                d1, d2 = st.columns(2)
+                d1.metric(
+                    "Días con actividad", str(num_dias_activos),
+                    help=f"{num_dias_activos / total_dias * 100:.0f}% de los últimos {total_dias} días",
+                )
+                d2.metric(
+                    "Días sin actividad", str(num_dias_sin_actividad),
+                    help=f"Sin actividad: {dias_inactivos_fmt}" if dias_inactivos_fmt else None,
+                )
+                if num_dias_sin_actividad > total_dias / 2:
+                    st.warning(f"Más de la mitad del mes sin actividad registrada ({num_dias_sin_actividad} de {total_dias} días).")
 
         st.divider()
         pdf_bytes = build_resumen_pdf(
