@@ -573,10 +573,27 @@ _COLOR_ESTADO = {
 }
 
 
+def _marcadores_clave(panel: dict, maximo: int = 3) -> str:
+    """Los primeros marcadores con dato real de este panel (nunca los
+    'pendiente' ni los 'sin dato') -- para darle punch a la alerta, en
+    vez de solo el texto del hallazgo."""
+    piezas = []
+    for m in panel.get("metricas", []):
+        if m.get("pendiente") or m.get("valor") is None:
+            continue
+        unidad = m.get("unidad") or ""
+        valor = m["valor"]
+        valor_fmt = valor if isinstance(valor, str) else f"{valor} {unidad}".rstrip()
+        piezas.append(f"{m['etiqueta']}: {valor_fmt}")
+        if len(piezas) >= maximo:
+            break
+    return " · ".join(piezas)
+
+
 def _render_alertas_cruces(data: dict | None):
     """Los paneles de Cruces clínicos que NO están en verde (riesgo o
-    alerta) -- para que salten a la vista en Alertas sin tener que abrir
-    la pestaña de Cruces clínicos panel por panel."""
+    alerta) -- para que salten a la vista en Alertas (y en Resumen) sin
+    tener que abrir la pestaña de Cruces clínicos panel por panel."""
     paneles = _calcular_paneles_cruces(data)
     por_atender = [p for p in paneles if (p.get("resumen") or {}).get("estado") in ("alerta", "riesgo")]
     if not por_atender:
@@ -588,6 +605,9 @@ def _render_alertas_cruces(data: dict | None):
             st.error(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/error:")
         else:
             st.warning(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/warning:")
+        marcadores = _marcadores_clave(panel)
+        if marcadores:
+            st.caption(f"Marcadores: {marcadores}")
         st.caption(f"Pauta sugerida: {resumen['pauta']}")
 
 

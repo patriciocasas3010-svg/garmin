@@ -897,6 +897,15 @@ def render_dashboard_body(
             "antes de entrar al detalle de cada pestaña."
         )
 
+        if cruces_alertas_renderer is not None:
+            st.divider()
+            st.subheader(":material/call_merge: Cruces clínicos a atender")
+            st.caption(
+                "Lo que sale de verde en los 10 paneles que cruzan laboratorio + InBody + wearable -- "
+                "detalle completo (marcadores y desglose) en la pestaña :material/call_merge: Cruces clínicos."
+            )
+            cruces_alertas_renderer(data)
+
         st.divider()
         st.subheader(f"Calificación del mes (últimos {wellness_days} días)")
 
