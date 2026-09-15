@@ -1,0 +1,412 @@
+<title>Sistema de Diseño AURA</title>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.gstatic.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #FFFFFF;
+    --surface: #F4F1EA;
+    --surface-2: #ECE7DA;
+    --ink: #2A3439;
+    --ink-soft: #5B6570;
+    --ink-faint: #8B958E;
+    --line: #DAD4C6;
+    --accent: #6B8E78;
+    --accent-ink: #2F4238;
+    --accent-bg: #6B8E7814;
+    --good: #38A169;
+    --warn: #DD6B20;
+    --bad: #E53E3E;
+    --good-bg: #EAF6EF;
+    --warn-bg: #FCEEE1;
+    --bad-bg: #FCEAEA;
+    --mono-tint: #2A34390A;
+    --flow: #5A6FA8;
+    --health: #3E7CB8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #1B211E;
+      --surface: #232A26;
+      --surface-2: #2A3230;
+      --ink: #E9EDE9;
+      --ink-soft: #A3AFA6;
+      --ink-faint: #6E7A72;
+      --line: #3A443E;
+      --accent: #8FB39C;
+      --accent-ink: #CFE2D4;
+      --accent-bg: #8FB39C1a;
+      --good: #5FBE8B;
+      --warn: #E6A15B;
+      --bad: #E97B72;
+      --good-bg: #1E3229;
+      --warn-bg: #362B1C;
+      --bad-bg: #392320;
+      --mono-tint: #FFFFFF0A;
+      --flow: #8C9BD4;
+      --health: #7BAEE0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #1B211E; --surface: #232A26; --surface-2: #2A3230; --ink: #E9EDE9;
+    --ink-soft: #A3AFA6; --ink-faint: #6E7A72; --line: #3A443E; --accent: #8FB39C;
+    --accent-ink: #CFE2D4; --accent-bg: #8FB39C1a; --good: #5FBE8B; --warn: #E6A15B;
+    --bad: #E97B72; --good-bg: #1E3229; --warn-bg: #362B1C; --bad-bg: #392320;
+    --mono-tint: #FFFFFF0A; --flow: #8C9BD4; --health: #7BAEE0;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: auto; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-inline: max(20px, calc((100vw - 900px) / 2));
+    padding-block: 56px 80px;
+  }
+
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  h1, h2, h3 { font-family: 'Syne', sans-serif; font-weight: 800; text-wrap: balance; margin: 0; }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .14em; color: var(--accent);
+  }
+  p { line-height: 1.6; color: var(--ink-soft); max-width: 62ch; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 0.92em; }
+
+  /* ---------- Header ---------- */
+  header { display: flex; align-items: flex-end; gap: 22px; margin-bottom: 10px; flex-wrap: wrap; }
+  header svg { width: 240px; height: auto; flex-shrink: 0; }
+  header h1 { font-size: 15px; letter-spacing: .1em; color: var(--ink-faint); font-weight: 700; }
+  .intro { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--line); }
+  .intro h2 { font-size: 34px; }
+  .intro p { font-size: 16px; margin-top: 10px; }
+  .intro .refs { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .refs span {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent-ink);
+    background: var(--accent-bg); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    padding: 5px 11px; border-radius: 999px; text-decoration: none;
+  }
+
+  /* ---------- Sections ---------- */
+  section { margin-top: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  .sec-head .num { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink-faint); }
+  .sec-head h2 { font-size: 24px; }
+  .sec-head .desc { font-family: 'Plus Jakarta Sans'; font-size: 13.5px; color: var(--ink-faint); margin-left: auto; text-align: right; max-width: 34ch; }
+
+  /* ---------- Color swatches ---------- */
+  .swatch-group { margin-bottom: 30px; }
+  .swatch-group h3 {
+    font-family: 'Plus Jakarta Sans'; font-weight: 700; font-size: 12.5px;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); margin-bottom: 12px;
+  }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .swatch {
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface);
+  }
+  .swatch .chip { height: 62px; }
+  .swatch .meta { padding: 9px 11px 11px; }
+  .swatch .name { font-size: 12.5px; font-weight: 600; }
+  .swatch .hex { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+  .swatch .use { font-size: 11px; color: var(--ink-faint); margin-top: 4px; line-height: 1.4; }
+
+  /* ---------- Typography specimens ---------- */
+  .type-role { border-top: 1px solid var(--line); padding: 22px 0; display: grid; grid-template-columns: 150px 1fr; gap: 20px; }
+  .type-role:first-child { border-top: none; }
+  .type-role .label { font-size: 12px; color: var(--ink-faint); }
+  .type-role .label b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 4px; }
+  .type-role .sample-syne { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 26px; }
+  .type-role .sample-jakarta-body { font-family: 'Plus Jakarta Sans'; font-size: 14.5px; color: var(--ink); line-height: 1.6; max-width: 52ch; }
+  .type-role .sample-jakarta-label { font-family: 'Plus Jakarta Sans'; font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); }
+  .type-role .sample-inter { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 30px; font-variant-numeric: tabular-nums; }
+  .type-role .sample-mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink-soft); }
+
+  /* ---------- Marca cards ---------- */
+  .marcas { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .marca-card { border: 1px solid var(--line); border-radius: 12px; padding: 22px 20px; background: var(--surface); }
+  .marca-card .wordmark { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 21px; letter-spacing: .5px; }
+  .marca-card .tagline { font-family: 'Plus Jakarta Sans'; font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); margin-top: 3px; }
+  .marca-card .rule { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+  .marca-card .logo-real { margin-bottom: 4px; }
+  .marca-card .logo-real svg { height: 34px; width: auto; }
+
+  /* ---------- Component specimens ---------- */
+  .spec { border: 1px solid var(--line); border-radius: 12px; padding: 24px; background: var(--surface); margin-bottom: 16px; }
+  .spec .spec-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faint); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .06em; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    font-family: 'Plus Jakarta Sans'; font-weight: 600; font-size: 13.5px; padding: 9px 18px;
+    border-radius: 8px; border: 1px solid var(--line); background: var(--ground); color: var(--ink); cursor: default;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .tabs-row { display: flex; gap: 26px; border-bottom: 1px solid var(--line); }
+  .tab { font-family: 'Plus Jakarta Sans'; font-weight: 600; font-size: 13.5px; color: var(--ink-faint); padding-bottom: 10px; position: relative; }
+  .tab.active { color: var(--accent); }
+  .tab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
+
+  .alert { display: flex; gap: 10px; padding: 12px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 8px; align-items: flex-start; }
+  .alert:last-child { margin-bottom: 0; }
+  .alert.error { background: var(--bad-bg); border-left: 3px solid var(--bad); color: var(--bad); }
+  .alert.warn { background: var(--warn-bg); border-left: 3px solid var(--warn); color: var(--warn); }
+  .alert.good { background: var(--good-bg); border-left: 3px solid var(--good); color: var(--good); }
+  .alert b { color: var(--ink); }
+
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    font-family: 'Plus Jakarta Sans'; font-weight: 600; font-size: 12px; padding: 4px 13px;
+    border-radius: 999px; border: 1.5px solid var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); color: var(--ink);
+  }
+  .chip.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+  .chip.good { border-color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 20px; }
+  .kpi .kpi-label { font-family: 'Plus Jakarta Sans'; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); }
+  .kpi .kpi-value { font-family: 'Inter'; font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .kpi .kpi-delta { font-family: 'Plus Jakarta Sans'; font-weight: 600; font-size: 11.5px; margin-top: 4px; display: inline-block; padding: 2px 8px; border-radius: 999px; }
+  .kpi .kpi-delta.down { color: var(--good); background: var(--good-bg); }
+  .kpi .kpi-delta.up { color: var(--bad); background: var(--bad-bg); }
+
+  /* ---------- Scale table ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-family: 'Plus Jakarta Sans'; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 11px 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); }
+  td:first-child { color: var(--ink); font-weight: 600; }
+  td code { color: var(--accent-ink); background: var(--accent-bg); padding: 1px 6px; border-radius: 4px; }
+  .scale-wrap { overflow-x: auto; }
+
+  footer { margin-top: 70px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-faint); }
+  footer code { color: var(--ink-soft); }
+
+  @media (max-width: 560px) {
+    .sec-head { flex-direction: column; align-items: flex-start; }
+    .sec-head .desc { text-align: left; margin-left: 0; }
+    .type-role { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="slate" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#2A3439"/><stop offset="100%" stop-color="#4A5760"/>
+        </linearGradient>
+        <linearGradient id="sageAmber" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#6B8E78"/><stop offset="50%" stop-color="#A9B37A"/><stop offset="100%" stop-color="#DD6B20"/>
+        </linearGradient>
+        <radialGradient id="flareWarm" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#6B8E78" stop-opacity="0.55"/><stop offset="100%" stop-color="#6B8E78" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="slateBevel" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#3E4B52"/><stop offset="45%" stop-color="#2A3439"/><stop offset="55%" stop-color="#232B2F"/><stop offset="100%" stop-color="#3E4B52"/>
+        </linearGradient>
+      </defs>
+      <g>
+        <path d="M10,112 L58,22 L106,112" fill="none" stroke="url(#slateBevel)" stroke-width="16" stroke-linecap="square" stroke-linejoin="miter"/>
+        <circle cx="58" cy="18" r="12" fill="url(#flareWarm)"/>
+        <path d="M47,13 Q58,2 69,13" fill="none" stroke="#6B8E78" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+        <path d="M27,63 Q44,45 58,60 Q72,75 89,57" fill="none" stroke="url(#sageAmber)" stroke-width="10" stroke-linecap="round"/>
+        <path d="M30,60 Q47,42 61,57" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+        <path d="M25,75 Q43,59 58,73 Q73,87 91,69" fill="none" stroke="url(#sageAmber)" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+        <path d="M22,87 Q41,73 58,86 Q75,99 94,81" fill="none" stroke="url(#sageAmber)" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+      </g>
+      <text x="140" y="72" font-family="Syne, 'Arial Black', sans-serif" font-weight="800" font-size="38" letter-spacing="1.5" fill="url(#slate)">AURA CLINICAL</text>
+      <text x="142" y="97" font-family="'Inter', 'Courier New', sans-serif" font-weight="600" font-size="11" letter-spacing="3" fill="#6B7680">HUMAN COHERENCE SYSTEM</text>
+    </svg>
+    <h1>Guía de entrega para desarrollo</h1>
+  </header>
+
+  <div class="intro">
+    <h2>Sistema de diseño AURA</h2>
+    <p>Los tokens, tipografías y patrones de componentes tal como existen hoy en producción (extraídos directamente de <code>theme.py</code> y <code>marca_aura.py</code>) — para reconstruir esto en Figma sin adivinar valores desde capturas de pantalla. Nada aquí es aspiracional: cada color, cada especimen, es exactamente lo que ya corre con pacientes reales.</p>
+    <div class="refs">
+      <span>theme.py</span>
+      <span>marca_aura.py</span>
+      <span>HANDOFF_DESARROLLADOR.md</span>
+      <span>assets/cruces_clinicos_referencia.html</span>
+    </div>
+  </div>
+
+  <section id="color">
+    <div class="sec-head">
+      <span class="num">01</span>
+      <h2>Color</h2>
+      <span class="desc">Clinical Pure White + Warm Sage Green — clínico y cálido, no "dark tech".</span>
+    </div>
+
+    <div class="swatch-group">
+      <h3>Base — fondo y tinta</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:var(--ground); border-bottom:1px solid var(--line);"></div><div class="meta"><div class="name">Clinical White</div><div class="hex">#FFFFFF</div><div class="use">Fondo base de toda la app</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--surface);"></div><div class="meta"><div class="name">Sand Linen</div><div class="hex">#F4F1EA</div><div class="use">Superficies, cards, contenedores</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--surface-2);"></div><div class="meta"><div class="name">Sand Linen 2</div><div class="hex">#ECE7DA</div><div class="use">Superficie elevada / hover</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink);"></div><div class="meta"><div class="name">Charcoal Slate</div><div class="hex">#2A3439</div><div class="use">Texto principal</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ink-soft);"></div><div class="meta"><div class="name">Slate Soft</div><div class="hex">#6B7680</div><div class="use">Texto secundario, subtítulos</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--line);"></div><div class="meta"><div class="name">Línea</div><div class="hex">#DAD4C6</div><div class="use">Bordes, divisores</div></div></div>
+      </div>
+    </div>
+
+    <div class="swatch-group">
+      <h3>Marcas AURA — una identidad por tipo de paciente</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:var(--accent);"></div><div class="meta"><div class="name">Sage Green — Clinical</div><div class="hex">#6B8E78</div><div class="use">Caso general: pérdida de peso, ganancia muscular, mantenimiento</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--flow);"></div><div class="meta"><div class="name">Indigo — Flow</div><div class="hex">#5A6FA8</div><div class="use">Enfoque = "Rendimiento deportivo / atleta"</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--health);"></div><div class="meta"><div class="name">Blue — Health</div><div class="hex">#3E7CB8</div><div class="use">Condición metabólica o GLP-1 activo (gana sobre Flow)</div></div></div>
+      </div>
+    </div>
+
+    <div class="swatch-group">
+      <h3>Semáforo clínico — estado de salud, no acento de marca</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:var(--good);"></div><div class="meta"><div class="name">Optimum Green</div><div class="hex">#38A169</div><div class="use">st.success · panel en verde</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--warn);"></div><div class="meta"><div class="name">Warning Amber</div><div class="hex">#DD6B20</div><div class="use">st.warning · riesgo, vigilar</div></div></div>
+        <div class="swatch"><div class="chip" style="background:var(--bad);"></div><div class="meta"><div class="name">Critical Coral</div><div class="hex">#E53E3E</div><div class="use">st.error · alerta, atender pronto</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="type">
+    <div class="sec-head">
+      <span class="num">02</span>
+      <h2>Tipografía</h2>
+      <span class="desc">3 roles, sin excepciones: titulares / UI / cifras.</span>
+    </div>
+
+    <div class="type-role">
+      <div class="label"><b>Syne 800</b>Titulares H1/H2 — nombre del paciente, títulos de sección</div>
+      <div class="sample-syne">Resumen de pacientes</div>
+    </div>
+    <div class="type-role">
+      <div class="label"><b>Plus Jakarta Sans</b>UI, cuerpo, tablas, botones — 400 a 700</div>
+      <div>
+        <div class="sample-jakarta-body">Cada panel junta señales de laboratorio, InBody y del reloj que por separado no dicen tanto.</div>
+        <div class="sample-jakarta-label" style="margin-top:10px;">Grasa corporal</div>
+      </div>
+    </div>
+    <div class="type-role">
+      <div class="label"><b>Inter 700</b>Cifras y KPIs — tabular-nums, alta legibilidad en tamaño reducido</div>
+      <div class="sample-inter">82.0 kg</div>
+    </div>
+    <div class="type-role">
+      <div class="label"><b>JetBrains Mono</b>Etiquetas técnicas, eyebrows, hex/código (no está en el código de producción — se agregó para este documento; considerar formalizarla como 4ª familia)</div>
+      <div class="sample-mono">DiasPlanMes · GLP1FechaInicio · #6B8E78</div>
+    </div>
+  </section>
+
+  <section id="marca">
+    <div class="sec-head">
+      <span class="num">03</span>
+      <h2>Marca dinámica</h2>
+      <span class="desc">marca_aura.calcular(perfil) decide cuál se muestra — nunca la elige el paciente.</span>
+    </div>
+    <div class="marcas">
+      <div class="marca-card">
+        <div class="logo-real">
+          <svg viewBox="0 0 250 40" xmlns="http://www.w3.org/2000/svg"><text x="0" y="30" font-family="Syne, sans-serif" font-weight="800" font-size="26" letter-spacing="1" fill="var(--ink)">AURA CLINICAL</text></svg>
+        </div>
+        <div class="tagline">Human Coherence System</div>
+        <div class="rule">Caso por default. Isotipo completo diseñado (ver <code>assets/aura_clinical_logo.svg</code>) — los otros dos todavía usan wordmark de texto.</div>
+      </div>
+      <div class="marca-card">
+        <div class="wordmark" style="color:var(--flow);">AURA FLOW</div>
+        <div class="tagline">Coherence for Performance Data</div>
+        <div class="rule">Cuando <code>enfoque == "Rendimiento deportivo / atleta"</code>. Sin isotipo propio todavía — pendiente de diseño.</div>
+      </div>
+      <div class="marca-card">
+        <div class="wordmark" style="color:var(--health);">AURA HEALTH</div>
+        <div class="tagline">Coherencia Metabólica</div>
+        <div class="rule">Cuando hay condición metabólica o GLP-1 activo. Gana sobre Flow si ambos aplican. Sin isotipo propio todavía.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="components">
+    <div class="sec-head">
+      <span class="num">04</span>
+      <h2>Componentes</h2>
+      <span class="desc">Patrones reales tal como se ven hoy en el dashboard.</span>
+    </div>
+
+    <div class="spec">
+      <div class="spec-label">Botones</div>
+      <div class="btn-row">
+        <button class="btn primary">Crear paciente</button>
+        <button class="btn">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-label">Tabs — hasta 10 en el dashboard hoy, punto de dolor conocido</div>
+      <div class="tabs-row">
+        <div class="tab active">Resumen</div>
+        <div class="tab">Composición corporal</div>
+        <div class="tab">Estudios clínicos</div>
+        <div class="tab">Cruces clínicos</div>
+        <div class="tab">Alertas</div>
+      </div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-label">Alertas semánticas</div>
+      <div class="alert error"><span>⚠</span><span><b>Alerta:</b> Glucosa en ayunas 121 mg/dL — fuera de rango normal (70–99).</span></div>
+      <div class="alert warn"><span>△</span><span><b>Riesgo:</b> ACWR 1.42 — carga aguda elevada, vigilar recuperación.</span></div>
+      <div class="alert good"><span>✓</span><span><b>Óptimo:</b> Sin hallazgos prioritarios con los datos disponibles.</span></div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-label">Chips de marcadores (Cruces clínicos)</div>
+      <div class="chip-row">
+        <span class="chip">Glucosa en ayunas: 105.0 mg/dL</span>
+        <span class="chip">Insulina basal: 12.0 µUI/mL</span>
+        <span class="chip warn">HOMA-IR (calculado): 3.11</span>
+        <span class="chip good">HbA1c: 5.2%</span>
+      </div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-label">KPI / métrica — label uppercase + cifra tabular + delta semántico</div>
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-label">Peso</div><div class="kpi-value">82.0 kg</div></div>
+        <div class="kpi"><div class="kpi-label">Grasa corporal</div><div class="kpi-value">25.0 kg</div><div class="kpi-delta down">↓ −5.0 kg</div></div>
+        <div class="kpi"><div class="kpi-label">Masa muscular</div><div class="kpi-value">29.0 kg</div><div class="kpi-delta up">↓ −3.0 kg</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scale">
+    <div class="sec-head">
+      <span class="num">05</span>
+      <h2>Escala y espaciado</h2>
+      <span class="desc">Los valores puntuales ya usados en el código — no una escala teórica nueva.</span>
+    </div>
+    <div class="scale-wrap">
+      <table>
+        <thead><tr><th>Rol</th><th>Familia / peso</th><th>Tamaño</th><th>Dónde se usa</th></tr></thead>
+        <tbody>
+          <tr><td>Nombre del paciente (header)</td><td>Syne 800</td><td><code>26px</code></td><td>render_header()</td></tr>
+          <tr><td>Marca en logo (Flow/Health)</td><td>Syne 800</td><td><code>30px</code></td><td>render_header()</td></tr>
+          <tr><td>Barra sticky — nombre</td><td>Syne (h5)</td><td><code>~20px</code></td><td>barra fija de paciente</td></tr>
+          <tr><td>Métrica primaria (KPI)</td><td>Inter 700</td><td><code>2rem</code> (nativo st.metric)</td><td>Peso / Grasa / Masa muscular</td></tr>
+          <tr><td>Etiqueta uppercase</td><td>Jakarta 500</td><td><code>0.75rem</code></td><td>stMetricLabel</td></tr>
+          <tr><td>Chip de marcador</td><td>Jakarta 600</td><td><code>12.5px</code></td><td>chips de Cruces clínicos</td></tr>
+          <tr><td>Caption / meta</td><td>Jakarta 400</td><td><code>12px</code></td><td>subtítulos, fechas</td></tr>
+          <tr><td>Radio de chip / pill</td><td>—</td><td><code>999px</code></td><td>chips, tags</td></tr>
+          <tr><td>Radio de card / botón</td><td>—</td><td><code>6–10px</code></td><td>containers, botones</td></tr>
+          <tr><td>Borde de alerta</td><td>—</td><td><code>3px solid</code></td><td>izquierdo, en el color semántico</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Documento generado a partir del código en producción (<code>theme.py</code>, <code>marca_aura.py</code>, <code>dashboard_pacientes.py</code>, <code>cruces_clinicos.py</code>) — no de una interpretación visual. Companion técnico: <code>HANDOFF_DESARROLLADOR.md</code> en la raíz del repo.
+  </footer>
+
+</div>
