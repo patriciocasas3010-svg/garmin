@@ -48,8 +48,10 @@ import inbody_store
 import libre_metrics
 import libre_store
 import notas_store
+import paciente_admin
 import sheet_cache
 import token_store
+import usuarios_store
 from garmin_dashboard_ui import (
     CRITICAL_CORAL,
     OPTIMUM_GREEN,
@@ -67,41 +69,6 @@ st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="w
 apply_theme()
 
 
-def _check_password() -> bool:
-    """Pide una contraseña (guardada como Secret APP_PASSWORD) antes de
-    mostrar nada -- este dashboard reúne la información de TODOS los
-    pacientes, así que a diferencia del dashboard personal, aquí sí
-    recomendamos fuerte configurar este Secret."""
-    try:
-        expected = st.secrets.get("APP_PASSWORD")
-    except Exception:
-        expected = None
-    if not expected:
-        st.warning(
-            "Este dashboard reúne los datos de todos tus pacientes y no tiene contraseña "
-            "configurada -- cualquiera con este link puede verlo. Configura el Secret "
-            "APP_PASSWORD en Streamlit Cloud (Settings → Secrets) lo antes posible.",
-            icon=":material/warning:",
-        )
-        return True
-
-    if st.session_state.get("_authed"):
-        return True
-
-    render_header("Resumen de pacientes")
-    pwd = st.text_input("Contraseña", type="password")
-    if pwd == expected:
-        st.session_state["_authed"] = True
-        st.rerun()
-    elif pwd:
-        st.error("Contraseña incorrecta.")
-    return False
-
-
-if not _check_password():
-    st.stop()
-
-
 @st.cache_resource
 def _gc() -> gspread.Client:
     creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
@@ -110,6 +77,63 @@ def _gc() -> gspread.Client:
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
+
+
+def _login() -> dict | None:
+    """Login de usuario/contraseña -- reemplaza la contraseña única
+    compartida de antes, para poder tener una cuenta por nutrióloga
+    (con su propio rol y sus propios pacientes asignados).
+
+    "admin" + el Secret APP_PASSWORD siempre funciona como acceso de
+    emergencia -- no depende de que la pestaña "Usuarios" exista ni
+    tenga datos, así nunca te quedas fuera. El resto de las cuentas se
+    crean desde Settings (ver más abajo) y viven en esa pestaña.
+
+    Regresa {"usuario", "nombre", "rol"} de quien ya inició sesión, o
+    None si todavía no (y ya mostró el formulario)."""
+    if st.session_state.get("_usuario"):
+        return st.session_state["_usuario"]
+
+    try:
+        admin_password = st.secrets.get("APP_PASSWORD")
+    except Exception:
+        admin_password = None
+
+    if not admin_password:
+        st.warning(
+            "Este dashboard reúne los datos de todos tus pacientes y no tiene contraseña "
+            "configurada -- cualquiera con este link puede verlo. Configura el Secret "
+            "APP_PASSWORD en Streamlit Cloud (Settings → Secrets) lo antes posible.",
+            icon=":material/warning:",
+        )
+        st.session_state["_usuario"] = {"usuario": "admin", "nombre": "Admin", "rol": "admin"}
+        return st.session_state["_usuario"]
+
+    render_header("Resumen de pacientes")
+    with st.form("login_form"):
+        usuario_input = st.text_input("Usuario", placeholder='"admin", o el usuario que te dieron')
+        pwd = st.text_input("Contraseña", type="password")
+        entrar = st.form_submit_button("Entrar", type="primary")
+
+    if entrar:
+        usuario_input = usuario_input.strip()
+        if usuario_input == "admin" and pwd == admin_password:
+            st.session_state["_usuario"] = {"usuario": "admin", "nombre": "Admin", "rol": "admin"}
+            st.rerun()
+        else:
+            perfil_login = usuarios_store.verificar_login(_gc(), st.secrets["SHEET_ID"], usuario_input, pwd)
+            if perfil_login:
+                st.session_state["_usuario"] = perfil_login
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos.")
+    return None
+
+
+usuario_actual = _login()
+if not usuario_actual:
+    st.stop()
+_ES_ADMIN = usuario_actual["rol"] == "admin"
 
 
 @st.cache_resource(ttl=3600)
@@ -157,12 +181,25 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 
 if st.session_state["paciente_actual"] is None:
-    render_header("Resumen de pacientes")
-    st.caption("Selecciona un paciente para ver su Tablero Maestro de Rendimiento.")
+    col_titulo, col_sesion = st.columns([5, 1])
+    with col_titulo:
+        render_header("Resumen de pacientes")
+        st.caption("Selecciona un paciente para ver su Tablero Maestro de Rendimiento.")
+    with col_sesion:
+        st.caption(f"{usuario_actual['nombre']} · {'admin' if _ES_ADMIN else 'nutriólogo'}")
+        if st.button(":material/logout: Cerrar sesión", key="cerrar_sesion"):
+            del st.session_state["_usuario"]
+            st.rerun()
 
-    nombres = []
+    nombres_todos = []
     if not df.empty and "Nombre" in df.columns:
-        nombres = sorted(df["Nombre"].dropna().unique())
+        nombres_todos = sorted(df["Nombre"].dropna().unique())
+
+    asignaciones = {}
+    nombres = nombres_todos
+    if not _ES_ADMIN:
+        asignaciones = enfoque_store.leer_todas_las_asignaciones(_gc(), st.secrets["SHEET_ID"])
+        nombres = [n for n in nombres_todos if asignaciones.get(n) == usuario_actual["usuario"]]
 
     if nombres:
         nombre = st.selectbox("Paciente", nombres, index=None, placeholder="Selecciona un paciente...")
@@ -236,6 +273,21 @@ if st.session_state["paciente_actual"] is None:
         })
         st.caption(f":material/label: Este paciente quedará bajo **{marca_aura.MARCAS[marca_preview]['nombre']}**.")
 
+        if _ES_ADMIN:
+            nutriologos_disponibles = [u for u in usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])]
+            opciones_nutriologo_n = ["Sin asignar"] + [f"{u['nombre']} ({u['usuario']})" for u in nutriologos_disponibles]
+            etiqueta_nutriologo_n = st.selectbox(
+                "Nutriólogo asignado", opciones_nutriologo_n, key="nutriologo_nuevo_paciente",
+                help="Quién lo ve en su propio listado -- déjalo \"Sin asignar\" si por ahora solo lo vas a "
+                "llevar tú como admin.",
+            )
+            nutriologo_nuevo = (
+                nutriologos_disponibles[opciones_nutriologo_n.index(etiqueta_nutriologo_n) - 1]["usuario"]
+                if etiqueta_nutriologo_n != "Sin asignar" else ""
+            )
+        else:
+            nutriologo_nuevo = usuario_actual["usuario"]
+
         notas_nuevo = st.text_area(
             "Notas iniciales (opcional)", key="notas_nuevo_paciente",
             placeholder="Gustos, disgustos, lesiones, lo que sea -- se puede seguir agregando después.",
@@ -243,7 +295,7 @@ if st.session_state["paciente_actual"] is None:
 
         if st.button("Crear paciente", disabled=not nombre_nuevo.strip(), key="crear_paciente_btn"):
             nombre_nuevo = nombre_nuevo.strip()
-            if nombre_nuevo in nombres:
+            if nombre_nuevo in nombres_todos:
                 st.error(f'Ya existe un paciente con el nombre "{nombre_nuevo}".')
             else:
                 crear_paciente_vacio(_worksheet(), nombre_nuevo)
@@ -254,12 +306,100 @@ if st.session_state["paciente_actual"] is None:
                     glp1_molecula=glp1_nuevo,
                     glp1_dosis=glp1_dosis_nueva if mostrar_detalle_glp1_nuevo else "",
                     glp1_fecha_inicio=glp1_fecha_nueva if mostrar_detalle_glp1_nuevo else "",
+                    nutriologo=nutriologo_nuevo,
                 )
                 if notas_nuevo.strip():
                     notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], nombre_nuevo, notas_nuevo.strip())
                 st.cache_data.clear()
                 st.session_state["paciente_actual"] = nombre_nuevo
                 st.rerun()
+
+    if _ES_ADMIN:
+        with st.expander(":material/settings: Settings (admin)"):
+            tab_usuarios, tab_borrar, tab_tokens = st.tabs([
+                "Usuarios", "Eliminar paciente", "Tokens de Garmin",
+            ])
+
+            with tab_usuarios:
+                st.caption("Crea una cuenta para cada nutrióloga -- con su propio usuario y contraseña.")
+                usuarios_actuales = usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])
+                if usuarios_actuales:
+                    st.dataframe(
+                        pd.DataFrame(usuarios_actuales)[["usuario", "nombre", "rol"]],
+                        hide_index=True, width="stretch",
+                    )
+                else:
+                    st.caption("Todavía no has creado ninguna cuenta aparte de tu acceso de admin.")
+
+                with st.form("crear_usuario_form", clear_on_submit=True):
+                    col_u1, col_u2 = st.columns(2)
+                    with col_u1:
+                        usuario_nuevo_id = st.text_input("Usuario (para iniciar sesión)", key="usuario_nuevo_id")
+                        nombre_nuevo_usuario = st.text_input("Nombre completo", key="nombre_nuevo_usuario")
+                    with col_u2:
+                        password_nuevo_usuario = st.text_input(
+                            "Contraseña", type="password", key="password_nuevo_usuario",
+                        )
+                        rol_nuevo_usuario = st.selectbox("Rol", usuarios_store.ROLES, key="rol_nuevo_usuario")
+                    crear_usuario_btn = st.form_submit_button("Crear usuario")
+
+                if crear_usuario_btn:
+                    if not usuario_nuevo_id.strip() or not password_nuevo_usuario:
+                        st.error("Usuario y contraseña son obligatorios.")
+                    elif usuario_nuevo_id.strip() == "admin":
+                        st.error('"admin" ya es tu acceso de emergencia -- usa otro nombre de usuario.')
+                    else:
+                        usuarios_store.crear_usuario(
+                            _gc(), st.secrets["SHEET_ID"], usuario_nuevo_id.strip(),
+                            nombre_nuevo_usuario.strip() or usuario_nuevo_id.strip(),
+                            password_nuevo_usuario, rol_nuevo_usuario,
+                        )
+                        st.success(f'Cuenta de "{usuario_nuevo_id.strip()}" creada.')
+                        st.rerun()
+
+            with tab_borrar:
+                st.caption(
+                    "Borra al paciente y TODO su historial (Enfoque, Notas, InBody, Antropometría, "
+                    "Calorías, Estudios, token de Garmin) -- no se puede deshacer."
+                )
+                if nombres_todos:
+                    paciente_a_borrar = st.selectbox(
+                        "Paciente a eliminar", nombres_todos, index=None,
+                        placeholder="Selecciona...", key="paciente_a_borrar",
+                    )
+                    confirmar_borrado = st.checkbox(
+                        f'Sí, quiero eliminar a "{paciente_a_borrar}" y todo su historial.',
+                        key="confirmar_borrado_paciente", disabled=not paciente_a_borrar,
+                    )
+                    if st.button(
+                        ":material/delete: Eliminar paciente", type="primary",
+                        disabled=not (paciente_a_borrar and confirmar_borrado), key="eliminar_paciente_btn",
+                    ):
+                        paciente_admin.eliminar_paciente(_gc(), st.secrets["SHEET_ID"], paciente_a_borrar)
+                        st.cache_data.clear()
+                        st.success(f'"{paciente_a_borrar}" fue eliminado.')
+                        st.rerun()
+                else:
+                    st.caption("No hay pacientes que borrar todavía.")
+
+            with tab_tokens:
+                st.caption(
+                    "Pacientes con un token de Garmin guardado (sincronización automática activa) -- "
+                    "elimínalo para forzar que se vuelva a conectar desde cero con un link nuevo."
+                )
+                tokens_actuales = token_store.listar_tokens(_gc(), st.secrets["SHEET_ID"])
+                if tokens_actuales:
+                    for t in tokens_actuales:
+                        col_tok1, col_tok2 = st.columns([4, 1])
+                        with col_tok1:
+                            st.write(f"**{t['nombre']}** -- guardado el {t.get('fecha') or 'sin fecha'}")
+                        with col_tok2:
+                            if st.button(":material/delete: Eliminar", key=f"eliminar_token_{t['nombre']}"):
+                                token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], t["nombre"])
+                                st.cache_data.clear()
+                                st.rerun()
+                else:
+                    st.caption("Ningún paciente tiene un token de Garmin guardado todavía.")
 
     st.stop()
 
@@ -268,6 +408,15 @@ if st.session_state["paciente_actual"] is None:
 # ---------------------------------------------------------------------------
 
 paciente = st.session_state["paciente_actual"]
+
+if not _ES_ADMIN:
+    _asignacion_paciente = enfoque_store.leer_todas_las_asignaciones(_gc(), st.secrets["SHEET_ID"]).get(paciente)
+    if _asignacion_paciente != usuario_actual["usuario"]:
+        st.error("No tienes acceso a este paciente.")
+        if st.button(":material/arrow_back: Elegir otro nombre"):
+            st.session_state["paciente_actual"] = None
+            st.rerun()
+        st.stop()
 
 filas_paciente = df[df["Nombre"] == paciente]
 if filas_paciente.empty:
@@ -377,6 +526,27 @@ with col_notas:
                 )
                 st.cache_data.clear()
                 st.success("Días de plan guardados.")
+                st.rerun()
+
+        if _ES_ADMIN:
+            nutriologos_lista = usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])
+            opciones_nutriologo_e = ["Sin asignar"] + [f"{u['nombre']} ({u['usuario']})" for u in nutriologos_lista]
+            usuarios_ids = [None] + [u["usuario"] for u in nutriologos_lista]
+            nutriologo_actual = perfil_actual["nutriologo"]
+            indice_nutriologo = usuarios_ids.index(nutriologo_actual) if nutriologo_actual in usuarios_ids else 0
+            etiqueta_nutriologo_e = st.selectbox(
+                "Nutriólogo asignado", opciones_nutriologo_e, index=indice_nutriologo,
+                key=f"nutriologo_select_{paciente}", help="Quién ve a este paciente en su propio listado.",
+            )
+            nutriologo_elegido = usuarios_ids[opciones_nutriologo_e.index(etiqueta_nutriologo_e)] or ""
+            if nutriologo_elegido != (nutriologo_actual or "") and st.button(
+                "Guardar nutriólogo asignado", key=f"guardar_nutriologo_{paciente}",
+            ):
+                enfoque_store.guardar_perfil(
+                    _gc(), st.secrets["SHEET_ID"], paciente, nutriologo=nutriologo_elegido,
+                )
+                st.cache_data.clear()
+                st.success("Nutriólogo asignado guardado.")
                 st.rerun()
 
         st.divider()

@@ -27,7 +27,7 @@ HOJA_NOMBRE = "Enfoque"
 ENCABEZADOS = [
     "Nombre", "Enfoque", "MetaGrasaPct", "DiasPlanMes",
     "CondicionMetabolica", "GLP1Molecula", "GLP1Dosis", "GLP1FechaInicio",
-    "Fecha",
+    "Nutriologo", "Fecha",
 ]
 
 OPCIONES = [
@@ -88,16 +88,20 @@ def guardar_perfil(
     enfoque: str | None = None, meta_grasa_pct: float | None = None, dias_plan_mes: int | None = None,
     condicion_metabolica: str | None = None, glp1_molecula: str | None = None,
     glp1_dosis: str | None = None, glp1_fecha_inicio: str | None = None,
+    nutriologo: str | None = None,
 ) -> None:
     """Actualiza solo los campos que no sean None -- así guardar el
-    enfoque no borra sin querer la meta de grasa, los días de plan o el
-    GLP-1/condición metabólica que ya se habían capturado antes (y
-    viceversa)."""
+    enfoque no borra sin querer la meta de grasa, los días de plan, el
+    GLP-1/condición metabólica o el nutriólogo asignado que ya se
+    habían capturado antes (y viceversa). `nutriologo` es el "usuario"
+    (ver usuarios_store.py) del nutriólogo dueño de este paciente --
+    "" (string vacío, a propósito, no None) lo deja sin asignar."""
     ws = _worksheet(gc, sheet_id)
     registros = ws.get_all_values()
     if not registros:
         ws.append_row(ENCABEZADOS)
         registros = [ENCABEZADOS]
+    ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
 
     for i, row in enumerate(registros[1:], start=2):
         if row and row[0] == nombre:
@@ -111,14 +115,15 @@ def guardar_perfil(
                 glp1_molecula if glp1_molecula is not None else actual[5],
                 glp1_dosis if glp1_dosis is not None else actual[6],
                 glp1_fecha_inicio if glp1_fecha_inicio is not None else actual[7],
+                nutriologo if nutriologo is not None else actual[8],
                 date.today().strftime("%d.%m.%Y"),
             ]
-            ws.update(f"A{i}:I{i}", [nueva_fila])
+            ws.update(f"A{i}:{ultima_col}{i}", [nueva_fila])
             return
     ws.append_row([
         nombre, enfoque or "", meta_grasa_pct or "", dias_plan_mes or "",
         condicion_metabolica or "", glp1_molecula or "", glp1_dosis or "", glp1_fecha_inicio or "",
-        date.today().strftime("%d.%m.%Y"),
+        nutriologo or "", date.today().strftime("%d.%m.%Y"),
     ])
 
 
@@ -143,11 +148,11 @@ def _a_int(v):
 @st.cache_data(ttl=30, show_spinner=False)
 def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
     """{"enfoque", "meta_grasa_pct", "dias_plan_mes", "condicion_metabolica",
-    "glp1_molecula", "glp1_dosis", "glp1_fecha_inicio"}."""
+    "glp1_molecula", "glp1_dosis", "glp1_fecha_inicio", "nutriologo"}."""
     vacio = {
         "enfoque": None, "meta_grasa_pct": None, "dias_plan_mes": None,
         "condicion_metabolica": "Ninguna", "glp1_molecula": "No usa",
-        "glp1_dosis": None, "glp1_fecha_inicio": None,
+        "glp1_dosis": None, "glp1_fecha_inicio": None, "nutriologo": None,
     }
     ws = _worksheet(_gc, sheet_id)
     registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
@@ -166,7 +171,18 @@ def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
         "glp1_molecula": ultima.get("GLP1Molecula") or "No usa",
         "glp1_dosis": ultima.get("GLP1Dosis") or None,
         "glp1_fecha_inicio": ultima.get("GLP1FechaInicio") or None,
+        "nutriologo": ultima.get("Nutriologo") or None,
     }
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def leer_todas_las_asignaciones(_gc: gspread.Client, sheet_id: str) -> dict:
+    """{nombre_paciente: usuario_nutriologo_asignado} de TODOS los
+    pacientes de un jalón -- para filtrar el listado de la pantalla de
+    selección según quién esté logueado, sin tener que leer_perfil()
+    paciente por paciente. "" (sin asignar) para quien no tenga."""
+    ws = _worksheet(_gc, sheet_id)
+    return {row[0]: (row[8] if len(row) > 8 else "") for row in ws.get_all_values()[1:] if row and row[0]}
 
 
 def leer_enfoque(_gc: gspread.Client, sheet_id: str, nombre: str) -> str | None:
