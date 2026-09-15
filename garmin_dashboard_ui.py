@@ -38,6 +38,14 @@ alt.themes.enable("none")
 
 _MESES_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
+# Streamlit no reenvía alt.renderers.set_embed_options(timeFormatLocale=...) al
+# vega-embed que corre en su frontend (confirmado: se probó y el eje se queda
+# en inglés) -- por eso los ejes de fecha usan este labelExpr en vez del
+# formato default de Vega-Lite, calculando el mes en español a mano con las
+# funciones de Vega (date()/month(), independientes de locale) en vez de
+# timeFormat() con nombres de mes (que sí depende del locale).
+_LABEL_EXPR_FECHA_ES = "date(datum.value) + ' ' + " + str(_MESES_ABBR) + "[month(datum.value)]"
+
 
 def _fmt_dia_es(d: pd.Timestamp) -> str:
     return f"{d.day} {_MESES_ABBR[d.month - 1]}"
@@ -58,7 +66,7 @@ def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float 
         alt.Chart(data)
         .mark_line(strokeWidth=2, color=color, point=alt.OverlayMarkDef(filled=True, size=45, color=color))
         .encode(
-            x=alt.X("fecha:T", title=None),
+            x=alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES)),
             y=alt.Y("valor:Q", title=title, scale=alt.Scale(zero=False)),
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("valor:Q", title=title, format=fmt)],
         )
@@ -96,7 +104,7 @@ def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, hei
         alt.Chart(data)
         .mark_bar(color=color, size=14)
         .encode(
-            x=alt.X("fecha:T", title=None),
+            x=alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES)),
             y=alt.Y("valor:Q", title=title),
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("valor:Q", title=title, format=".0f")],
         )
@@ -220,7 +228,7 @@ def grouped_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
         alt.Chart(long_df)
         .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
         .encode(
-            x=alt.X("fecha:T", title=None),
+            x=alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES)),
             xOffset=alt.XOffset("serie:N", sort=names),
             y=alt.Y("valor:Q", title=value_title),
             color=alt.Color("serie:N", scale=alt.Scale(domain=names, range=colors), legend=alt.Legend(title=None, orient="top")),
@@ -248,7 +256,7 @@ def stacked_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
         alt.Chart(long_df)
         .mark_bar()
         .encode(
-            x=alt.X("fecha:T", title=None),
+            x=alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES)),
             y=alt.Y("valor:Q", title=value_title, stack="zero"),
             order=alt.Order("serie:N", sort="descending"),
             color=alt.Color("serie:N", scale=alt.Scale(domain=names, range=colors), legend=alt.Legend(title=None, orient="top")),
@@ -353,9 +361,17 @@ def render_inbody_section(historial: pd.DataFrame):
         return
     ultimo = historial.iloc[-1]
 
+    def _o_guion(valor, sufijo=""):
+        # .get() de un DataFrame regresa la columna con NaN si el campo se
+        # dejó vacío al guardar (no si falta la columna) -- pd.notna()
+        # es quien de verdad distingue "vacío" de "con dato", a diferencia
+        # del default de .get() que nunca se usa en la práctica.
+        return f"{valor}{sufijo}" if pd.notna(valor) else "—"
+
     st.caption(
         f"Último InBody: {ultimo.get('Fecha', '')} · {ultimo.get('Modelo', '')} · "
-        f"{ultimo.get('Altura_cm', '—')} cm · {ultimo.get('Edad', '—')} años · {ultimo.get('Sexo', '—')}"
+        f"{_o_guion(ultimo.get('Altura_cm'), ' cm')} · {_o_guion(ultimo.get('Edad'), ' años')} · "
+        f"{ultimo.get('Sexo') or '—'}"
     )
 
     _estado_grasa_corporal(ultimo.get("PGC_pct"), ultimo.get("Sexo"))
@@ -1246,6 +1262,11 @@ def render_dashboard_body(
                     }
                 ),
                 width="stretch", hide_index=True,
+                column_config={
+                    "Deriva cardiaca (%)": st.column_config.NumberColumn(format="%.1f%%"),
+                    "FC 1ª mitad": st.column_config.NumberColumn(format="%.0f lpm"),
+                    "FC 2ª mitad": st.column_config.NumberColumn(format="%.0f lpm"),
+                },
             )
             st.metric("Peor deriva de la semana", f"{peor_deriva_val:.1f}%")
 
@@ -1298,6 +1319,10 @@ def render_dashboard_body(
                         columns={"fecha": "Fecha", "actividad": "Actividad", "caida_2min": "Caída en 2min (lpm)", "caida_por_minuto": "Caída por minuto (lpm)"}
                     ),
                     width="stretch", hide_index=True,
+                    column_config={
+                        "Caída en 2min (lpm)": st.column_config.NumberColumn(format="%.0f"),
+                        "Caída por minuto (lpm)": st.column_config.NumberColumn(format="%.1f"),
+                    },
                 )
 
         st.divider()
@@ -1485,7 +1510,13 @@ def render_dashboard_body(
                 tabla = df_bal[["Fecha", "CaloriasComidas", "Gastadas", "Balance"]].rename(
                     columns={"CaloriasComidas": "Comidas"}
                 ).iloc[::-1]
-                st.dataframe(tabla, width="stretch", hide_index=True)
+                st.dataframe(
+                    tabla, width="stretch", hide_index=True,
+                    column_config={
+                        "Gastadas": st.column_config.NumberColumn(format="%.0f"),
+                        "Balance": st.column_config.NumberColumn(format="%+.0f"),
+                    },
+                )
                 balance_valido = df_bal["Balance"].dropna()
                 if not balance_valido.empty:
                     st.metric(
