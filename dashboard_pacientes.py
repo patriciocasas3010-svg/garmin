@@ -384,10 +384,19 @@ with col_wearable:
                                 st.success("Listo -- se actualizó con lo más reciente de Garmin.")
                                 st.rerun()
                             except Exception as e:
-                                st.error(
-                                    f"No se pudo actualizar: {e}. Si el token ya venció, pídele que corra "
-                                    "`export_token.py` otra vez y te mande uno nuevo."
-                                )
+                                texto_error = str(e)
+                                if "429" in texto_error or "Too Many Requests" in texto_error or "Rate limit" in texto_error:
+                                    st.error(
+                                        "Garmin está limitando temporalmente las conexiones (\"Too Many "
+                                        "Requests\") -- el token sigue bien, no hay que regenerar nada. "
+                                        "Espera unos 15-20 minutos y vuelve a intentar."
+                                    )
+                                else:
+                                    st.error(
+                                        f"No se pudo actualizar: {texto_error}. Si el token ya venció, "
+                                        "genera un link de conexión nuevo (arriba) o pídele que corra "
+                                        "`export_token.py` otra vez."
+                                    )
                 with col_quitar:
                     if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
                         token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], paciente)
