@@ -517,11 +517,9 @@ st.markdown(f'<div id="{_sticky_marca}"></div>', unsafe_allow_html=True)
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
     st.markdown(f"##### {paciente}")
-    etiquetas_sticky = [f"Último envío: {fila.get('Fecha', 'sin fecha')}"]
-    if marca_actual != "clinical":
-        etiquetas_sticky.insert(0, marca_aura.MARCAS[marca_actual]["nombre"])
+    etiquetas_sticky = [marca_aura.MARCAS[marca_actual]["nombre"], f"Último envío: {fila.get('Fecha', 'sin fecha')}"]
     if glp1_diabetes.activo(perfil_actual):
-        etiquetas_sticky.insert(1 if marca_actual != "clinical" else 0, "GLP-1 activo")
+        etiquetas_sticky.insert(1, "GLP-1 activo")
     st.caption(" · ".join(etiquetas_sticky))
 with top_col2:
     if st.button(":material/refresh: Actualizar", width="stretch"):
