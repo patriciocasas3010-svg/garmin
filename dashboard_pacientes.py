@@ -23,6 +23,7 @@ import re
 import tempfile
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlencode
 
 import gspread
 import pandas as pd
@@ -395,19 +396,52 @@ with col_wearable:
                         st.rerun()
             else:
                 st.caption(
-                    "¿Que se actualice solo, todos los días, sin que tenga que abrir nada? Pídele que en "
-                    "su computadora corra una vez `python3 export_token.py` (junto con lo demás que ya "
-                    "tiene) y que te mande por WhatsApp/correo el bloque de texto que le sale. Pégalo aquí:"
+                    "¿Que se actualice solo, todos los días, sin que tenga que abrir nada? Mándale un "
+                    "link -- lo abre en su celular o computadora, escribe su correo y contraseña de "
+                    "Garmin una sola vez (nunca se guardan), y ya queda conectado. No necesita instalar "
+                    "nada ni usar Python."
                 )
-            token_pegado = st.text_area(
-                "Token de Garmin", key=f"token_pegado_{paciente}", label_visibility="collapsed",
-                placeholder="Pega aquí el bloque completo que imprimió export_token.py...",
-            )
-            if st.button("Guardar token", key=f"guardar_token_{paciente}", disabled=not token_pegado.strip()):
-                token_store.guardar_token(_gc(), st.secrets["SHEET_ID"], paciente, token_pegado)
-                st.cache_data.clear()
-                st.success("Token guardado -- desde la próxima sincronización diaria ya no depende de que abra nada.")
-                st.rerun()
+                conectar_url = st.secrets.get("CONECTAR_GARMIN_URL")
+                if not conectar_url:
+                    st.warning(
+                        "Falta configurar el Secret CONECTAR_GARMIN_URL -- pega ahí la URL pública que te "
+                        "da Streamlit Cloud al publicar conectar_garmin_web.py como una app aparte (mismos "
+                        "Secrets GOOGLE_CREDENTIALS_JSON/SHEET_ID, sin APP_PASSWORD).",
+                        icon=":material/warning:",
+                    )
+                else:
+                    if st.button(":material/link: Generar link de conexión", key=f"generar_link_{paciente}"):
+                        clave = token_store.generar_clave_conexion(_gc(), st.secrets["SHEET_ID"], paciente)
+                        st.session_state[f"link_conexion_{paciente}"] = (
+                            f"{conectar_url.rstrip('/')}/?{urlencode({'p': paciente, 'k': clave})}"
+                        )
+
+                    link_generado = st.session_state.get(f"link_conexion_{paciente}")
+                    if link_generado:
+                        st.text_input(
+                            "Mándale este link (funciona una sola vez)", value=link_generado,
+                            key=f"link_mostrado_{paciente}",
+                        )
+                        st.caption(
+                            "Cópialo y mándaselo por WhatsApp o correo -- en cuanto lo use para conectar "
+                            "su reloj, el link deja de funcionar solo."
+                        )
+
+                with st.expander("O de forma manual (para cuando el link no funcione)"):
+                    st.caption(
+                        "Pídele que en su computadora corra una vez `python3 export_token.py` (junto con "
+                        "lo demás que ya tiene, requiere Python) y que te mande por WhatsApp/correo el "
+                        "bloque de texto que le sale. Pégalo aquí:"
+                    )
+                    token_pegado = st.text_area(
+                        "Token de Garmin", key=f"token_pegado_{paciente}", label_visibility="collapsed",
+                        placeholder="Pega aquí el bloque completo que imprimió export_token.py...",
+                    )
+                    if st.button("Guardar token", key=f"guardar_token_{paciente}", disabled=not token_pegado.strip()):
+                        token_store.guardar_token(_gc(), st.secrets["SHEET_ID"], paciente, token_pegado)
+                        st.cache_data.clear()
+                        st.success("Token guardado -- desde la próxima sincronización diaria ya no depende de que abra nada.")
+                        st.rerun()
 
         st.divider()
         st.caption("¿Te mandó el .zip de Apple Health (por WhatsApp, correo)? Súbelo aquí directo:")

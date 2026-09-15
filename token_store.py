@@ -14,16 +14,25 @@ ningún lado fuera de esta hoja de Google.
 A diferencia del resto de los *_store.py, este módulo lo usan tanto
 dashboard_pacientes.py (dentro de Streamlit) como sync_diario.py (un
 script normal, sin Streamlit corriendo) -- por eso aquí no se usa
-sheet_cache.abrir_hoja ni @st.cache_data, solo gspread directo."""
+sheet_cache.abrir_hoja ni @st.cache_data, solo gspread directo.
+
+También lo usa conectar_garmin_web.py -- la página web donde el propio
+paciente pega su correo/contraseña de Garmin una sola vez (sin Python ni
+terminal en su computadora) para activar la sincronización automática.
+Ese flujo usa una "ClaveConexion" de un solo uso (generar_clave_conexion/
+validar_clave_conexion/invalidar_clave_conexion) para que el link que le
+mandas por WhatsApp no sirva para nada una vez usado, y para no tener que
+exponer ahí la contraseña de tu hoja de Google ni un login compartido."""
 
 import re
+import secrets
 from datetime import date
 
 import gspread
 
 HOJA_NOMBRE = "TokensGarmin"
 
-ENCABEZADOS = ["Nombre", "Token", "FechaGuardado"]
+ENCABEZADOS = ["Nombre", "Token", "FechaGuardado", "ClaveConexion"]
 
 _DELIMITADOR_RE = re.compile(r"-{10,}\s*\n(.*?)\n\s*-{10,}", re.S)
 
@@ -95,4 +104,49 @@ def eliminar_token(gc: gspread.Client, sheet_id: str, nombre: str) -> None:
     for i, row in enumerate(registros):
         if row and row[0] == nombre:
             ws.update(f"A{i + 1}:C{i + 1}", [[nombre, "", ""]])
+            return
+
+
+def generar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str) -> str:
+    """Genera una clave nueva de un solo uso para que este paciente se
+    conecte solo desde conectar_garmin_web.py -- reemplaza al flujo de
+    export_token.py (Python/terminal en su computadora) con un link que
+    abre en cualquier navegador. Sobrescribe cualquier clave anterior sin
+    usar (así un link viejo que mandaste por error deja de funcionar)."""
+    ws = _worksheet(gc, sheet_id)
+    clave = secrets.token_urlsafe(16)
+    registros = ws.get_all_values()
+    for i, row in enumerate(registros):
+        if row and row[0] == nombre:
+            actual = row + [""] * (len(ENCABEZADOS) - len(row))
+            actual[3] = clave
+            ws.update(f"A{i + 1}:D{i + 1}", [actual])
+            return clave
+    ws.append_row([nombre, "", "", clave])
+    return clave
+
+
+def validar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str, clave: str) -> bool:
+    """True solo si `clave` es exactamente la que se generó para `nombre`
+    y todavía no se usó (ver invalidar_clave_conexion)."""
+    if not clave:
+        return False
+    ws = _worksheet(gc, sheet_id)
+    for row in ws.get_all_values()[1:]:
+        if row and row[0] == nombre and len(row) > 3 and row[3] and row[3] == clave:
+            return True
+    return False
+
+
+def invalidar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str) -> None:
+    """Se llama justo después de guardar el token con éxito -- para que
+    el link de conexión no se pueda volver a usar (por ejemplo si se
+    quedó visible en un chat de WhatsApp)."""
+    ws = _worksheet(gc, sheet_id)
+    registros = ws.get_all_values()
+    for i, row in enumerate(registros):
+        if row and row[0] == nombre:
+            actual = row + [""] * (len(ENCABEZADOS) - len(row))
+            actual[3] = ""
+            ws.update(f"A{i + 1}:D{i + 1}", [actual])
             return
