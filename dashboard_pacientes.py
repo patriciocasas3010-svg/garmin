@@ -1081,6 +1081,25 @@ def _render_detalle_panel_cruce(panel: dict) -> None:
         st.caption(panel["nota"])
 
 
+_RUTA_REFERENCIA_CRUCES = Path(__file__).parent / "assets" / "cruces_clinicos_referencia.html"
+
+
+@st.dialog("Cruces Clínicos AURA -- documento de referencia", width="large")
+def _mostrar_referencia_cruces():
+    """El documento completo (los 10/11 paneles, con la fórmula y la
+    bibliografía de por qué se hace cada cruce) que se armó como
+    artefacto al inicio del proyecto -- vive como archivo estático en
+    assets/ para que cualquier nutrióloga lo pueda abrir desde aquí
+    mismo, sin depender de un link de Claude al que no todas tengan
+    acceso."""
+    try:
+        html_doc = _RUTA_REFERENCIA_CRUCES.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        st.error("No se encontró el documento de referencia (assets/cruces_clinicos_referencia.html).")
+        return
+    st.components.v1.html(html_doc, height=800, scrolling=True)
+
+
 def _render_cruces_clinicos(data: dict | None):
     """10 paneles que cruzan Estudios clínicos + InBody + wearable --
     apoyo a la lectura clínica, nunca un diagnóstico ni una sustitución
@@ -1151,6 +1170,10 @@ def _render_cruces_clinicos(data: dict | None):
         with st.container(border=True):
             st.markdown(f"#### {panel['icono']} {panel['titulo']}")
             _render_detalle_panel_cruce(panel)
+
+    st.divider()
+    if st.button(":material/menu_book: Ver documento de referencia (bibliografía y fórmulas de cada cruce)"):
+        _mostrar_referencia_cruces()
 
 
 def _render_composicion_corporal(data: dict | None):
