@@ -165,18 +165,81 @@ if st.session_state["paciente_actual"] is None:
 
     with st.expander(":material/person_add: Agregar paciente nuevo (sin Garmin/Apple/Oura todavía)"):
         st.caption(
-            "Úsalo cuando quieras empezar a subirle InBody o mediciones antropométricas a un "
-            "paciente antes de (o sin que nunca) conecte un reloj, anillo o iPhone. En cuanto ese "
-            "paciente sí mande datos de un wearable, se juntan solos en el mismo perfil -- no hace "
-            "falta crearlo dos veces."
+            "Unas preguntas rápidas para armar su perfil desde el inicio -- así el sistema ya sabe "
+            "si este paciente vive bajo AURA Clinical, Flow o Health. Su primer InBody/estudio "
+            "clínico se sube después, ya en su perfil (Composición corporal / Estudios clínicos), "
+            "y su reloj se conecta desde Wearable -- no hace falta crearlo de nuevo cuando eso pase."
         )
         nombre_nuevo = st.text_input("Nombre del paciente nuevo", key="nombre_nuevo_paciente")
-        if st.button("Crear paciente", disabled=not nombre_nuevo.strip()):
+
+        enfoque_nuevo = st.selectbox(
+            "Enfoque principal", enfoque_store.OPCIONES, index=None, key="enfoque_nuevo_paciente",
+            placeholder="Selecciona...",
+            help="Ajusta el tono del análisis con IA y ayuda a decidir su marca AURA (Flow si es "
+            "rendimiento deportivo/atleta).",
+        )
+
+        col_grasa_n, col_dias_n = st.columns(2)
+        with col_grasa_n:
+            meta_grasa_nueva = st.number_input(
+                "Meta de % de grasa corporal", min_value=0.0, max_value=60.0, step=0.5,
+                key="meta_grasa_nuevo_paciente", help="Déjalo en 0 si todavía no aplica.",
+            )
+        with col_dias_n:
+            dias_plan_nuevo = st.number_input(
+                "Días de entrenamiento/movilidad planeados (por mes)", min_value=0, max_value=31, step=1,
+                key="dias_plan_nuevo_paciente", help="Déjalo en 0 si no aplica.",
+            )
+
+        col_condicion_n, col_glp1_n = st.columns(2)
+        with col_condicion_n:
+            condicion_nueva = st.selectbox(
+                "Condición metabólica", enfoque_store.OPCIONES_CONDICION_METABOLICA,
+                key="condicion_nuevo_paciente",
+            )
+        with col_glp1_n:
+            glp1_nuevo = st.selectbox("GLP-1", enfoque_store.OPCIONES_GLP1, key="glp1_nuevo_paciente")
+
+        mostrar_detalle_glp1_nuevo = glp1_nuevo != "No usa"
+        glp1_dosis_nueva = ""
+        glp1_fecha_nueva = ""
+        if mostrar_detalle_glp1_nuevo:
+            col_dosis_n, col_fecha_n = st.columns(2)
+            with col_dosis_n:
+                glp1_dosis_nueva = st.text_input(
+                    "Dosis", key="glp1_dosis_nuevo_paciente", placeholder="ej. 1.7 mg/semana",
+                )
+            with col_fecha_n:
+                glp1_fecha_nueva = st.text_input(
+                    "Fecha de inicio", key="glp1_fecha_nuevo_paciente", placeholder="DD.MM.AAAA",
+                )
+
+        marca_preview = marca_aura.calcular({
+            "enfoque": enfoque_nuevo, "condicion_metabolica": condicion_nueva, "glp1_molecula": glp1_nuevo,
+        })
+        st.caption(f":material/label: Este paciente quedará bajo **{marca_aura.MARCAS[marca_preview]['nombre']}**.")
+
+        notas_nuevo = st.text_area(
+            "Notas iniciales (opcional)", key="notas_nuevo_paciente",
+            placeholder="Gustos, disgustos, lesiones, lo que sea -- se puede seguir agregando después.",
+        )
+
+        if st.button("Crear paciente", disabled=not nombre_nuevo.strip(), key="crear_paciente_btn"):
             nombre_nuevo = nombre_nuevo.strip()
             if nombre_nuevo in nombres:
                 st.error(f'Ya existe un paciente con el nombre "{nombre_nuevo}".')
             else:
                 crear_paciente_vacio(_worksheet(), nombre_nuevo)
+                enfoque_store.guardar_perfil(
+                    _gc(), st.secrets["SHEET_ID"], nombre_nuevo,
+                    enfoque=enfoque_nuevo, meta_grasa_pct=meta_grasa_nueva or None,
+                    dias_plan_mes=dias_plan_nuevo or None, condicion_metabolica=condicion_nueva,
+                    glp1_molecula=glp1_nuevo,
+                    glp1_dosis=glp1_dosis_nueva if mostrar_detalle_glp1_nuevo else "",
+                    glp1_fecha_inicio=glp1_fecha_nueva if mostrar_detalle_glp1_nuevo else "",
+                )
+                if notas_nuevo.strip():
+                    notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], nombre_nuevo, notas_nuevo.strip())
                 st.cache_data.clear()
                 st.session_state["paciente_actual"] = nombre_nuevo
                 st.rerun()
