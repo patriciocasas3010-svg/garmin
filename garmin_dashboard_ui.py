@@ -998,56 +998,69 @@ def render_dashboard_body(
             gasto_total_avg = calories_df["total_kcal"].dropna().mean()
             gasto_total_avg = gasto_total_avg if pd.notna(gasto_total_avg) else None
 
-        if edad_fisica is not None or nivel_estres is not None or gasto_total_avg is not None:
-            g1, g2, g3 = st.columns(3)
-            g1.metric(
-                "Edad física", f"{edad_fisica:.0f} años" if edad_fisica is not None else "—",
-                help="Fitness Age de Garmin -- estimada de VO2max, actividad y composición corporal. "
-                "No todos los relojes la calculan.",
-            )
-            g2.metric(
-                "Gasto energético total (30d)", f"{gasto_total_avg:.0f} kcal/día" if gasto_total_avg is not None else "—",
-                help="Promedio de calorías en reposo + actividad de los últimos 30 días.",
-            )
-            g3.metric(
-                "Nivel de estrés", f"{nivel_estres:.0f}/100" if nivel_estres is not None else "—",
-                help="Nivel de estrés de hoy que reporta el reloj (0-100).",
-            )
-            if gasto_total_avg is not None:
-                g2.caption(
-                    "Lo que su cuerpo gasta en promedio al día (reposo + actividad) -- referencia para el "
-                    "balance calórico, no una cifra exacta a seguir al pie de la letra."
-                )
-            if nivel_estres is not None:
-                if nivel_estres < 25:
-                    texto_estres = "Nivel bajo -- buena señal de recuperación general."
-                elif nivel_estres < 50:
-                    texto_estres = "Nivel manejable -- dentro de lo esperado para un día normal."
-                elif nivel_estres < 75:
-                    texto_estres = "Nivel elevado -- vale la pena vigilar sueño y carga de entrenamiento estos días."
-                else:
-                    texto_estres = "Nivel alto -- prioriza descanso/recuperación antes de sumar más carga."
-                g3.caption(texto_estres)
-            st.divider()
-
         pasos_promedio_dia = data.get("pasos_promedio_dia")
         minutos_ejercicio_promedio_dia = data.get("minutos_ejercicio_promedio_dia")
         vo2max = data.get("vo2max")
-        if pasos_promedio_dia is not None or minutos_ejercicio_promedio_dia is not None or vo2max is not None:
-            a1, a2, a3 = st.columns(3)
-            a1.metric(
-                "Pasos (promedio/día)", f"{pasos_promedio_dia:,.0f}" if pasos_promedio_dia is not None else "—",
-            )
-            a2.metric(
-                "Minutos de ejercicio (promedio/día)",
-                f"{minutos_ejercicio_promedio_dia:.0f} min" if minutos_ejercicio_promedio_dia is not None else "—",
-                help="Anillo 'Ejercicio' del Apple Watch.",
-            )
-            a3.metric(
-                "VO2 Max", f"{vo2max:.1f} mL/kg/min" if vo2max is not None else "—",
-                help="Estimado por el Apple Watch a partir de carreras/caminatas al aire libre con GPS. "
-                "Indicador de condición cardiovascular -- entre más alto, mejor.",
-            )
+
+        hay_contexto_secundario = (
+            edad_fisica is not None or nivel_estres is not None or gasto_total_avg is not None
+            or pasos_promedio_dia is not None or minutos_ejercicio_promedio_dia is not None or vo2max is not None
+        )
+        # Contexto secundario (edad física, gasto energético, pasos, VO2
+        # Max...) colapsado por default -- antes competía visualmente con
+        # Peso/Grasa/Masa muscular/Alertas de arriba (mismo st.metric,
+        # mismo peso visual) aunque es información de apoyo, no lo
+        # primero que hay que ver en un scan de unos segundos.
+        if hay_contexto_secundario:
+            with st.expander(":material/more_horiz: Más contexto (edad física, gasto energético, pasos, VO2 Max...)"):
+                if edad_fisica is not None or nivel_estres is not None or gasto_total_avg is not None:
+                    g1, g2, g3 = st.columns(3)
+                    g1.metric(
+                        "Edad física", f"{edad_fisica:.0f} años" if edad_fisica is not None else "—",
+                        help="Fitness Age de Garmin -- estimada de VO2max, actividad y composición corporal. "
+                        "No todos los relojes la calculan.",
+                    )
+                    g2.metric(
+                        "Gasto energético total (30d)", f"{gasto_total_avg:.0f} kcal/día" if gasto_total_avg is not None else "—",
+                        help="Promedio de calorías en reposo + actividad de los últimos 30 días.",
+                    )
+                    g3.metric(
+                        "Nivel de estrés", f"{nivel_estres:.0f}/100" if nivel_estres is not None else "—",
+                        help="Nivel de estrés de hoy que reporta el reloj (0-100).",
+                    )
+                    if gasto_total_avg is not None:
+                        g2.caption(
+                            "Lo que su cuerpo gasta en promedio al día (reposo + actividad) -- referencia para el "
+                            "balance calórico, no una cifra exacta a seguir al pie de la letra."
+                        )
+                    if nivel_estres is not None:
+                        if nivel_estres < 25:
+                            texto_estres = "Nivel bajo -- buena señal de recuperación general."
+                        elif nivel_estres < 50:
+                            texto_estres = "Nivel manejable -- dentro de lo esperado para un día normal."
+                        elif nivel_estres < 75:
+                            texto_estres = "Nivel elevado -- vale la pena vigilar sueño y carga de entrenamiento estos días."
+                        else:
+                            texto_estres = "Nivel alto -- prioriza descanso/recuperación antes de sumar más carga."
+                        g3.caption(texto_estres)
+
+                if pasos_promedio_dia is not None or minutos_ejercicio_promedio_dia is not None or vo2max is not None:
+                    if edad_fisica is not None or nivel_estres is not None or gasto_total_avg is not None:
+                        st.divider()
+                    a1, a2, a3 = st.columns(3)
+                    a1.metric(
+                        "Pasos (promedio/día)", f"{pasos_promedio_dia:,.0f}" if pasos_promedio_dia is not None else "—",
+                    )
+                    a2.metric(
+                        "Minutos de ejercicio (promedio/día)",
+                        f"{minutos_ejercicio_promedio_dia:.0f} min" if minutos_ejercicio_promedio_dia is not None else "—",
+                        help="Anillo 'Ejercicio' del Apple Watch.",
+                    )
+                    a3.metric(
+                        "VO2 Max", f"{vo2max:.1f} mL/kg/min" if vo2max is not None else "—",
+                        help="Estimado por el Apple Watch a partir de carreras/caminatas al aire libre con GPS. "
+                        "Indicador de condición cardiovascular -- entre más alto, mejor.",
+                    )
             st.divider()
 
         st.subheader("¿Cómo vengo hoy?")

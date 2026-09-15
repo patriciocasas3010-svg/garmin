@@ -557,11 +557,11 @@ def _resumen_p10(filas, ratio_neu_lin, acwr, battery_recarga_prom) -> dict:
     )
 
 
-def marcadores_clave(panel: dict, maximo: int = 3) -> str:
+def marcadores_clave_lista(panel: dict, maximo: int = 3) -> list[str]:
     """Los primeros marcadores con dato real de un panel (nunca los
-    'pendiente' ni los 'sin dato') -- se usa tanto en pantalla (Resumen y
-    Alertas) como en el PDF descargable, para que la alerta traiga el
-    valor concreto y no solo el texto del hallazgo."""
+    'pendiente' ni los 'sin dato'), uno por elemento de la lista -- para
+    poder pintarlos como chips individuales en pantalla en vez de un
+    solo bloque de texto."""
     piezas = []
     for m in panel.get("metricas", []):
         if m.get("pendiente") or m.get("valor") is None:
@@ -572,7 +572,14 @@ def marcadores_clave(panel: dict, maximo: int = 3) -> str:
         piezas.append(f"{m['etiqueta']}: {valor_fmt}")
         if len(piezas) >= maximo:
             break
-    return " · ".join(piezas)
+    return piezas
+
+
+def marcadores_clave(panel: dict, maximo: int = 3) -> str:
+    """Los primeros marcadores con dato real de un panel, unidos en un
+    solo texto -- se usa en el PDF descargable, donde no aplican los
+    chips de pantalla (ver marcadores_clave_lista)."""
+    return " · ".join(marcadores_clave_lista(panel, maximo))
 
 
 def calcular_paneles(

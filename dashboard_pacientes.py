@@ -43,6 +43,7 @@ import garmin_metrics as gm
 import garmin_session
 import glp1_diabetes
 import marca_aura
+import feedback_store
 import inbody_ocr
 import inbody_store
 import libre_metrics
@@ -134,6 +135,43 @@ usuario_actual = _login()
 if not usuario_actual:
     st.stop()
 _ES_ADMIN = usuario_actual["rol"] == "admin"
+
+
+@st.dialog("Reportar un problema o sugerencia")
+def _feedback_dialog():
+    st.caption(
+        "Cualquier cosa que no funcione, se sienta lenta, confusa o que se te ocurra mientras usas el "
+        "dashboard -- se guarda directo, sin salir de aquí."
+    )
+    mensaje = st.text_area("Mensaje", key="feedback_mensaje", placeholder="Ej. \"Se tardó mucho en cargar el InBody\"...")
+    if st.button("Enviar", type="primary", disabled=not mensaje.strip()):
+        feedback_store.guardar(
+            _gc(), st.secrets["SHEET_ID"], usuario_actual["usuario"],
+            st.session_state.get("paciente_actual") or "", mensaje.strip(),
+        )
+        st.success("Gracias, se guardó.")
+        st.session_state.pop("feedback_mensaje", None)
+        st.rerun()
+
+
+# Botón fijo en la esquina inferior derecha (position:fixed, no depende
+# de en qué pantalla/pestaña esté el usuario) -- para capturar fricción
+# real durante el piloto sin que tenga que salirse de lo que está
+# haciendo para avisar.
+st.markdown(
+    """<style>
+    div[data-testid="stElementContainer"]:has(#feedback-fab) {
+        position: fixed; bottom: 18px; right: 18px; z-index: 1000; width: auto;
+    }
+    div[data-testid="stElementContainer"]:has(#feedback-fab) + div[data-testid="stElementContainer"] {
+        position: fixed; bottom: 18px; right: 18px; z-index: 1000; width: auto;
+    }
+    </style>""",
+    unsafe_allow_html=True,
+)
+st.markdown('<div id="feedback-fab"></div>', unsafe_allow_html=True)
+if st.button(":material/chat_bubble: Reportar", key="feedback_btn", help="Reportar un problema o sugerencia"):
+    _feedback_dialog()
 
 
 @st.cache_resource(ttl=3600)
@@ -452,12 +490,39 @@ historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"]
 
 marca_actual = marca_aura.calcular(perfil_actual)
 
+render_header(paciente, subtitulo=fuente, marca=marca_actual)
+
+# Barra compacta con lo que el nutriólogo nunca debe perder de vista
+# mientras hace scroll por las pestañas (nombre ya quedó arriba, en
+# render_header) -- fija con position:sticky. IMPORTANTE: nada de esto
+# puede vivir dentro de un st.container() propio -- Streamlit envuelve
+# cada container en un wrapper que se ajusta exactamente a su
+# contenido, así que un sticky adentro no tiene espacio real para
+# desplazarse y nunca se pega. En vez de eso, el marcador y la fila de
+# botones quedan sueltos al nivel de la página (mismo padre que el
+# resto del contenido largo de las pestañas), y se selecciona con
+# "hermano siguiente" (+) a partir del <div> marcador -- mismo patrón
+# que el botón flotante de feedback más arriba.
+_sticky_marca = f"sticky-paciente-{re.sub(r'[^a-zA-Z0-9_]', '_', paciente)}"
+st.markdown(
+    f"""<style>
+    div[data-testid="stElementContainer"]:has(#{_sticky_marca}) + div {{
+        position: sticky; top: 60px; z-index: 999; background: #FFFFFF;
+        padding: 8px 0 10px 0; border-bottom: 1px solid #E7E5DE;
+    }}
+    </style>""",
+    unsafe_allow_html=True,
+)
+st.markdown(f'<div id="{_sticky_marca}"></div>', unsafe_allow_html=True)
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
-    render_header(paciente, subtitulo=fuente, marca=marca_actual)
+    st.markdown(f"##### {paciente}")
+    etiquetas_sticky = [f"Último envío: {fila.get('Fecha', 'sin fecha')}"]
     if marca_actual != "clinical":
-        st.caption(f":material/label: Este paciente vive bajo {marca_aura.MARCAS[marca_actual]['nombre']}.")
-    st.caption(f"Último envío: {fila.get('Fecha', 'sin fecha')}")
+        etiquetas_sticky.insert(0, marca_aura.MARCAS[marca_actual]["nombre"])
+    if glp1_diabetes.activo(perfil_actual):
+        etiquetas_sticky.insert(1 if marca_actual != "clinical" else 0, "GLP-1 activo")
+    st.caption(" · ".join(etiquetas_sticky))
 with top_col2:
     if st.button(":material/refresh: Actualizar", width="stretch"):
         st.cache_data.clear()
@@ -945,6 +1010,21 @@ _COLOR_ESTADO = {
 }
 
 
+def _render_chips_marcadores(marcadores: list[str], color: str) -> None:
+    """Los marcadores de un panel como chips individuales (en vez de un
+    solo renglón de texto "Marcadores: A: 1 -- B: 2 -- C: 3") -- para que
+    se puedan escanear de un vistazo en vez de leerse como párrafo,
+    coloreados con el mismo semáforo (verde/ámbar/coral) que ya usa el
+    resto de Cruces clínicos."""
+    chips = "".join(
+        f'<span style="display:inline-block; background:{color}1F; border:1.5px solid {color}; '
+        f'border-radius:999px; padding:2px 10px; margin:2px 4px 2px 0; font-size:12.5px; '
+        f'font-weight:600; white-space:nowrap;">{m}</span>'
+        for m in marcadores
+    )
+    st.markdown(chips, unsafe_allow_html=True)
+
+
 def _render_alertas_cruces(data: dict | None):
     """Los paneles de Cruces clínicos que NO están en verde (riesgo o
     alerta) -- para que salten a la vista en Alertas (y en Resumen) sin
@@ -960,9 +1040,9 @@ def _render_alertas_cruces(data: dict | None):
             st.error(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/error:")
         else:
             st.warning(f"{panel['icono']} **{panel['titulo']}** -- {resumen['hallazgo']}", icon=":material/warning:")
-        marcadores = cruces_clinicos.marcadores_clave(panel)
+        marcadores = cruces_clinicos.marcadores_clave_lista(panel)
         if marcadores:
-            st.caption(f"Marcadores: {marcadores}")
+            _render_chips_marcadores(marcadores, _COLOR_ESTADO[resumen["estado"]])
         st.caption(f"Pauta sugerida: {resumen['pauta']}")
 
 
