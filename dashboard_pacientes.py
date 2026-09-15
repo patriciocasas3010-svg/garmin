@@ -180,20 +180,117 @@ except Exception as e:
 # Pantalla de selección (landing)
 # ---------------------------------------------------------------------------
 
+nombres_todos = []
+if not df.empty and "Nombre" in df.columns:
+    nombres_todos = sorted(df["Nombre"].dropna().unique())
+
+
+@st.dialog("Settings", width="large")
+def _settings_dialog():
+    tab_usuarios, tab_borrar, tab_tokens = st.tabs(["Usuarios", "Eliminar paciente", "Tokens de Garmin"])
+
+    with tab_usuarios:
+        st.caption("Crea una cuenta para cada nutrióloga -- con su propio usuario y contraseña.")
+        usuarios_actuales = usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])
+        if usuarios_actuales:
+            st.dataframe(
+                pd.DataFrame(usuarios_actuales)[["usuario", "nombre", "rol"]],
+                hide_index=True, width="stretch",
+            )
+        else:
+            st.caption("Todavía no has creado ninguna cuenta aparte de tu acceso de admin.")
+
+        with st.form("crear_usuario_form", clear_on_submit=True):
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                usuario_nuevo_id = st.text_input("Usuario (para iniciar sesión)", key="usuario_nuevo_id")
+                nombre_nuevo_usuario = st.text_input("Nombre completo", key="nombre_nuevo_usuario")
+            with col_u2:
+                password_nuevo_usuario = st.text_input(
+                    "Contraseña", type="password", key="password_nuevo_usuario",
+                )
+                rol_nuevo_usuario = st.selectbox("Rol", usuarios_store.ROLES, key="rol_nuevo_usuario")
+            crear_usuario_btn = st.form_submit_button("Crear usuario")
+
+        if crear_usuario_btn:
+            if not usuario_nuevo_id.strip() or not password_nuevo_usuario:
+                st.error("Usuario y contraseña son obligatorios.")
+            elif usuario_nuevo_id.strip() == "admin":
+                st.error('"admin" ya es tu acceso de emergencia -- usa otro nombre de usuario.')
+            else:
+                usuarios_store.crear_usuario(
+                    _gc(), st.secrets["SHEET_ID"], usuario_nuevo_id.strip(),
+                    nombre_nuevo_usuario.strip() or usuario_nuevo_id.strip(),
+                    password_nuevo_usuario, rol_nuevo_usuario,
+                )
+                st.success(f'Cuenta de "{usuario_nuevo_id.strip()}" creada.')
+                st.rerun()
+
+    with tab_borrar:
+        st.caption(
+            "Borra al paciente y TODO su historial (Enfoque, Notas, InBody, Antropometría, "
+            "Calorías, Estudios, token de Garmin) -- no se puede deshacer."
+        )
+        if nombres_todos:
+            paciente_a_borrar = st.selectbox(
+                "Paciente a eliminar", nombres_todos, index=None,
+                placeholder="Selecciona...", key="paciente_a_borrar",
+            )
+            confirmar_borrado = st.checkbox(
+                f'Sí, quiero eliminar a "{paciente_a_borrar}" y todo su historial.',
+                key="confirmar_borrado_paciente", disabled=not paciente_a_borrar,
+            )
+            if st.button(
+                ":material/delete: Eliminar paciente", type="primary",
+                disabled=not (paciente_a_borrar and confirmar_borrado), key="eliminar_paciente_btn",
+            ):
+                paciente_admin.eliminar_paciente(_gc(), st.secrets["SHEET_ID"], paciente_a_borrar)
+                st.cache_data.clear()
+                st.success(f'"{paciente_a_borrar}" fue eliminado.')
+                st.rerun()
+        else:
+            st.caption("No hay pacientes que borrar todavía.")
+
+    with tab_tokens:
+        st.caption(
+            "Pacientes con un token de Garmin guardado (sincronización automática activa) -- "
+            "elimínalo para forzar que se vuelva a conectar desde cero con un link nuevo."
+        )
+        tokens_actuales = token_store.listar_tokens(_gc(), st.secrets["SHEET_ID"])
+        if tokens_actuales:
+            for t in tokens_actuales:
+                col_tok1, col_tok2 = st.columns([4, 1])
+                with col_tok1:
+                    st.write(f"**{t['nombre']}** -- guardado el {t.get('fecha') or 'sin fecha'}")
+                with col_tok2:
+                    if st.button(":material/delete: Eliminar", key=f"eliminar_token_{t['nombre']}"):
+                        token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], t["nombre"])
+                        st.cache_data.clear()
+                        st.rerun()
+        else:
+            st.caption("Ningún paciente tiene un token de Garmin guardado todavía.")
+
+
 if st.session_state["paciente_actual"] is None:
-    col_titulo, col_sesion = st.columns([5, 1])
+    col_titulo, col_sesion = st.columns([5, 2])
     with col_titulo:
         render_header("Resumen de pacientes")
         st.caption("Selecciona un paciente para ver su Tablero Maestro de Rendimiento.")
     with col_sesion:
         st.caption(f"{usuario_actual['nombre']} · {'admin' if _ES_ADMIN else 'nutriólogo'}")
-        if st.button(":material/logout: Cerrar sesión", key="cerrar_sesion"):
-            del st.session_state["_usuario"]
-            st.rerun()
-
-    nombres_todos = []
-    if not df.empty and "Nombre" in df.columns:
-        nombres_todos = sorted(df["Nombre"].dropna().unique())
+        if _ES_ADMIN:
+            col_settings, col_salir = st.columns(2)
+            with col_settings:
+                if st.button(":material/settings:", key="abrir_settings", help="Settings (admin)"):
+                    _settings_dialog()
+            with col_salir:
+                if st.button(":material/logout:", key="cerrar_sesion", help="Cerrar sesión"):
+                    del st.session_state["_usuario"]
+                    st.rerun()
+        else:
+            if st.button(":material/logout:", key="cerrar_sesion", help="Cerrar sesión"):
+                del st.session_state["_usuario"]
+                st.rerun()
 
     asignaciones = {}
     nombres = nombres_todos
@@ -313,93 +410,6 @@ if st.session_state["paciente_actual"] is None:
                 st.cache_data.clear()
                 st.session_state["paciente_actual"] = nombre_nuevo
                 st.rerun()
-
-    if _ES_ADMIN:
-        with st.expander(":material/settings: Settings (admin)"):
-            tab_usuarios, tab_borrar, tab_tokens = st.tabs([
-                "Usuarios", "Eliminar paciente", "Tokens de Garmin",
-            ])
-
-            with tab_usuarios:
-                st.caption("Crea una cuenta para cada nutrióloga -- con su propio usuario y contraseña.")
-                usuarios_actuales = usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])
-                if usuarios_actuales:
-                    st.dataframe(
-                        pd.DataFrame(usuarios_actuales)[["usuario", "nombre", "rol"]],
-                        hide_index=True, width="stretch",
-                    )
-                else:
-                    st.caption("Todavía no has creado ninguna cuenta aparte de tu acceso de admin.")
-
-                with st.form("crear_usuario_form", clear_on_submit=True):
-                    col_u1, col_u2 = st.columns(2)
-                    with col_u1:
-                        usuario_nuevo_id = st.text_input("Usuario (para iniciar sesión)", key="usuario_nuevo_id")
-                        nombre_nuevo_usuario = st.text_input("Nombre completo", key="nombre_nuevo_usuario")
-                    with col_u2:
-                        password_nuevo_usuario = st.text_input(
-                            "Contraseña", type="password", key="password_nuevo_usuario",
-                        )
-                        rol_nuevo_usuario = st.selectbox("Rol", usuarios_store.ROLES, key="rol_nuevo_usuario")
-                    crear_usuario_btn = st.form_submit_button("Crear usuario")
-
-                if crear_usuario_btn:
-                    if not usuario_nuevo_id.strip() or not password_nuevo_usuario:
-                        st.error("Usuario y contraseña son obligatorios.")
-                    elif usuario_nuevo_id.strip() == "admin":
-                        st.error('"admin" ya es tu acceso de emergencia -- usa otro nombre de usuario.')
-                    else:
-                        usuarios_store.crear_usuario(
-                            _gc(), st.secrets["SHEET_ID"], usuario_nuevo_id.strip(),
-                            nombre_nuevo_usuario.strip() or usuario_nuevo_id.strip(),
-                            password_nuevo_usuario, rol_nuevo_usuario,
-                        )
-                        st.success(f'Cuenta de "{usuario_nuevo_id.strip()}" creada.')
-                        st.rerun()
-
-            with tab_borrar:
-                st.caption(
-                    "Borra al paciente y TODO su historial (Enfoque, Notas, InBody, Antropometría, "
-                    "Calorías, Estudios, token de Garmin) -- no se puede deshacer."
-                )
-                if nombres_todos:
-                    paciente_a_borrar = st.selectbox(
-                        "Paciente a eliminar", nombres_todos, index=None,
-                        placeholder="Selecciona...", key="paciente_a_borrar",
-                    )
-                    confirmar_borrado = st.checkbox(
-                        f'Sí, quiero eliminar a "{paciente_a_borrar}" y todo su historial.',
-                        key="confirmar_borrado_paciente", disabled=not paciente_a_borrar,
-                    )
-                    if st.button(
-                        ":material/delete: Eliminar paciente", type="primary",
-                        disabled=not (paciente_a_borrar and confirmar_borrado), key="eliminar_paciente_btn",
-                    ):
-                        paciente_admin.eliminar_paciente(_gc(), st.secrets["SHEET_ID"], paciente_a_borrar)
-                        st.cache_data.clear()
-                        st.success(f'"{paciente_a_borrar}" fue eliminado.')
-                        st.rerun()
-                else:
-                    st.caption("No hay pacientes que borrar todavía.")
-
-            with tab_tokens:
-                st.caption(
-                    "Pacientes con un token de Garmin guardado (sincronización automática activa) -- "
-                    "elimínalo para forzar que se vuelva a conectar desde cero con un link nuevo."
-                )
-                tokens_actuales = token_store.listar_tokens(_gc(), st.secrets["SHEET_ID"])
-                if tokens_actuales:
-                    for t in tokens_actuales:
-                        col_tok1, col_tok2 = st.columns([4, 1])
-                        with col_tok1:
-                            st.write(f"**{t['nombre']}** -- guardado el {t.get('fecha') or 'sin fecha'}")
-                        with col_tok2:
-                            if st.button(":material/delete: Eliminar", key=f"eliminar_token_{t['nombre']}"):
-                                token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], t["nombre"])
-                                st.cache_data.clear()
-                                st.rerun()
-                else:
-                    st.caption("Ningún paciente tiene un token de Garmin guardado todavía.")
 
     st.stop()
 
