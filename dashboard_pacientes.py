@@ -21,7 +21,7 @@ Ver PUBLICAR_DASHBOARD_PACIENTES.md para la guía paso a paso completa.
 import json
 import re
 import tempfile
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -125,6 +125,18 @@ def _worksheet():
     return sheet_cache.abrir_hoja(_gc(), st.secrets["SHEET_ID"]).sheet1
 
 
+def _parsear_fecha_ddmmaaaa(texto: str):
+    """"DD.MM.AAAA" (como se guarda GLP1FechaInicio) -> date, para poder
+    precargar el st.date_input al editar -- None si está vacío o no se
+    puede parsear (p.ej. quedó vacío o con un formato viejo)."""
+    if not texto:
+        return None
+    try:
+        return datetime.strptime(texto, "%d.%m.%Y").date()
+    except ValueError:
+        return None
+
+
 @st.cache_data(ttl=300)
 def _load_df() -> pd.DataFrame:
     registros = _worksheet().get_all_records()
@@ -186,10 +198,13 @@ if st.session_state["paciente_actual"] is None:
                 key="meta_grasa_nuevo_paciente", help="Déjalo en 0 si todavía no aplica.",
             )
         with col_dias_n:
-            dias_plan_nuevo = st.number_input(
-                "Días de entrenamiento/movilidad planeados (por mes)", min_value=0, max_value=31, step=1,
-                key="dias_plan_nuevo_paciente", help="Déjalo en 0 si no aplica.",
+            etiquetas_dias_plan = [etiqueta for etiqueta, _ in enfoque_store.OPCIONES_DIAS_PLAN]
+            etiqueta_dias_nueva = st.selectbox(
+                "Días de entrenamiento/movilidad planeados", etiquetas_dias_plan,
+                key="dias_plan_nuevo_paciente",
+                help="Para comparar contra los días realmente ejercitados en el resumen.",
             )
+            dias_plan_nuevo = dict(enfoque_store.OPCIONES_DIAS_PLAN)[etiqueta_dias_nueva]
 
         col_condicion_n, col_glp1_n = st.columns(2)
         with col_condicion_n:
@@ -210,9 +225,11 @@ if st.session_state["paciente_actual"] is None:
                     "Dosis", key="glp1_dosis_nuevo_paciente", placeholder="ej. 1.7 mg/semana",
                 )
             with col_fecha_n:
-                glp1_fecha_nueva = st.text_input(
-                    "Fecha de inicio", key="glp1_fecha_nuevo_paciente", placeholder="DD.MM.AAAA",
+                fecha_glp1_nueva_date = st.date_input(
+                    "Fecha de inicio", value=None, key="glp1_fecha_nuevo_paciente",
+                    format="DD.MM.YYYY",
                 )
+                glp1_fecha_nueva = fecha_glp1_nueva_date.strftime("%d.%m.%Y") if fecha_glp1_nueva_date else ""
 
         marca_preview = marca_aura.calcular({
             "enfoque": enfoque_nuevo, "condicion_metabolica": condicion_nueva, "glp1_molecula": glp1_nuevo,
@@ -233,7 +250,7 @@ if st.session_state["paciente_actual"] is None:
                 enfoque_store.guardar_perfil(
                     _gc(), st.secrets["SHEET_ID"], nombre_nuevo,
                     enfoque=enfoque_nuevo, meta_grasa_pct=meta_grasa_nueva or None,
-                    dias_plan_mes=dias_plan_nuevo or None, condicion_metabolica=condicion_nueva,
+                    dias_plan_mes=dias_plan_nuevo, condicion_metabolica=condicion_nueva,
                     glp1_molecula=glp1_nuevo,
                     glp1_dosis=glp1_dosis_nueva if mostrar_detalle_glp1_nuevo else "",
                     glp1_fecha_inicio=glp1_fecha_nueva if mostrar_detalle_glp1_nuevo else "",
@@ -339,17 +356,24 @@ with col_notas:
                 st.success("Meta guardada.")
                 st.rerun()
         with col_dias:
-            dias_plan_elegidos = st.number_input(
-                "Días de entrenamiento planeados (por mes)", min_value=0, max_value=31, step=1,
-                value=perfil_actual["dias_plan_mes"] or 0,
+            etiquetas_dias_plan = [etiqueta for etiqueta, _ in enfoque_store.OPCIONES_DIAS_PLAN]
+            valores_dias_plan = dict(enfoque_store.OPCIONES_DIAS_PLAN)
+            etiqueta_dias_actual = min(
+                enfoque_store.OPCIONES_DIAS_PLAN,
+                key=lambda par: abs(par[1] - (perfil_actual["dias_plan_mes"] or 0)),
+            )[0]
+            etiqueta_dias_elegida = st.selectbox(
+                "Días de entrenamiento planeados", etiquetas_dias_plan,
+                index=etiquetas_dias_plan.index(etiqueta_dias_actual),
                 key=f"dias_plan_{paciente}",
-                help="Para comparar días ejercitados vs. lo planeado en el resumen. Déjalo en 0 si no aplica.",
+                help="Para comparar días ejercitados vs. lo planeado en el resumen.",
             )
+            dias_plan_elegidos = valores_dias_plan[etiqueta_dias_elegida]
             if dias_plan_elegidos != (perfil_actual["dias_plan_mes"] or 0) and st.button(
                 "Guardar plan", key=f"guardar_dias_plan_{paciente}",
             ):
                 enfoque_store.guardar_perfil(
-                    _gc(), st.secrets["SHEET_ID"], paciente, dias_plan_mes=dias_plan_elegidos or None,
+                    _gc(), st.secrets["SHEET_ID"], paciente, dias_plan_mes=dias_plan_elegidos,
                 )
                 st.cache_data.clear()
                 st.success("Días de plan guardados.")
@@ -385,9 +409,11 @@ with col_notas:
                     "Dosis", value=glp1_dosis_elegida, key=f"glp1_dosis_{paciente}", placeholder="ej. 1.7 mg/semana",
                 )
             with col_fecha_glp1:
-                glp1_fecha_elegida = st.text_input(
-                    "Fecha de inicio", value=glp1_fecha_elegida, key=f"glp1_fecha_{paciente}", placeholder="DD.MM.AAAA",
+                fecha_glp1_elegida_date = st.date_input(
+                    "Fecha de inicio", value=_parsear_fecha_ddmmaaaa(glp1_fecha_elegida),
+                    key=f"glp1_fecha_{paciente}", format="DD.MM.YYYY",
                 )
+                glp1_fecha_elegida = fecha_glp1_elegida_date.strftime("%d.%m.%Y") if fecha_glp1_elegida_date else ""
 
         hubo_cambio_glp1 = (
             condicion_elegida != condicion_actual or glp1_elegido != glp1_actual

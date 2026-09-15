@@ -53,6 +53,17 @@ OPCIONES_GLP1 = [
     "Otro",
 ]
 
+# (etiqueta, días de plan por mes equivalentes) -- categorías en vez de
+# pedir un número exacto, para que sea más rápido de llenar. El número
+# guardado es solo un equivalente aproximado (semana * ~4.3) para poder
+# seguir comparando contra los días realmente ejercitados en el resumen.
+OPCIONES_DIAS_PLAN = [
+    ("Nula", 0),
+    ("Sedentario (1-2 días por semana)", 7),
+    ("Intermedio (3-5 días por semana)", 17),
+    ("Alto (más de 4 días por semana)", 24),
+]
+
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
     sh = sheet_cache.abrir_hoja(gc, sheet_id)
