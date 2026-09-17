@@ -111,13 +111,22 @@ def guardar_snapshot(engine: sqlalchemy.engine.Engine, nombre: str, runtime_data
 
 def leer_todos(engine: sqlalchemy.engine.Engine) -> pd.DataFrame:
     """Todos los pacientes con fila en resumen (con o sin datos de
-    wearable todavía) -- para poblar el listado de pacientes."""
+    wearable todavía) -- para poblar el listado de pacientes.
+
+    COALESCE(..., '') en las columnas de texto (fecha, datos, fuente):
+    sin esto, un paciente sin ningún dato de wearable (todos NULL) hace
+    que pandas represente esa columna entera como NaN (float) en vez de
+    None/"" -- y el resto del código (dashboard_pacientes.py) revisa
+    "if not datos_json" esperando "" o None, no NaN, que es "truthy" en
+    Python y se cuela hasta json.loads(), donde truena con un error
+    confuso ("the JSON object must be str, bytes or bytearray, not
+    float") en vez de mostrar el aviso de "todavía no tiene datos"."""
     return pd.read_sql(
         sqlalchemy.text("""
-            SELECT nombre AS "Nombre", fecha AS "Fecha", calificacion AS "Calificacion",
+            SELECT nombre AS "Nombre", COALESCE(fecha, '') AS "Fecha", calificacion AS "Calificacion",
                 recuperacion AS "Recuperacion", sueno AS "Sueno", actividad AS "Actividad",
                 dias_con_actividad AS "DiasConActividad", dias_sin_actividad AS "DiasSinActividad",
-                rhr_7d AS "RHR7d", datos::text AS "Datos", fuente AS "Fuente"
+                rhr_7d AS "RHR7d", COALESCE(datos::text, '') AS "Datos", COALESCE(fuente, '') AS "Fuente"
             FROM resumen
         """),
         engine,
