@@ -21,13 +21,7 @@ ENCABEZADOS = ["Nombre", "Fecha", "CaloriasComidas"]
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = sheet_cache.abrir_hoja(gc, sheet_id)
-    try:
-        return sh.worksheet(HOJA_NOMBRE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=500, cols=len(ENCABEZADOS))
-        ws.append_row(ENCABEZADOS)
-        return ws
+    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS), filas=500)
 
 
 def guardar_calorias(gc: gspread.Client, sheet_id: str, nombre: str, fecha: date, calorias: float) -> None:

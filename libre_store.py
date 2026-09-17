@@ -16,13 +16,7 @@ ENCABEZADOS = ["Nombre", "LibrePatientId", "LibrePatientNombre"]
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = sheet_cache.abrir_hoja(gc, sheet_id)
-    try:
-        return sh.worksheet(HOJA_NOMBRE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=200, cols=len(ENCABEZADOS))
-        ws.append_row(ENCABEZADOS)
-        return ws
+    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS))
 
 
 def guardar_vinculo(gc: gspread.Client, sheet_id: str, nombre: str, libre_id: str, libre_nombre: str) -> None:

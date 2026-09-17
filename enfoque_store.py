@@ -66,21 +66,7 @@ OPCIONES_DIAS_PLAN = [
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = sheet_cache.abrir_hoja(gc, sheet_id)
-    try:
-        ws = sh.worksheet(HOJA_NOMBRE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=200, cols=len(ENCABEZADOS))
-        ws.append_row(ENCABEZADOS)
-        return ws
-    # Hoja creada con una versión anterior de este archivo, a la que le
-    # faltan las columnas nuevas (MetaGrasaPct/DiasPlanMes) -- se repara
-    # el encabezado sin tocar ninguna fila de datos ya guardada.
-    encabezado_actual = ws.row_values(1)
-    if encabezado_actual != ENCABEZADOS:
-        ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
-        ws.update(f"A1:{ultima_col}1", [ENCABEZADOS])
-    return ws
+    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS))
 
 
 def guardar_perfil(

@@ -23,6 +23,8 @@ from datetime import date
 
 import gspread
 
+import sheet_cache
+
 HOJA_NOMBRE = "Usuarios"
 
 ENCABEZADOS = ["Usuario", "Nombre", "PasswordHash", "Salt", "Rol", "Fecha"]
@@ -33,17 +35,7 @@ _ITERACIONES_HASH = 200_000
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = gc.open_by_key(sheet_id)
-    try:
-        ws = sh.worksheet(HOJA_NOMBRE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=200, cols=len(ENCABEZADOS))
-        ws.append_row(ENCABEZADOS)
-        return ws
-    if ws.row_values(1) != ENCABEZADOS:
-        ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
-        ws.update(f"A1:{ultima_col}1", [ENCABEZADOS])
-    return ws
+    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS))
 
 
 def _hash_password(password: str, salt: str) -> str:

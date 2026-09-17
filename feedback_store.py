@@ -8,23 +8,15 @@ from datetime import datetime
 
 import gspread
 
+import sheet_cache
+
 HOJA_NOMBRE = "Feedback"
 
 ENCABEZADOS = ["Fecha", "Usuario", "Paciente", "Mensaje"]
 
 
 def _worksheet(gc: gspread.Client, sheet_id: str):
-    sh = gc.open_by_key(sheet_id)
-    try:
-        ws = sh.worksheet(HOJA_NOMBRE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=500, cols=len(ENCABEZADOS))
-        ws.append_row(ENCABEZADOS)
-        return ws
-    if ws.row_values(1) != ENCABEZADOS:
-        ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
-        ws.update(f"A1:{ultima_col}1", [ENCABEZADOS])
-    return ws
+    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS), filas=500)
 
 
 def guardar(gc: gspread.Client, sheet_id: str, usuario: str, paciente: str, mensaje: str) -> None:
