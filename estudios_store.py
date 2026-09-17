@@ -11,9 +11,28 @@ la celda de Google Sheets) ya llega parseado como lista/dict de Python
 al leerlo -- ya no hace falta json.dumps/json.loads a mano."""
 
 import json
+import math
 from datetime import date
 
 import sqlalchemy
+
+
+def _sin_nan(obj):
+    """NaN no es JSON válido -- json.dumps de Python lo deja pasar
+    (es una extensión no estándar), pero Postgres lo rechaza al
+    insertar en una columna JSONB ("Token 'NaN' is invalid"). Pasa de
+    verdad aquí: el editor de la tabla de resultados (st.data_editor)
+    guarda una columna como float64 de pandas en cuanto CUALQUIER fila
+    tiene un número (rango_min/rango_max), y cualquier otra fila sin
+    ese dato queda como NaN, no None -- se reemplaza recursivo por None
+    antes de guardar."""
+    if isinstance(obj, float) and math.isnan(obj):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sin_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sin_nan(v) for v in obj]
+    return obj
 
 
 def guardar_estudio(engine: sqlalchemy.engine.Engine, nombre: str, estudio: dict) -> None:
@@ -21,7 +40,7 @@ def guardar_estudio(engine: sqlalchemy.engine.Engine, nombre: str, estudio: dict
     (como el InBody), nunca se sobreescribe, siempre se agrega."""
     fecha = estudio.get("fecha") or date.today().strftime("%d.%m.%Y")
     laboratorio = estudio.get("laboratorio") or ""
-    resultados_json = json.dumps(estudio.get("resultados") or [], ensure_ascii=False)
+    resultados_json = json.dumps(_sin_nan(estudio.get("resultados") or []), ensure_ascii=False, allow_nan=False)
     with engine.begin() as conn:
         conn.execute(
             sqlalchemy.text("""
