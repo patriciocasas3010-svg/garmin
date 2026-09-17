@@ -132,6 +132,15 @@ def _a_int(v):
 
 
 @st.cache_data(ttl=30, show_spinner=False)
+def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
+    """El perfil de TODOS los pacientes -- cacheado aparte del paciente
+    para que ver varios pacientes seguidos no dispare una lectura nueva
+    a Sheets por cada uno (ver notas_store._leer_todo)."""
+    ws = _worksheet(_gc, sheet_id)
+    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
+    return pd.DataFrame(registros)
+
+
 def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
     """{"enfoque", "meta_grasa_pct", "dias_plan_mes", "condicion_metabolica",
     "glp1_molecula", "glp1_dosis", "glp1_fecha_inicio", "nutriologo"}."""
@@ -140,9 +149,7 @@ def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
         "condicion_metabolica": "Ninguna", "glp1_molecula": "No usa",
         "glp1_dosis": None, "glp1_fecha_inicio": None, "nutriologo": None,
     }
-    ws = _worksheet(_gc, sheet_id)
-    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
-    df = pd.DataFrame(registros)
+    df = _leer_todo(_gc, sheet_id)
     if df.empty or "Nombre" not in df.columns:
         return vacio
     fila = df[df["Nombre"] == nombre]

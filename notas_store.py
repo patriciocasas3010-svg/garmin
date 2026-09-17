@@ -33,10 +33,19 @@ def guardar_nota(gc: gspread.Client, sheet_id: str, nombre: str, texto: str) -> 
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
+    """Las notas de TODOS los pacientes de un jalón -- cacheado aparte
+    del paciente (a diferencia de antes) para que ver varios pacientes
+    seguidos (Cruces Clínicos, por ejemplo) no dispare una lectura nueva
+    a Sheets por cada uno; el filtro por paciente pasa después, ya en
+    memoria, sin volver a pedirle nada a Google."""
     ws = _worksheet(_gc, sheet_id)
     registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
-    df = pd.DataFrame(registros)
+    return pd.DataFrame(registros)
+
+
+def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+    df = _leer_todo(_gc, sheet_id)
     if df.empty or "Nombre" not in df.columns:
         return pd.DataFrame(columns=ENCABEZADOS)
     return df[df["Nombre"] == nombre].reset_index(drop=True)

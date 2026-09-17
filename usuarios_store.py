@@ -22,6 +22,7 @@ import secrets
 from datetime import date
 
 import gspread
+import streamlit as st
 
 import sheet_cache
 
@@ -58,13 +59,24 @@ def crear_usuario(
     ws.append_row(fila)
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _leer_todo(_gc: gspread.Client, sheet_id: str) -> list[list[str]]:
+    """Todas las filas de Usuarios -- cacheado para que listar_usuarios()
+    (llamado 3 veces por cada rerun del dashboard, para poblar
+    desplegables) no dispare una lectura nueva a Sheets en cada clic
+    (pasó en producción: 10 clics seguidos entre resultados de un mismo
+    paciente bastaron para tronar con "Quota exceeded" aquí, sin que
+    ninguna otra pestaña tuviera nada que ver)."""
+    ws = _worksheet(_gc, sheet_id)
+    return ws.get_all_values()
+
+
 def verificar_login(gc: gspread.Client, sheet_id: str, usuario: str, password: str) -> dict | None:
     """{"usuario", "nombre", "rol"} si el usuario existe y la contraseña
     es correcta -- None si no."""
     if not usuario or not password:
         return None
-    ws = _worksheet(gc, sheet_id)
-    for row in ws.get_all_values()[1:]:
+    for row in _leer_todo(gc, sheet_id)[1:]:
         if row and row[0] == usuario:
             actual = row + [""] * (len(ENCABEZADOS) - len(row))
             hash_guardado, salt = actual[2], actual[3]
@@ -78,9 +90,8 @@ def listar_usuarios(gc: gspread.Client, sheet_id: str) -> list[dict]:
     """Todos los usuarios ({"usuario", "nombre", "rol"}) -- para el
     listado en Settings y para el desplegable de "a quién se le asigna
     este paciente" al crear/editar uno."""
-    ws = _worksheet(gc, sheet_id)
     usuarios = []
-    for row in ws.get_all_values()[1:]:
+    for row in _leer_todo(gc, sheet_id)[1:]:
         if row and row[0]:
             actual = row + [""] * (len(ENCABEZADOS) - len(row))
             usuarios.append({"usuario": actual[0], "nombre": actual[1] or actual[0], "rol": actual[4] or "nutriologo"})

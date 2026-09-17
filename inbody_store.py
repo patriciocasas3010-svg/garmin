@@ -56,7 +56,10 @@ _COLUMNAS_NUMERICAS = [
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
+    """El historial de InBody de TODOS los pacientes -- cacheado aparte
+    del paciente para que ver varios pacientes seguidos no dispare una
+    lectura nueva a Sheets por cada uno (ver notas_store._leer_todo)."""
     ws = _worksheet(_gc, sheet_id)
     # UNFORMATTED_VALUE: trae el número tal cual (13.3), no el texto ya
     # formateado según el idioma de la hoja de cálculo ("13,3" en una hoja
@@ -64,9 +67,6 @@ def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFr
     # en un número de mil (13,3 -> 133).
     registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
     df = pd.DataFrame(registros)
-    if df.empty or "Nombre" not in df.columns:
-        return pd.DataFrame(columns=ENCABEZADOS)
-    df = df[df["Nombre"] == nombre].reset_index(drop=True)
     # Una celda vacía (un campo que se guardó como None -- p. ej. porque el
     # OCR de InBody no pudo leerlo con confianza) llega de gspread como
     # texto vacío "", no como NaN -- sin este paso, pd.notna("") da True y
@@ -77,3 +77,10 @@ def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFr
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
+
+
+def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
+    df = _leer_todo(_gc, sheet_id)
+    if df.empty or "Nombre" not in df.columns:
+        return pd.DataFrame(columns=ENCABEZADOS)
+    return df[df["Nombre"] == nombre].reset_index(drop=True)

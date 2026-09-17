@@ -38,13 +38,20 @@ def guardar_estudio(gc: gspread.Client, sheet_id: str, nombre: str, estudio: dic
 
 
 @st.cache_data(ttl=30, show_spinner=False)
+def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
+    """Los estudios de TODOS los pacientes -- cacheado aparte del
+    paciente para que ver varios pacientes seguidos no dispare una
+    lectura nueva a Sheets por cada uno (ver notas_store._leer_todo)."""
+    ws = _worksheet(_gc, sheet_id)
+    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
+    return pd.DataFrame(registros)
+
+
 def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> list[dict]:
     """Regresa una lista de estudios (cada uno {"fecha", "laboratorio",
     "resultados": [...]}) de este paciente, en el orden en que se
     guardaron (el más reciente al final)."""
-    ws = _worksheet(_gc, sheet_id)
-    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
-    df = pd.DataFrame(registros)
+    df = _leer_todo(_gc, sheet_id)
     if df.empty or "Nombre" not in df.columns:
         return []
     df = df[df["Nombre"] == nombre]

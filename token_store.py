@@ -28,6 +28,22 @@ abrir un par de paneles de Cruces clínicos seguido para pasarse del
 límite de lecturas por minuto de Google y tronar con "Quota exceeded"
 (pasó en producción, con Patricio, el 17 de septiembre).
 
+Ese primer fix solo evitaba las llamadas para RESOLVER la pestaña
+(fetch_sheet_metadata) -- pero leer_token()/listar_tokens() seguían
+haciendo su propio ws.get_all_values() sin caché alguno, uno distinto
+por cada paciente que se consultara. Eso significa que ver varios
+pacientes seguidos en Cruces Clínicos (que llama a leer_token() para
+cada uno) seguía sumando una llamada de LECTURA de datos por paciente,
+y con suficientes pacientes vistos rápido se vuelve a pasar la cuota
+igual (volvió a pasar, con ~10 pacientes seguidos, el mismo día).
+_leer_filas_cacheadas() cachea las filas completas (de TODOS los
+pacientes) por poco tiempo (20s, más corto que los 300s del Worksheet,
+porque los datos sí cambian seguido) -- así ver N pacientes en menos de
+20s cuesta 1 sola lectura a Sheets, no N. Cualquier escritura
+(guardar_token, eliminar_token, generar/invalidar_clave_conexion)
+invalida ese caché de inmediato para no arriesgarse a mostrar un dato
+desactualizado tras guardar algo.
+
 También lo usa conectar_garmin_web.py -- la página web donde el propio
 paciente pega su correo/contraseña de Garmin una sola vez (sin Python ni
 terminal en su computadora) para activar la sincronización automática.
@@ -51,6 +67,9 @@ _DELIMITADOR_RE = re.compile(r"-{10,}\s*\n(.*?)\n\s*-{10,}", re.S)
 
 _CACHE_TTL_SEGUNDOS = 300
 _cache_ws: dict[str, tuple[float, "gspread.Worksheet"]] = {}
+
+_CACHE_LECTURA_TTL_SEGUNDOS = 20
+_cache_filas: dict[str, tuple[float, list[list[str]]]] = {}
 
 
 def _worksheet_cacheado(gc: gspread.Client, sheet_id: str, resolver) -> "gspread.Worksheet":
@@ -99,23 +118,43 @@ def _worksheet(gc: gspread.Client, sheet_id: str):
     return _worksheet_cacheado(gc, sheet_id, lambda: _resolver_worksheet(gc, sheet_id))
 
 
+def _leer_filas_cacheadas(gc: gspread.Client, sheet_id: str) -> list[list[str]]:
+    """Todas las filas de la pestaña (de TODOS los pacientes), cacheadas
+    por poco tiempo -- ver la nota sobre "Quota exceeded" arriba del
+    módulo. Cualquier escritura invalida este caché de inmediato con
+    _invalidar_cache_lectura()."""
+    ahora = time.time()
+    entrada = _cache_filas.get(sheet_id)
+    if entrada is not None and ahora - entrada[0] < _CACHE_LECTURA_TTL_SEGUNDOS:
+        return entrada[1]
+    ws = _worksheet(gc, sheet_id)
+    filas = ws.get_all_values()
+    _cache_filas[sheet_id] = (ahora, filas)
+    return filas
+
+
+def _invalidar_cache_lectura(sheet_id: str) -> None:
+    _cache_filas.pop(sheet_id, None)
+
+
 def guardar_token(gc: gspread.Client, sheet_id: str, nombre: str, texto_pegado: str) -> None:
     ws = _worksheet(gc, sheet_id)
     token = _extraer_token(texto_pegado)
     fila = [nombre, token, date.today().strftime("%d.%m.%Y")]
-    registros = ws.get_all_values()
+    registros = _leer_filas_cacheadas(gc, sheet_id)
     for i, row in enumerate(registros):
         if row and row[0] == nombre:
             ws.update(f"A{i + 1}:C{i + 1}", [fila])
+            _invalidar_cache_lectura(sheet_id)
             return
     ws.append_row(fila)
+    _invalidar_cache_lectura(sheet_id)
 
 
 def leer_token(gc: gspread.Client, sheet_id: str, nombre: str) -> dict | None:
     """{"token": str, "fecha": str} de este paciente, o None si nunca
     guardó uno (o lo quitó con eliminar_token)."""
-    ws = _worksheet(gc, sheet_id)
-    for row in ws.get_all_values()[1:]:
+    for row in _leer_filas_cacheadas(gc, sheet_id)[1:]:
         if row and row[0] == nombre and len(row) > 1 and row[1]:
             return {"token": row[1], "fecha": row[2] if len(row) > 2 else None}
     return None
@@ -124,9 +163,8 @@ def leer_token(gc: gspread.Client, sheet_id: str, nombre: str) -> dict | None:
 def listar_tokens(gc: gspread.Client, sheet_id: str) -> list[dict]:
     """Todos los pacientes con token guardado -- lo usa sync_diario.py
     para saber a quién sincronizar cada día."""
-    ws = _worksheet(gc, sheet_id)
     pacientes = []
-    for row in ws.get_all_values()[1:]:
+    for row in _leer_filas_cacheadas(gc, sheet_id)[1:]:
         if row and row[0] and len(row) > 1 and row[1]:
             pacientes.append({"nombre": row[0], "token": row[1], "fecha": row[2] if len(row) > 2 else None})
     return pacientes
@@ -138,10 +176,11 @@ def eliminar_token(gc: gspread.Client, sheet_id: str, nombre: str) -> None:
     intente usar un token viejo/inválido para alguien que ya no quiere
     esto activado)."""
     ws = _worksheet(gc, sheet_id)
-    registros = ws.get_all_values()
+    registros = _leer_filas_cacheadas(gc, sheet_id)
     for i, row in enumerate(registros):
         if row and row[0] == nombre:
             ws.update(f"A{i + 1}:C{i + 1}", [[nombre, "", ""]])
+            _invalidar_cache_lectura(sheet_id)
             return
 
 
@@ -153,14 +192,16 @@ def generar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str) -> st
     usar (así un link viejo que mandaste por error deja de funcionar)."""
     ws = _worksheet(gc, sheet_id)
     clave = secrets.token_urlsafe(16)
-    registros = ws.get_all_values()
+    registros = _leer_filas_cacheadas(gc, sheet_id)
     for i, row in enumerate(registros):
         if row and row[0] == nombre:
             actual = row + [""] * (len(ENCABEZADOS) - len(row))
             actual[3] = clave
             ws.update(f"A{i + 1}:D{i + 1}", [actual])
+            _invalidar_cache_lectura(sheet_id)
             return clave
     ws.append_row([nombre, "", "", clave])
+    _invalidar_cache_lectura(sheet_id)
     return clave
 
 
@@ -169,8 +210,7 @@ def validar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str, clave
     y todavía no se usó (ver invalidar_clave_conexion)."""
     if not clave:
         return False
-    ws = _worksheet(gc, sheet_id)
-    for row in ws.get_all_values()[1:]:
+    for row in _leer_filas_cacheadas(gc, sheet_id)[1:]:
         if row and row[0] == nombre and len(row) > 3 and row[3] and row[3] == clave:
             return True
     return False
@@ -181,10 +221,11 @@ def invalidar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str) -> 
     el link de conexión no se pueda volver a usar (por ejemplo si se
     quedó visible en un chat de WhatsApp)."""
     ws = _worksheet(gc, sheet_id)
-    registros = ws.get_all_values()
+    registros = _leer_filas_cacheadas(gc, sheet_id)
     for i, row in enumerate(registros):
         if row and row[0] == nombre:
             actual = row + [""] * (len(ENCABEZADOS) - len(row))
             actual[3] = ""
             ws.update(f"A{i + 1}:D{i + 1}", [actual])
+            _invalidar_cache_lectura(sheet_id)
             return

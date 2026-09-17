@@ -262,6 +262,7 @@ def _settings_dialog():
                     password_nuevo_usuario, rol_nuevo_usuario,
                 )
                 st.success(f'Cuenta de "{usuario_nuevo_id.strip()}" creada.')
+                st.cache_data.clear()
                 st.rerun()
 
     with tab_borrar:
@@ -1246,6 +1247,7 @@ def _render_composicion_corporal(data: dict | None):
                     }
                     inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
                     st.session_state.pop(f"inbody_draft_{paciente}", None)
+                    st.cache_data.clear()
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
 
@@ -1317,6 +1319,7 @@ def _render_composicion_corporal(data: dict | None):
                     }
                     antropometria_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
                     st.session_state.pop(f"antro_draft_{paciente}", None)
+                    st.cache_data.clear()
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
 
