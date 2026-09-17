@@ -91,7 +91,9 @@ def _resumen_antropometria(historial: pd.DataFrame | None) -> str:
     return "\n".join(partes)
 
 
-def _resumen_wearable(data: dict) -> str:
+def _resumen_wearable(data: dict | None) -> str:
+    if not data:
+        return "Sin wearable conectado todavía -- este paciente aún no ha sincronizado Garmin/Apple Health/Oura."
     resumen_mes = data.get("resumen_mes") or {}
     lineas = [
         f"Calificación general del mes: {_fmt(resumen_mes.get('overall_score'), '/100', 0)} "
@@ -245,7 +247,7 @@ actividad" como si nada."""
 
 
 def _armar_contexto(
-    paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
     enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
 ) -> str:
     return (
@@ -254,7 +256,7 @@ def _armar_contexto(
         f"--- InBody ---\n{_resumen_inbody(inbody_historial)}\n\n"
         f"--- Mediciones antropométricas ---\n{_resumen_antropometria(antro_historial)}\n\n"
         f"--- Estudios clínicos de laboratorio ---\n{_resumen_estudios(estudios_historial)}\n\n"
-        f"--- Wearable (últimos {data.get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}\n\n"
+        f"--- Wearable (últimos {(data or {}).get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}\n\n"
         f"--- Cruces clínicos (10 paneles: labs + InBody + wearable) ---\n{_resumen_cruces(paneles_cruces)}\n\n"
         f"--- Notas del nutriólogo (historial, la más reciente al final) ---\n{_resumen_notas(notas_historial)}"
     )
@@ -270,7 +272,7 @@ _NOTAS_PLACEHOLDER = (
 
 
 def armar_mensaje_para_pegar(
-    paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
     enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
 ) -> str:
     """Mismo contenido que se le manda a la API, pero como un solo texto
@@ -346,11 +348,13 @@ def _tabla_cruces_completa(paneles: list[dict] | None) -> str:
     return "\n\n".join(bloques)
 
 
-def _tabla_wearable_diaria(data: dict) -> str:
+def _tabla_wearable_diaria(data: dict | None) -> str:
     """Series día por día del wearable (RHR, carga, sueño, hidratación,
     Body Battery, calorías, ACWR, HRV) en una sola tabla CSV -- el
     resumen del mes ya lo da _resumen_wearable, esto es el detalle
     crudo detrás de ese resumen."""
+    if not data:
+        return "Sin series diarias del wearable disponibles (no ha sincronizado wearable todavía)."
     piezas = []
     for clave in [
         "rhr_series", "load_series", "readiness_series", "acwr_df", "hrv_df",
@@ -375,7 +379,7 @@ def _tabla_wearable_diaria(data: dict) -> str:
 
 
 def armar_exportacion_completa(
-    paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
     enfoque: str | None = None, estudios_historial=None, paneles_cruces=None, calorias_historial=None,
 ) -> str:
     """A diferencia de armar_mensaje_para_pegar (que RESUME cada sección
@@ -397,7 +401,7 @@ def armar_exportacion_completa(
         f"{_tabla_estudios_completa(estudios_historial)}",
         f"\n=== CALORÍAS COMIDAS -- captura manual (historial completo) ===\n{_tabla_historial(calorias_historial)}",
         f"\n=== WEARABLE -- resumen del mes ===\n{_resumen_wearable(data)}",
-        f"\n=== WEARABLE -- series diarias (últimos {data.get('wellness_days', 30)} días) ===\n"
+        f"\n=== WEARABLE -- series diarias (últimos {(data or {}).get('wellness_days', 30)} días) ===\n"
         f"{_tabla_wearable_diaria(data)}",
         f"\n=== CRUCES CLÍNICOS -- 10 paneles completos ===\n{_tabla_cruces_completa(paneles_cruces)}",
         f"\n=== NOTAS DEL NUTRIÓLOGO (historial completo) ===\n{_resumen_notas(notas_historial)}",
@@ -406,7 +410,7 @@ def armar_exportacion_completa(
 
 
 def generar_analisis(
-    paciente_nombre: str, data: dict, inbody_historial, antro_historial, notas_historial=None,
+    paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
     enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
 ) -> str:
     """Arma el contexto del paciente y le pide a Claude una lectura rápida +

@@ -55,6 +55,8 @@ from garmin_dashboard_ui import (
     CRITICAL_CORAL,
     OPTIMUM_GREEN,
     WARNING_AMBER,
+    _render_glp1_diabetes,
+    inbody_historial_valido,
     inbody_ultimo_registro,
     render_antropometria_section,
     render_composicion_avanzada,
@@ -1383,21 +1385,190 @@ def _render_analisis_ia(data: dict):
             st.markdown(texto)
 
 
+def _placeholder_requiere_wearable(titulo: str, descripcion: str) -> None:
+    """Se usa en vez de esconder una pestaña completa cuando el paciente
+    no ha conectado wearable todavía -- la plataforma tiene que verse
+    igual de robusta con o sin wearable, el wearable es un "nice to
+    have", no un requisito para empezar a usar AURA desde la primera
+    cita."""
+    st.info(f":material/watch: **Requiere wearable conectado** -- {descripcion}")
+    st.caption(
+        "El wearable (Garmin, Apple Health u Oura) es un \"nice to have\": no hace falta para empezar a "
+        "usar AURA con un paciente desde la primera cita. En cuanto conecte su reloj/anillo/iPhone, esta "
+        "pestaña se llena sola, sin tener que hacer nada más aquí."
+    )
+
+
+def _render_resumen_sin_wearable() -> None:
+    """Pestaña Resumen para un paciente que todavía no conecta wearable --
+    tiene que verse igual de completa que la de un paciente con wearable
+    desde la primera cita: InBody, cruces clínicos y el análisis/descarga
+    con IA (obligatorio) ya funcionan sin necesitar ni un solo dato de
+    reloj/anillo."""
+    historial_valido = inbody_historial_valido(historial_inbody)
+    inbody_resumen = historial_valido.iloc[-1] if len(historial_valido) >= 1 else None
+    inbody_penultimo = historial_valido.iloc[-2] if len(historial_valido) >= 2 else None
+
+    if inbody_resumen is not None:
+        b1, b2, b3, b4 = st.columns(4)
+        peso_val = inbody_resumen.get("Peso_kg")
+        grasa_val = inbody_resumen.get("MasaGrasa_kg")
+        mme_val = inbody_resumen.get("MME_kg")
+        agua_val = inbody_resumen.get("AguaTotal_L")
+
+        delta_grasa_str = delta_mme_str = None
+        if inbody_penultimo is not None:
+            grasa_prev = inbody_penultimo.get("MasaGrasa_kg")
+            mme_prev = inbody_penultimo.get("MME_kg")
+            if pd.notna(grasa_val) and pd.notna(grasa_prev):
+                delta_grasa_str = f"{grasa_val - grasa_prev:+.1f} kg vs. cita anterior"
+            if pd.notna(mme_val) and pd.notna(mme_prev):
+                delta_mme_str = f"{mme_val - mme_prev:+.1f} kg vs. cita anterior"
+
+        b1.metric("Peso", f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—")
+        b2.metric(
+            "Grasa corporal", f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—",
+            delta=delta_grasa_str, delta_color="inverse",
+        )
+        b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", delta=delta_mme_str)
+        b4.metric("Hidratación (agua total)", f"{agua_val:.1f} L" if pd.notna(agua_val) else "—")
+        st.caption(
+            f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en "
+            ":material/monitor_weight: Composición corporal."
+        )
+
+        meta_grasa_pct = (perfil_actual or {}).get("meta_grasa_pct")
+        pgc_actual = inbody_resumen.get("PGC_pct")
+        if meta_grasa_pct and pd.notna(pgc_actual):
+            pgc_inicial = historial_valido.iloc[0].get("PGC_pct")
+            if pd.notna(pgc_inicial) and pgc_inicial > meta_grasa_pct:
+                avance = max(0.0, min(1.0, (pgc_inicial - pgc_actual) / (pgc_inicial - meta_grasa_pct)))
+            else:
+                avance = 1.0 if pgc_actual <= meta_grasa_pct else 0.0
+            st.markdown(f"**% de grasa corporal -- actual vs. meta ({meta_grasa_pct:.1f}%)**")
+            st.progress(
+                avance,
+                text=f"{pgc_actual:.1f}% actual · meta {meta_grasa_pct:.1f}%"
+                + (" · ¡meta alcanzada! :material/celebration:" if pgc_actual <= meta_grasa_pct else ""),
+            )
+
+        peso_inicial = historial_valido.iloc[0].get("Peso_kg")
+        if pd.notna(peso_inicial) and pd.notna(peso_val) and peso_inicial > peso_val:
+            total_perdido = peso_inicial - peso_val
+            hitos = int(total_perdido // 2.5)
+            if hitos >= 1:
+                hitos_prev = 0
+                if inbody_penultimo is not None:
+                    peso_prev_hito = inbody_penultimo.get("Peso_kg")
+                    if pd.notna(peso_prev_hito) and peso_inicial > peso_prev_hito:
+                        hitos_prev = int((peso_inicial - peso_prev_hito) // 2.5)
+                nuevo_hito = hitos > hitos_prev
+                medallas = ":material/military_tech:" * min(hitos, 5) + ("…" if hitos > 5 else "")
+                texto_hito = (
+                    f"{medallas} Ha bajado **{total_perdido:.1f} kg** desde su primer registro -- "
+                    f"{hitos} hito(s) de 2.5 kg alcanzado(s)."
+                )
+                if nuevo_hito:
+                    st.success(f":material/celebration: ¡Nuevo hito! {texto_hito}")
+                else:
+                    st.info(texto_hito)
+        st.divider()
+    else:
+        st.info(
+            ":material/upload_file: Sube el primer InBody de este paciente en la pestaña "
+            ":material/monitor_weight: Composición corporal para que este resumen se llene -- no hace "
+            "falta wearable para empezar."
+        )
+        st.divider()
+
+    st.subheader(":material/watch: ¿Cómo vengo hoy?")
+    _placeholder_requiere_wearable(
+        "¿Cómo vengo hoy?",
+        "aquí se verían la frecuencia cardiaca en reposo, horas de sueño, ACWR/HRV y alertas activas de "
+        "la semana en cuanto el paciente conecte Garmin, Apple Health u Oura.",
+    )
+
+    st.divider()
+    st.subheader(":material/call_merge: Cruces clínicos a atender")
+    st.caption(
+        "Lo que sale de verde en los 10 paneles que cruzan laboratorio + InBody + wearable -- detalle "
+        "completo (marcadores y desglose) en la pestaña :material/call_merge: Cruces clínicos. Sin "
+        "wearable, los cruces que solo dependen de laboratorio + InBody funcionan igual; los que necesitan "
+        "wearable se muestran \"sin dato\" hasta que el paciente conecte uno."
+    )
+    _render_alertas_cruces(None)
+
+    if historial_notas is not None and not historial_notas.empty:
+        st.divider()
+        st.subheader(":material/edit_note: Notas recientes")
+        for _, fila_nota in historial_notas.iloc[::-1].head(3).iterrows():
+            st.caption(f"**{fila_nota.get('Fecha')}** -- {fila_nota.get('Nota')}")
+
+    _render_analisis_ia(None)
+
+
+_DESCRIPCIONES_TABS_WEARABLE = {
+    ":material/balance: Carga y Preparación": (
+        "carga de entrenamiento (ACWR), preparación y frecuencia cardiaca en reposo día a día."
+    ),
+    ":material/track_changes: Eficiencia y Zonas": (
+        "eficiencia cardiaca y tiempo en cada zona de frecuencia cardiaca durante los entrenamientos."
+    ),
+    ":material/bedtime: Sueño y Bienestar": (
+        "horas y calidad de sueño, HRV, hidratación diaria estimada y nivel de estrés reportado por el reloj."
+    ),
+    "Calorías": "gasto energético diario (reposo + actividad) que reporta el wearable.",
+    "Alertas": (
+        "alertas automáticas de disrupción del sueño, eficiencia y tono vagal calculadas de las series "
+        "diarias del wearable."
+    ),
+}
+
+
 st.divider()
 
 if not datos_json:
-    st.warning(
-        "Este paciente todavía no tiene el dashboard completo guardado (solo un resumen viejo). "
-        "Pídele que vuelva a abrir su dashboard local para que se actualice."
+    st.info(
+        ":material/watch_off: Este paciente todavía no conecta un wearable (Garmin/Apple Health/Oura) -- "
+        "es un \"nice to have\", no un requisito: la plataforma funciona igual de completa desde la "
+        "primera cita, con InBody, estudios clínicos y cruces clínicos."
     )
-    st.divider()
-    _render_composicion_corporal(None)
-    st.divider()
-    st.subheader(":material/biotech: Estudios clínicos")
-    _render_estudios_clinicos()
-    st.divider()
-    st.subheader(":material/call_merge: Cruces clínicos")
-    _render_cruces_clinicos(None)
+
+    glp1_activo_actual = glp1_diabetes.activo(perfil_actual)
+    etiquetas_sw = [
+        ":material/summarize: Resumen", ":material/monitor_weight: Composición corporal",
+        ":material/biotech: Estudios clínicos", ":material/call_merge: Cruces clínicos",
+    ]
+    if glp1_activo_actual:
+        etiquetas_sw.append(":material/medication: GLP-1 y Diabéticos")
+    etiquetas_sw += [
+        ":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas",
+        ":material/bedtime: Sueño y Bienestar", "Calorías", "Alertas",
+    ]
+    tabs_sw = st.tabs(etiquetas_sw)
+
+    with tabs_sw[0]:
+        _render_resumen_sin_wearable()
+    with tabs_sw[1]:
+        _render_composicion_corporal(None)
+    with tabs_sw[2]:
+        _render_estudios_clinicos()
+    with tabs_sw[3]:
+        _render_cruces_clinicos(None)
+
+    idx_sw = 4
+    if glp1_activo_actual:
+        with tabs_sw[idx_sw]:
+            _render_glp1_diabetes(_calcular_glp1_resumen(), _render_glucosa_libre)
+        idx_sw += 1
+
+    for etiqueta_sw in etiquetas_sw[idx_sw:]:
+        with tabs_sw[idx_sw]:
+            _placeholder_requiere_wearable(
+                etiqueta_sw, _DESCRIPCIONES_TABS_WEARABLE.get(etiqueta_sw, "datos que aporta el wearable."),
+            )
+        idx_sw += 1
+
     st.stop()
 
 try:
