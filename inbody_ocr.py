@@ -284,7 +284,7 @@ def parse_inbody_text(texto: str) -> dict:
     # posición fija -- si no calza con el formato real, se queda en None
     # (nunca inventa un valor) y se revisa/corrige a mano como todo lo demás.
     bmr_m = re.search(
-        r"(?:Tasa\s*Metab[oó]lica\s*Basal|Metabolismo\s*Basal|Basal\s*Metabolic\s*Rate|BMR)"
+        r"(?:Tasa\s*Metab[oó]lica\s*B[aá]sal|Metabolismo\s*B[aá]sal|Basal\s*Metabolic\s*Rate|BMR)"
         r"\D*?(\d{3,4}(?:[.,]\d+)?)\s*kcal",
         texto, re.IGNORECASE,
     )
