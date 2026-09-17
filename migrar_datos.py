@@ -36,15 +36,31 @@ def _txt(v):
     return v if v not in (None, "") else None
 
 
+def _sin_nan(obj):
+    """NaN no es JSON válido (aunque el módulo json de Python lo deja
+    pasar de más, tanto al leerlo como al escribirlo -- es una extensión
+    no estándar) -- Postgres sí lo rechaza al insertar. Pasó de verdad en
+    un estudio real (un campo "unidad" vacío que quedó como float NaN al
+    pasar por pandas antes de guardarse) -- se reemplaza por None
+    recursivamente antes de volver a serializar."""
+    if isinstance(obj, float) and obj != obj:  # NaN != NaN, es la forma estándar de detectarlo
+        return None
+    if isinstance(obj, dict):
+        return {k: _sin_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sin_nan(v) for v in obj]
+    return obj
+
+
 def _json_o_none(v):
     if not v:
         return None
     try:
-        json.loads(v)
-        return v
+        parseado = json.loads(v)
     except (TypeError, ValueError):
         print(f"    aviso: JSON inválido, se guarda como None: {v!r}")
         return None
+    return json.dumps(_sin_nan(parseado), ensure_ascii=False, allow_nan=False)
 
 
 def _fecha_calorias(v):
