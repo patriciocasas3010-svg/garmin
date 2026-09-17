@@ -14,7 +14,19 @@ ningún lado fuera de esta hoja de Google.
 A diferencia del resto de los *_store.py, este módulo lo usan tanto
 dashboard_pacientes.py (dentro de Streamlit) como sync_diario.py (un
 script normal, sin Streamlit corriendo) -- por eso aquí no se usa
-sheet_cache.abrir_hoja ni @st.cache_data, solo gspread directo.
+sheet_cache.abrir_hoja ni @st.cache_data (que requieren Streamlit
+corriendo), solo gspread directo, con un caché propio hecho a mano
+(_worksheet_cacheado) que hace algo parecido a sheet_cache.py pero sin
+depender de streamlit -- y va un paso más allá: gspread.Spreadsheet.
+worksheet() NO cachea nada por su cuenta, así que cachear solo el
+Spreadsheet (como hace sheet_cache.py) no evita la llamada a la API en
+cada .worksheet()/row_values(1) -- aquí se cachea directo el Worksheet
+ya resuelto. Sin este caché, cada función de este archivo terminaba
+abriendo la hoja y revisando la pestaña desde cero, y Streamlit vuelve
+a ejecutar el script completo en cada clic (cada "rerun") -- bastaba
+abrir un par de paneles de Cruces clínicos seguido para pasarse del
+límite de lecturas por minuto de Google y tronar con "Quota exceeded"
+(pasó en producción, con Patricio, el 17 de septiembre).
 
 También lo usa conectar_garmin_web.py -- la página web donde el propio
 paciente pega su correo/contraseña de Garmin una sola vez (sin Python ni
@@ -26,6 +38,7 @@ exponer ahí la contraseña de tu hoja de Google ni un login compartido."""
 
 import re
 import secrets
+import time
 from datetime import date
 
 import gspread
@@ -35,6 +48,27 @@ HOJA_NOMBRE = "TokensGarmin"
 ENCABEZADOS = ["Nombre", "Token", "FechaGuardado", "ClaveConexion"]
 
 _DELIMITADOR_RE = re.compile(r"-{10,}\s*\n(.*?)\n\s*-{10,}", re.S)
+
+_CACHE_TTL_SEGUNDOS = 300
+_cache_ws: dict[str, tuple[float, "gspread.Worksheet"]] = {}
+
+
+def _worksheet_cacheado(gc: gspread.Client, sheet_id: str, resolver) -> "gspread.Worksheet":
+    """El Worksheet ya resuelto (spreadsheet abierto + pestaña encontrada
+    + encabezado revisado) reutilizado por 5 minutos en vez de repetir
+    esas 2-3 llamadas a la API cada vez -- ver la nota sobre "Quota
+    exceeded" arriba del módulo. `gspread.Spreadsheet.worksheet()` NO
+    cachea nada por su cuenta (siempre vuelve a pedir los metadatos a
+    Google), así que el caché tiene que vivir aquí. No usa
+    @st.cache_resource (sheet_cache.py) porque este archivo también
+    corre fuera de Streamlit, en sync_diario.py."""
+    ahora = time.time()
+    entrada = _cache_ws.get(sheet_id)
+    if entrada is not None and ahora - entrada[0] < _CACHE_TTL_SEGUNDOS:
+        return entrada[1]
+    ws = resolver()
+    _cache_ws[sheet_id] = (ahora, ws)
+    return ws
 
 
 def _extraer_token(texto_pegado: str) -> str:
@@ -47,7 +81,7 @@ def _extraer_token(texto_pegado: str) -> str:
     return (m.group(1) if m else texto_pegado).strip()
 
 
-def _worksheet(gc: gspread.Client, sheet_id: str):
+def _resolver_worksheet(gc: gspread.Client, sheet_id: str):
     sh = gc.open_by_key(sheet_id)
     try:
         ws = sh.worksheet(HOJA_NOMBRE)
@@ -59,6 +93,10 @@ def _worksheet(gc: gspread.Client, sheet_id: str):
         ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
         ws.update(f"A1:{ultima_col}1", [ENCABEZADOS])
     return ws
+
+
+def _worksheet(gc: gspread.Client, sheet_id: str):
+    return _worksheet_cacheado(gc, sheet_id, lambda: _resolver_worksheet(gc, sheet_id))
 
 
 def guardar_token(gc: gspread.Client, sheet_id: str, nombre: str, texto_pegado: str) -> None:
