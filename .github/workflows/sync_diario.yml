@@ -18,5 +18,4 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python3 sync_diario.py
         env:
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-          SHEET_ID: ${{ secrets.SHEET_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

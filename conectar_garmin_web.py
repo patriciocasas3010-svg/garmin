@@ -11,21 +11,17 @@ la hoja de Google, leído por sync_diario.py) que ya existía, solo que
 ahora se genera desde el navegador en vez de un script local.
 
 Se publica como una app de Streamlit Cloud APARTE (mismo repositorio,
-mismos Secrets GOOGLE_CREDENTIALS_JSON/SHEET_ID que dashboard_pacientes.py,
-pero SIN el Secret APP_PASSWORD -- esta página es la única pensada para
-que la abra directamente el paciente, protegida por la clave de un solo
-uso en el link, no por una contraseña compartida).
+mismo Secret DATABASE_URL que dashboard_pacientes.py, pero SIN el
+Secret APP_PASSWORD -- esta página es la única pensada para que la abra
+directamente el paciente, protegida por la clave de un solo uso en el
+link, no por una contraseña compartida).
 
 Seguridad: el correo/contraseña del paciente NUNCA se guardan ni se
-escriben en ningún lado (ni en la hoja de Google, ni en logs) -- viven
+escriben en ningún lado (ni en la base de datos, ni en logs) -- viven
 solo en memoria durante esta sesión de Streamlit, el tiempo que tarda en
 completarse el login contra los servidores de Garmin. Lo único que se
-guarda es el token de sesión resultante (client.garth.dumps()), igual
-que ya hacía export_token.py."""
+guarda es el token de sesión resultante (client.garth.dumps())."""
 
-import json
-
-import gspread
 import streamlit as st
 from garminconnect import (
     Garmin,
@@ -33,8 +29,8 @@ from garminconnect import (
     GarminConnectConnectionError,
     GarminConnectTooManyRequestsError,
 )
-from google.oauth2.service_account import Credentials
 
+import db
 import token_store
 from theme import apply_theme, render_header
 
@@ -42,18 +38,14 @@ st.set_page_config(page_title="Conectar Garmin · AURA", page_icon=":material/wa
 apply_theme()
 
 
-@st.cache_resource
-def _gc() -> gspread.Client:
-    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    return gspread.authorize(creds)
+def _engine():
+    return db.engine()
 
 
 def _guardar_y_confirmar(client: Garmin, paciente: str) -> None:
     token = client.garth.dumps()
-    token_store.guardar_token(_gc(), st.secrets["SHEET_ID"], paciente, token)
-    token_store.invalidar_clave_conexion(_gc(), st.secrets["SHEET_ID"], paciente)
+    token_store.guardar_token(_engine(), paciente, token)
+    token_store.invalidar_clave_conexion(_engine(), paciente)
     st.session_state["mfa_pendiente"] = None
     st.success(
         ":material/check_circle: ¡Listo! Tu reloj Garmin ya quedó conectado. "
@@ -76,7 +68,7 @@ if not paciente or not clave:
     )
     st.stop()
 
-if not token_store.validar_clave_conexion(_gc(), st.secrets["SHEET_ID"], paciente, clave):
+if not token_store.validar_clave_conexion(_engine(), paciente, clave):
     render_header("Conectar tu reloj Garmin")
     st.error(
         "Este link ya no es válido -- ya se usó antes, o tu nutrióloga generó uno más nuevo. "

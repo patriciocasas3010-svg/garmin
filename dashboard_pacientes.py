@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """Dashboard central del nutriólogo: cada paciente ve su propio Tablero
 Maestro de Rendimiento completo -- las mismas pestañas y gráficas que
-dashboard.py, con los datos que cada paciente mandó desde su equipo.
+dashboard.py, con los datos que se sincronizan solos todos los días
+(ver sync_diario.py) o que subes tú directo desde aquí (Apple Health).
 
-Piensa esto para publicarlo en Streamlit Community Cloud (un solo link para
-ti), NO para correrlo localmente -- lee de una hoja de Google donde cada
-paciente manda su dashboard completo automáticamente al abrir su propio
-dashboard local (ver push_resumen.py e iniciar_paciente.command/.bat).
+Piensa esto para publicarlo en Streamlit Community Cloud (un solo link
+para ti), NO para correrlo localmente -- lee y escribe en una base de
+datos Postgres (Supabase durante el piloto).
 
-Requiere estos Secrets en Streamlit Cloud (Settings -> Secrets):
+Requiere este Secret en Streamlit Cloud (Settings -> Secrets):
 
-    SHEET_ID = "el id de tu hoja de Google"
-    GOOGLE_CREDENTIALS_JSON = '''
-    {... contenido completo del archivo credenciales_hoja.json ...}
-    '''
+    DATABASE_URL = "postgresql://usuario:clave@host:puerto/basededatos"
 
-Ver PUBLICAR_DASHBOARD_PACIENTES.md para la guía paso a paso completa.
+(Supabase te la da lista en Settings -> Database -> Connection string,
+modo "Session pooler"). Ver schema.sql para crear las tablas la primera
+vez, y HANDOFF_DESARROLLADOR.md para el resto de los Secrets.
 """
 
 import json
@@ -25,10 +24,8 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-import gspread
 import pandas as pd
 import streamlit as st
-from google.oauth2.service_account import Credentials
 
 import ai_analisis
 import antropometria_parser
@@ -36,6 +33,7 @@ import antropometria_store
 import apple_health
 import calorias_store
 import cruces_clinicos
+import db
 import enfoque_store
 import estudios_parser
 import estudios_store
@@ -50,7 +48,7 @@ import libre_metrics
 import libre_store
 import notas_store
 import paciente_admin
-import sheet_cache
+import resumen_store
 import token_store
 import usuarios_store
 from garmin_dashboard_ui import (
@@ -63,21 +61,14 @@ from garmin_dashboard_ui import (
     render_dashboard_body,
     render_inbody_section,
 )
-from push_resumen import crear_paciente_vacio, write_snapshot_to_worksheet
 from theme import apply_theme, render_header
 
 st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="wide", page_icon=":material/stethoscope:")
 apply_theme()
 
 
-@st.cache_resource
-def _gc() -> gspread.Client:
-    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
-    # Antes era de solo lectura -- ahora también necesita poder escribir,
-    # para guardar los resultados de InBody que subes desde aquí mismo.
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    return gspread.authorize(creds)
+def _engine():
+    return db.engine()
 
 
 def _login() -> dict | None:
@@ -122,7 +113,7 @@ def _login() -> dict | None:
             st.session_state["_usuario"] = {"usuario": "admin", "nombre": "Admin", "rol": "admin"}
             st.rerun()
         else:
-            perfil_login = usuarios_store.verificar_login(_gc(), st.secrets["SHEET_ID"], usuario_input, pwd)
+            perfil_login = usuarios_store.verificar_login(_engine(), usuario_input, pwd)
             if perfil_login:
                 st.session_state["_usuario"] = perfil_login
                 st.rerun()
@@ -146,7 +137,7 @@ def _feedback_dialog():
     mensaje = st.text_area("Mensaje", key="feedback_mensaje", placeholder="Ej. \"Se tardó mucho en cargar el InBody\"...")
     if st.button("Enviar", type="primary", disabled=not mensaje.strip()):
         feedback_store.guardar(
-            _gc(), st.secrets["SHEET_ID"], usuario_actual["usuario"],
+            _engine(), usuario_actual["usuario"],
             st.session_state.get("paciente_actual") or "", mensaje.strip(),
         )
         st.success("Gracias, se guardó.")
@@ -183,10 +174,6 @@ def _libre_client():
     return libre_metrics.conectar(st.secrets.get("LIBRE_EMAIL"), st.secrets.get("LIBRE_PASSWORD"))
 
 
-def _worksheet():
-    return sheet_cache.abrir_hoja(_gc(), st.secrets["SHEET_ID"]).sheet1
-
-
 def _parsear_fecha_ddmmaaaa(texto: str):
     """"DD.MM.AAAA" (como se guarda GLP1FechaInicio) -> date, para poder
     precargar el st.date_input al editar -- None si está vacío o no se
@@ -201,8 +188,7 @@ def _parsear_fecha_ddmmaaaa(texto: str):
 
 @st.cache_data(ttl=300)
 def _load_df() -> pd.DataFrame:
-    registros = _worksheet().get_all_records()
-    return pd.DataFrame(registros)
+    return resumen_store.leer_todos(_engine())
 
 
 if "paciente_actual" not in st.session_state:
@@ -229,7 +215,7 @@ def _settings_dialog():
 
     with tab_usuarios:
         st.caption("Crea una cuenta para cada nutrióloga -- con su propio usuario y contraseña.")
-        usuarios_actuales = usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])
+        usuarios_actuales = usuarios_store.listar_usuarios(_engine())
         if usuarios_actuales:
             st.dataframe(
                 pd.DataFrame(usuarios_actuales)[["usuario", "nombre", "rol"]],
@@ -257,7 +243,7 @@ def _settings_dialog():
                 st.error('"admin" ya es tu acceso de emergencia -- usa otro nombre de usuario.')
             else:
                 usuarios_store.crear_usuario(
-                    _gc(), st.secrets["SHEET_ID"], usuario_nuevo_id.strip(),
+                    _engine(), usuario_nuevo_id.strip(),
                     nombre_nuevo_usuario.strip() or usuario_nuevo_id.strip(),
                     password_nuevo_usuario, rol_nuevo_usuario,
                 )
@@ -283,7 +269,7 @@ def _settings_dialog():
                 ":material/delete: Eliminar paciente", type="primary",
                 disabled=not (paciente_a_borrar and confirmar_borrado), key="eliminar_paciente_btn",
             ):
-                paciente_admin.eliminar_paciente(_gc(), st.secrets["SHEET_ID"], paciente_a_borrar)
+                paciente_admin.eliminar_paciente(_engine(), paciente_a_borrar)
                 st.cache_data.clear()
                 st.success(f'"{paciente_a_borrar}" fue eliminado.')
                 st.rerun()
@@ -295,7 +281,7 @@ def _settings_dialog():
             "Pacientes con un token de Garmin guardado (sincronización automática activa) -- "
             "elimínalo para forzar que se vuelva a conectar desde cero con un link nuevo."
         )
-        tokens_actuales = token_store.listar_tokens(_gc(), st.secrets["SHEET_ID"])
+        tokens_actuales = token_store.listar_tokens(_engine())
         if tokens_actuales:
             for t in tokens_actuales:
                 col_tok1, col_tok2 = st.columns([4, 1])
@@ -303,7 +289,7 @@ def _settings_dialog():
                     st.write(f"**{t['nombre']}** -- guardado el {t.get('fecha') or 'sin fecha'}")
                 with col_tok2:
                     if st.button(":material/delete: Eliminar", key=f"eliminar_token_{t['nombre']}"):
-                        token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], t["nombre"])
+                        token_store.eliminar_token(_engine(), t["nombre"])
                         st.cache_data.clear()
                         st.rerun()
         else:
@@ -334,7 +320,7 @@ if st.session_state["paciente_actual"] is None:
     asignaciones = {}
     nombres = nombres_todos
     if not _ES_ADMIN:
-        asignaciones = enfoque_store.leer_todas_las_asignaciones(_gc(), st.secrets["SHEET_ID"])
+        asignaciones = enfoque_store.leer_todas_las_asignaciones(_engine())
         nombres = [n for n in nombres_todos if asignaciones.get(n) == usuario_actual["usuario"]]
 
     if nombres:
@@ -410,7 +396,7 @@ if st.session_state["paciente_actual"] is None:
         st.caption(f":material/label: Este paciente quedará bajo **{marca_aura.MARCAS[marca_preview]['nombre']}**.")
 
         if _ES_ADMIN:
-            nutriologos_disponibles = [u for u in usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])]
+            nutriologos_disponibles = [u for u in usuarios_store.listar_usuarios(_engine())]
             opciones_nutriologo_n = ["Sin asignar"] + [f"{u['nombre']} ({u['usuario']})" for u in nutriologos_disponibles]
             etiqueta_nutriologo_n = st.selectbox(
                 "Nutriólogo asignado", opciones_nutriologo_n, key="nutriologo_nuevo_paciente",
@@ -434,9 +420,9 @@ if st.session_state["paciente_actual"] is None:
             if nombre_nuevo in nombres_todos:
                 st.error(f'Ya existe un paciente con el nombre "{nombre_nuevo}".')
             else:
-                crear_paciente_vacio(_worksheet(), nombre_nuevo)
+                resumen_store.crear_paciente_vacio(_engine(), nombre_nuevo)
                 enfoque_store.guardar_perfil(
-                    _gc(), st.secrets["SHEET_ID"], nombre_nuevo,
+                    _engine(), nombre_nuevo,
                     enfoque=enfoque_nuevo, meta_grasa_pct=meta_grasa_nueva or None,
                     dias_plan_mes=dias_plan_nuevo, condicion_metabolica=condicion_nueva,
                     glp1_molecula=glp1_nuevo,
@@ -445,7 +431,7 @@ if st.session_state["paciente_actual"] is None:
                     nutriologo=nutriologo_nuevo,
                 )
                 if notas_nuevo.strip():
-                    notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], nombre_nuevo, notas_nuevo.strip())
+                    notas_store.guardar_nota(_engine(), nombre_nuevo, notas_nuevo.strip())
                 st.cache_data.clear()
                 st.session_state["paciente_actual"] = nombre_nuevo
                 st.rerun()
@@ -459,7 +445,7 @@ if st.session_state["paciente_actual"] is None:
 paciente = st.session_state["paciente_actual"]
 
 if not _ES_ADMIN:
-    _asignacion_paciente = enfoque_store.leer_todas_las_asignaciones(_gc(), st.secrets["SHEET_ID"]).get(paciente)
+    _asignacion_paciente = enfoque_store.leer_todas_las_asignaciones(_engine()).get(paciente)
     if _asignacion_paciente != usuario_actual["usuario"]:
         st.error("No tienes acceso a este paciente.")
         if st.button(":material/arrow_back: Elegir otro nombre"):
@@ -481,13 +467,13 @@ fuente = fila.get("Fuente") or "Garmin"
 
 # Se leen una sola vez aquí (no dentro de _render_composicion_corporal) para
 # poder usar también el historial de InBody en la pestaña Resumen.
-historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-perfil_actual = enfoque_store.leer_perfil(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_inbody = inbody_store.leer_historial(_engine(), paciente)
+historial_antro = antropometria_store.leer_historial(_engine(), paciente)
+historial_notas = notas_store.leer_historial(_engine(), paciente)
+perfil_actual = enfoque_store.leer_perfil(_engine(), paciente)
 enfoque_actual = perfil_actual["enfoque"]
-historial_calorias = calorias_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_calorias = calorias_store.leer_historial(_engine(), paciente)
+historial_estudios = estudios_store.leer_historial(_engine(), paciente)
 
 marca_actual = marca_aura.calcular(perfil_actual)
 
@@ -556,7 +542,7 @@ with col_notas:
             "controlando una condición médica).",
         )
         if enfoque_elegido != enfoque_actual and st.button("Guardar enfoque", key=f"guardar_enfoque_{paciente}"):
-            enfoque_store.guardar_enfoque(_gc(), st.secrets["SHEET_ID"], paciente, enfoque_elegido)
+            enfoque_store.guardar_enfoque(_engine(), paciente, enfoque_elegido)
             st.cache_data.clear()
             st.success("Enfoque guardado.")
             st.rerun()
@@ -573,7 +559,7 @@ with col_notas:
                 "Guardar meta", key=f"guardar_meta_{paciente}",
             ):
                 enfoque_store.guardar_perfil(
-                    _gc(), st.secrets["SHEET_ID"], paciente, meta_grasa_pct=meta_grasa_elegida or None,
+                    _engine(), paciente, meta_grasa_pct=meta_grasa_elegida or None,
                 )
                 st.cache_data.clear()
                 st.success("Meta guardada.")
@@ -596,14 +582,14 @@ with col_notas:
                 "Guardar plan", key=f"guardar_dias_plan_{paciente}",
             ):
                 enfoque_store.guardar_perfil(
-                    _gc(), st.secrets["SHEET_ID"], paciente, dias_plan_mes=dias_plan_elegidos,
+                    _engine(), paciente, dias_plan_mes=dias_plan_elegidos,
                 )
                 st.cache_data.clear()
                 st.success("Días de plan guardados.")
                 st.rerun()
 
         if _ES_ADMIN:
-            nutriologos_lista = usuarios_store.listar_usuarios(_gc(), st.secrets["SHEET_ID"])
+            nutriologos_lista = usuarios_store.listar_usuarios(_engine())
             opciones_nutriologo_e = ["Sin asignar"] + [f"{u['nombre']} ({u['usuario']})" for u in nutriologos_lista]
             usuarios_ids = [None] + [u["usuario"] for u in nutriologos_lista]
             nutriologo_actual = perfil_actual["nutriologo"]
@@ -617,7 +603,7 @@ with col_notas:
                 "Guardar nutriólogo asignado", key=f"guardar_nutriologo_{paciente}",
             ):
                 enfoque_store.guardar_perfil(
-                    _gc(), st.secrets["SHEET_ID"], paciente, nutriologo=nutriologo_elegido,
+                    _engine(), paciente, nutriologo=nutriologo_elegido,
                 )
                 st.cache_data.clear()
                 st.success("Nutriólogo asignado guardado.")
@@ -666,7 +652,7 @@ with col_notas:
         )
         if hubo_cambio_glp1 and st.button("Guardar condición/GLP-1", key=f"guardar_glp1_{paciente}"):
             enfoque_store.guardar_perfil(
-                _gc(), st.secrets["SHEET_ID"], paciente,
+                _engine(), paciente,
                 condicion_metabolica=condicion_elegida, glp1_molecula=glp1_elegido,
                 glp1_dosis=glp1_dosis_elegida if mostrar_detalle_glp1 else "",
                 glp1_fecha_inicio=glp1_fecha_elegida if mostrar_detalle_glp1 else "",
@@ -686,7 +672,7 @@ with col_notas:
             "entrenar. Su platillo favorito del plan fue la lasaña de calabaza.\"",
         )
         if st.button("Agregar nota", key=f"agregar_nota_{paciente}", disabled=not nota_nueva.strip()):
-            notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], paciente, nota_nueva)
+            notas_store.guardar_nota(_engine(), paciente, nota_nueva)
             st.cache_data.clear()
             st.success("Nota guardada.")
             st.rerun()
@@ -702,7 +688,7 @@ with col_wearable:
 
         if fuente == "Garmin":
             st.divider()
-            token_actual = token_store.leer_token(_gc(), st.secrets["SHEET_ID"], paciente)
+            token_actual = token_store.leer_token(_engine(), paciente)
             if token_actual:
                 st.caption(f":material/check_circle: Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
                 col_forzar, col_quitar = st.columns(2)
@@ -712,7 +698,7 @@ with col_wearable:
                             try:
                                 client = garmin_session.client_from_token(token_actual["token"])
                                 runtime_data = gm.build_runtime_data(client)
-                                write_snapshot_to_worksheet(_worksheet(), paciente, runtime_data, fuente="Garmin")
+                                resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Garmin")
                                 st.cache_data.clear()
                                 st.success("Listo -- se actualizó con lo más reciente de Garmin.")
                                 st.rerun()
@@ -732,7 +718,7 @@ with col_wearable:
                                     )
                 with col_quitar:
                     if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
-                        token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], paciente)
+                        token_store.eliminar_token(_engine(), paciente)
                         st.cache_data.clear()
                         st.success("Listo, se quitó -- vuelve a depender de que abra su programa.")
                         st.rerun()
@@ -748,12 +734,12 @@ with col_wearable:
                     st.warning(
                         "Falta configurar el Secret CONECTAR_GARMIN_URL -- pega ahí la URL pública que te "
                         "da Streamlit Cloud al publicar conectar_garmin_web.py como una app aparte (mismos "
-                        "Secrets GOOGLE_CREDENTIALS_JSON/SHEET_ID, sin APP_PASSWORD).",
+                        "Secret DATABASE_URL, sin APP_PASSWORD).",
                         icon=":material/warning:",
                     )
                 else:
                     if st.button(":material/link: Generar link de conexión", key=f"generar_link_{paciente}"):
-                        clave = token_store.generar_clave_conexion(_gc(), st.secrets["SHEET_ID"], paciente)
+                        clave = token_store.generar_clave_conexion(_engine(), paciente)
                         st.session_state[f"link_conexion_{paciente}"] = (
                             f"{conectar_url.rstrip('/')}/?{urlencode({'p': paciente, 'k': clave})}"
                         )
@@ -780,7 +766,7 @@ with col_wearable:
                         placeholder="Pega aquí el bloque completo que imprimió export_token.py...",
                     )
                     if st.button("Guardar token", key=f"guardar_token_{paciente}", disabled=not token_pegado.strip()):
-                        token_store.guardar_token(_gc(), st.secrets["SHEET_ID"], paciente, token_pegado)
+                        token_store.guardar_token(_engine(), paciente, token_pegado)
                         st.cache_data.clear()
                         st.success("Token guardado -- desde la próxima sincronización diaria ya no depende de que abra nada.")
                         st.rerun()
@@ -798,7 +784,7 @@ with col_wearable:
                         zip_path = Path(tmp) / "export.zip"
                         zip_path.write_bytes(archivo_apple.getvalue())
                         runtime_data = apple_health.build_runtime_data(str(zip_path))
-                    write_snapshot_to_worksheet(_worksheet(), paciente, runtime_data, fuente="Apple Health")
+                    resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Apple Health")
                     st.cache_data.clear()
                     st.success("Listo -- se guardó el dashboard de este paciente.")
                     st.rerun()
@@ -825,7 +811,7 @@ def _render_calorias_comidas():
         st.write("")
         st.write("")
         if st.button("Guardar", key=f"guardar_calorias_{paciente}", disabled=not calorias_valor):
-            calorias_store.guardar_calorias(_gc(), st.secrets["SHEET_ID"], paciente, fecha_calorias, calorias_valor)
+            calorias_store.guardar_calorias(_engine(), paciente, fecha_calorias, calorias_valor)
             st.cache_data.clear()
             st.success("Calorías guardadas.")
             st.rerun()
@@ -849,7 +835,7 @@ def _render_glucosa_libre():
         )
         return
 
-    vinculo_actual = libre_store.leer_vinculo(_gc(), st.secrets["SHEET_ID"], paciente)
+    vinculo_actual = libre_store.leer_vinculo(_engine(), paciente)
     try:
         libre_pacientes = libre_metrics.listar_pacientes(_libre_client())
     except Exception as e:
@@ -875,7 +861,7 @@ def _render_glucosa_libre():
     if not vinculo_actual or str(vinculo_actual["id"]) != str(libre_elegido["id"]):
         if st.button("Vincular", key=f"libre_vincular_{paciente}"):
             libre_store.guardar_vinculo(
-                _gc(), st.secrets["SHEET_ID"], paciente, libre_elegido["id"], libre_elegido["nombre"],
+                _engine(), paciente, libre_elegido["id"], libre_elegido["nombre"],
             )
             st.cache_data.clear()
             st.success("Vinculado.")
@@ -968,7 +954,7 @@ def _render_estudios_clinicos():
                     "laboratorio": laboratorio_estudio,
                     "resultados": df_editado.to_dict("records"),
                 }
-                estudios_store.guardar_estudio(_gc(), st.secrets["SHEET_ID"], paciente, estudio_final)
+                estudios_store.guardar_estudio(_engine(), paciente, estudio_final)
                 st.session_state.pop(f"estudio_draft_{paciente}", None)
                 st.cache_data.clear()
                 st.success("Estudio guardado -- se agregó al historial de este paciente.")
@@ -1245,7 +1231,7 @@ def _render_composicion_corporal(data: dict | None):
                         "agua_extra_l": agua_extra or None, "imc": imc or None,
                         "pgc_pct": draft.get("pgc_pct"), "bmr_kcal": bmr or None,
                     }
-                    inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                    inbody_store.guardar_registro(_engine(), paciente, campos_final)
                     st.session_state.pop(f"inbody_draft_{paciente}", None)
                     st.cache_data.clear()
                     st.success("Guardado -- se agregó al historial de este paciente.")
@@ -1317,7 +1303,7 @@ def _render_composicion_corporal(data: dict | None):
                         **{k: (v or None) for k, v in pliegues_valores.items()},
                         **{k: (v or None) for k, v in circ_valores.items()},
                     }
-                    antropometria_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                    antropometria_store.guardar_registro(_engine(), paciente, campos_final)
                     st.session_state.pop(f"antro_draft_{paciente}", None)
                     st.cache_data.clear()
                     st.success("Guardado -- se agregó al historial de este paciente.")
