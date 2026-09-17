@@ -67,6 +67,23 @@ def _a_float(s: str | None) -> float | None:
         return None
 
 
+def _recuperar_decimal_perdido(valor: float | None, rango: tuple[float, float]) -> float | None:
+    """El OCR a veces pierde por completo el punto decimal en una fila
+    ("19.6L" se lee "196L", "12.0L" se lee "120L") -- si el valor queda
+    fuera de su rango humano posible pero SÍ cae adentro al dividirlo
+    entre 10, es casi seguro que fue justo eso lo que pasó (y no un
+    número real disparatado) -- se corrige en vez de dejarlo en None.
+    Pasó de verdad con Agua Intracelular/Extracelular en varios reportes
+    reales probados."""
+    if valor is None:
+        return None
+    minimo, maximo = rango
+    if minimo <= valor <= maximo:
+        return valor
+    candidato = round(valor / 10, 1)
+    return candidato if minimo <= candidato <= maximo else valor
+
+
 def _elige(nums: list[str], primero: bool, preferir_decimal: bool) -> str:
     """Si preferir_decimal=True y hay al menos un número con punto/coma
     entre los candidatos, se ignoran los que no lo tienen -- útil quando
@@ -260,11 +277,13 @@ def parse_inbody_text(texto: str) -> dict:
         _a_float(agua_intra_m.group(1)) if agua_intra_m
         else _valor_de_fila(lineas, r"Agua\s*Intracelular|Intracellular\s*Water", primero=True)
     )
+    agua_intra = _recuperar_decimal_perdido(agua_intra, _RANGOS_PLAUSIBLES["agua_intra_l"])
     # Agua Extracelular es justo la fila donde más se pierde el punto
     # decimal en el OCR ("19.0L" leído como "190L") -- en vez de confiar en
     # leerla directo, se calcula: Agua Corporal Total = Intracelular +
     # Extracelular siempre (no es una fila más, es una identidad), y
-    # agua_total/agua_intra ya se leen de forma confiable arriba.
+    # agua_total/agua_intra ya se leen de forma confiable arriba (con el
+    # decimal ya recuperado si se perdió).
     if agua_total is not None and agua_intra is not None and agua_total > agua_intra:
         agua_extra = round(agua_total - agua_intra, 2)
     else:
@@ -275,6 +294,7 @@ def parse_inbody_text(texto: str) -> dict:
             _a_float(agua_extra_m.group(1)) if agua_extra_m
             else _valor_de_fila(lineas, r"Agua\s*Extracelular|Extracellular\s*Water", primero=True)
         )
+        agua_extra = _recuperar_decimal_perdido(agua_extra, _RANGOS_PLAUSIBLES["agua_extra_l"])
     imc = _valor_de_fila(lineas, r"^(IMC|BMI)\b")
 
     # Tasa Metabólica Basal (BMR) -- NOTA: sin poder probarlo contra un
