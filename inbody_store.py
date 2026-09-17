@@ -1,16 +1,10 @@
 """Guarda y lee el historial de resultados de InBody de cada paciente, en
-una pestaña separada ("InBody") dentro de la misma hoja de Google que ya
-usa push_resumen.py -- así el nutriólogo lleva el historial de composición
-corporal de cada paciente en el mismo lugar, sin mezclarlo con el resumen
-de Garmin/Apple Health de esa hoja."""
+la tabla "inbody" de Postgres -- así el nutriólogo lleva el historial de
+composición corporal de cada paciente en el mismo lugar, sin mezclarlo
+con el resumen de Garmin/Apple Health (tabla "resumen")."""
 
-import gspread
 import pandas as pd
-import streamlit as st
-
-import sheet_cache
-
-HOJA_NOMBRE = "InBody"
+import sqlalchemy
 
 ENCABEZADOS = [
     "Nombre", "Fecha", "Modelo", "Altura_cm", "Edad", "Sexo",
@@ -19,68 +13,52 @@ ENCABEZADOS = [
 ]
 
 
-def _worksheet(gc: gspread.Client, sheet_id: str):
-    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS))
-
-
-def guardar_registro(gc: gspread.Client, sheet_id: str, nombre: str, campos: dict) -> None:
+def guardar_registro(engine: sqlalchemy.engine.Engine, nombre: str, campos: dict) -> None:
     """Agrega una fila nueva al historial -- cada resultado de InBody es
     una medición puntual (como un peso en una báscula), no algo que se
     "actualice"; por eso siempre se agrega, nunca se sobreescribe."""
-    ws = _worksheet(gc, sheet_id)
-    fila = [
-        nombre,
-        campos.get("fecha") or "",
-        campos.get("modelo") or "",
-        campos.get("altura_cm"),
-        campos.get("edad"),
-        campos.get("sexo") or "",
-        campos.get("peso_kg"),
-        campos.get("masa_grasa_kg"),
-        campos.get("mme_kg"),
-        campos.get("grasa_visceral"),
-        campos.get("agua_total_l"),
-        campos.get("agua_intra_l"),
-        campos.get("agua_extra_l"),
-        campos.get("imc"),
-        campos.get("pgc_pct"),
-        campos.get("bmr_kcal"),
-    ]
-    ws.append_row(fila)
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("""
+                INSERT INTO inbody (
+                    nombre, fecha, modelo, altura_cm, edad, sexo, peso_kg, masa_grasa_kg,
+                    mme_kg, grasa_visceral, agua_total_l, agua_intra_l, agua_extra_l, imc, pgc_pct, bmr_kcal
+                ) VALUES (
+                    :nombre, :fecha, :modelo, :altura_cm, :edad, :sexo, :peso_kg, :masa_grasa_kg,
+                    :mme_kg, :grasa_visceral, :agua_total_l, :agua_intra_l, :agua_extra_l, :imc, :pgc_pct, :bmr_kcal
+                )
+            """),
+            {
+                "nombre": nombre,
+                "fecha": campos.get("fecha") or "",
+                "modelo": campos.get("modelo") or "",
+                "altura_cm": campos.get("altura_cm"),
+                "edad": campos.get("edad"),
+                "sexo": campos.get("sexo") or "",
+                "peso_kg": campos.get("peso_kg"),
+                "masa_grasa_kg": campos.get("masa_grasa_kg"),
+                "mme_kg": campos.get("mme_kg"),
+                "grasa_visceral": campos.get("grasa_visceral"),
+                "agua_total_l": campos.get("agua_total_l"),
+                "agua_intra_l": campos.get("agua_intra_l"),
+                "agua_extra_l": campos.get("agua_extra_l"),
+                "imc": campos.get("imc"),
+                "pgc_pct": campos.get("pgc_pct"),
+                "bmr_kcal": campos.get("bmr_kcal"),
+            },
+        )
 
 
-_COLUMNAS_NUMERICAS = [
-    "Altura_cm", "Edad", "Peso_kg", "MasaGrasa_kg", "MME_kg", "GrasaVisceral",
-    "AguaTotal_L", "AguaIntra_L", "AguaExtra_L", "IMC", "PGC_pct", "BMR_kcal",
-]
-
-
-@st.cache_data(ttl=30, show_spinner=False)
-def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
-    """El historial de InBody de TODOS los pacientes -- cacheado aparte
-    del paciente para que ver varios pacientes seguidos no dispare una
-    lectura nueva a Sheets por cada uno (ver notas_store._leer_todo)."""
-    ws = _worksheet(_gc, sheet_id)
-    # UNFORMATTED_VALUE: trae el número tal cual (13.3), no el texto ya
-    # formateado según el idioma de la hoja de cálculo ("13,3" en una hoja
-    # en español) -- si no, gspread puede leer mal esa coma y convertirla
-    # en un número de mil (13,3 -> 133).
-    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
-    df = pd.DataFrame(registros)
-    # Una celda vacía (un campo que se guardó como None -- p. ej. porque el
-    # OCR de InBody no pudo leerlo con confianza) llega de gspread como
-    # texto vacío "", no como NaN -- sin este paso, pd.notna("") da True y
-    # cualquier intento de formatear ese "número" truena. to_numeric con
-    # errors="coerce" convierte tanto "" como cualquier basura no numérica
-    # a NaN de verdad.
-    for col in _COLUMNAS_NUMERICAS:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
-
-
-def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> pd.DataFrame:
-    df = _leer_todo(_gc, sheet_id)
-    if df.empty or "Nombre" not in df.columns:
-        return pd.DataFrame(columns=ENCABEZADOS)
-    return df[df["Nombre"] == nombre].reset_index(drop=True)
+def leer_historial(engine: sqlalchemy.engine.Engine, nombre: str) -> pd.DataFrame:
+    return pd.read_sql(
+        sqlalchemy.text("""
+            SELECT
+                fecha AS "Fecha", modelo AS "Modelo", altura_cm AS "Altura_cm", edad AS "Edad",
+                sexo AS "Sexo", peso_kg AS "Peso_kg", masa_grasa_kg AS "MasaGrasa_kg",
+                mme_kg AS "MME_kg", grasa_visceral AS "GrasaVisceral", agua_total_l AS "AguaTotal_L",
+                agua_intra_l AS "AguaIntra_L", agua_extra_l AS "AguaExtra_L", imc AS "IMC",
+                pgc_pct AS "PGC_pct", bmr_kcal AS "BMR_kcal"
+            FROM inbody WHERE nombre = :nombre ORDER BY id
+        """),
+        engine, params={"nombre": nombre},
+    )

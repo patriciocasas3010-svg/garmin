@@ -1,70 +1,49 @@
 """Guarda y lee el historial de estudios clínicos (sangre, orina, etc.)
-de cada paciente, en una pestaña separada ("Estudios") de la misma hoja
-de Google -- igual que inbody_store.py.
+de cada paciente, en la tabla "estudios" de Postgres -- igual que
+inbody_store.py.
 
 A diferencia de InBody/Antropometría (que siempre traen los mismos
 campos fijos), un estudio de laboratorio puede traer cualquier cantidad
 de pruebas distintas según lo que se haya pedido -- por eso aquí cada
-estudio completo se guarda como un solo bloque de JSON en una celda (el
-mismo patrón que usa push_resumen.py para el snapshot del wearable),
-en vez de una columna fija por prueba."""
+estudio completo se guarda en una columna JSONB, en vez de una columna
+fija por prueba. JSONB (a diferencia del texto JSON que se guardaba en
+la celda de Google Sheets) ya llega parseado como lista/dict de Python
+al leerlo -- ya no hace falta json.dumps/json.loads a mano."""
 
 import json
 from datetime import date
 
-import gspread
-import pandas as pd
-import streamlit as st
-
-import sheet_cache
-
-HOJA_NOMBRE = "Estudios"
-
-ENCABEZADOS = ["Nombre", "Fecha", "Laboratorio", "Resultados"]
+import sqlalchemy
 
 
-def _worksheet(gc: gspread.Client, sheet_id: str):
-    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS))
-
-
-def guardar_estudio(gc: gspread.Client, sheet_id: str, nombre: str, estudio: dict) -> None:
+def guardar_estudio(engine: sqlalchemy.engine.Engine, nombre: str, estudio: dict) -> None:
     """Agrega un estudio nuevo -- cada estudio es una medición puntual
     (como el InBody), nunca se sobreescribe, siempre se agrega."""
-    ws = _worksheet(gc, sheet_id)
     fecha = estudio.get("fecha") or date.today().strftime("%d.%m.%Y")
     laboratorio = estudio.get("laboratorio") or ""
     resultados_json = json.dumps(estudio.get("resultados") or [], ensure_ascii=False)
-    ws.append_row([nombre, fecha, laboratorio, resultados_json])
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("""
+                INSERT INTO estudios (nombre, fecha, laboratorio, resultados)
+                VALUES (:nombre, :fecha, :laboratorio, CAST(:resultados AS JSONB))
+            """),
+            {"nombre": nombre, "fecha": fecha, "laboratorio": laboratorio, "resultados": resultados_json},
+        )
 
 
-@st.cache_data(ttl=30, show_spinner=False)
-def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
-    """Los estudios de TODOS los pacientes -- cacheado aparte del
-    paciente para que ver varios pacientes seguidos no dispare una
-    lectura nueva a Sheets por cada uno (ver notas_store._leer_todo)."""
-    ws = _worksheet(_gc, sheet_id)
-    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
-    return pd.DataFrame(registros)
-
-
-def leer_historial(_gc: gspread.Client, sheet_id: str, nombre: str) -> list[dict]:
+def leer_historial(engine: sqlalchemy.engine.Engine, nombre: str) -> list[dict]:
     """Regresa una lista de estudios (cada uno {"fecha", "laboratorio",
     "resultados": [...]}) de este paciente, en el orden en que se
     guardaron (el más reciente al final)."""
-    df = _leer_todo(_gc, sheet_id)
-    if df.empty or "Nombre" not in df.columns:
-        return []
-    df = df[df["Nombre"] == nombre]
-
-    estudios = []
-    for _, fila in df.iterrows():
-        try:
-            resultados = json.loads(fila.get("Resultados") or "[]")
-        except (json.JSONDecodeError, TypeError):
-            resultados = []
-        estudios.append({
-            "fecha": fila.get("Fecha"),
-            "laboratorio": fila.get("Laboratorio"),
-            "resultados": resultados,
-        })
-    return estudios
+    with engine.connect() as conn:
+        filas = conn.execute(
+            sqlalchemy.text(
+                "SELECT fecha, laboratorio, resultados FROM estudios WHERE nombre = :nombre ORDER BY id"
+            ),
+            {"nombre": nombre},
+        ).mappings().all()
+    return [
+        {"fecha": fila["fecha"], "laboratorio": fila["laboratorio"], "resultados": fila["resultados"] or []}
+        for fila in filas
+    ]

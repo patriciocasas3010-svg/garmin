@@ -1,8 +1,8 @@
 """Guarda y lee el "perfil" de enfoque de cada paciente -- el enfoque
 principal (pérdida de peso, rendimiento deportivo, etc.), la meta de
 % de grasa corporal, los días de entrenamiento planeados por mes, y
-la condición metabólica/GLP-1 -- en una pestaña separada ("Enfoque")
-dentro de la misma hoja de Google, igual que notas_store.py/inbody_store.py.
+la condición metabólica/GLP-1 -- en la tabla "enfoque" de Postgres,
+igual que notas_store.py/inbody_store.py.
 
 La condición metabólica y el GLP-1 son el prerrequisito de la sección
 "GLP-1 y Diabéticos" del dashboard (ver glp1_diabetes.py): sin saber
@@ -11,24 +11,13 @@ si mostrarle esa sección a la nutrióloga.
 
 A diferencia de las notas (que son un historial que se va acumulando),
 aquí solo importa el valor ACTUAL de cada campo -- por eso se
-sobreescribe en vez de agregarse, para no ir juntando enfoques viejos
-que ya no aplican."""
+sobreescribe en vez de agregarse. El upsert (INSERT ... ON CONFLICT)
+actualiza solo los campos que llegaron con un valor (COALESCE contra el
+valor ya guardado) en una sola instrucción atómica -- reemplaza al
+"leer toda la hoja, buscar la fila, armar la fila completa a mano,
+escribir" que hacía esto mismo en gspread."""
 
-from datetime import date
-
-import gspread
-import pandas as pd
-import streamlit as st
-
-import sheet_cache
-
-HOJA_NOMBRE = "Enfoque"
-
-ENCABEZADOS = [
-    "Nombre", "Enfoque", "MetaGrasaPct", "DiasPlanMes",
-    "CondicionMetabolica", "GLP1Molecula", "GLP1Dosis", "GLP1FechaInicio",
-    "Nutriologo", "Fecha",
-]
+import sqlalchemy
 
 OPCIONES = [
     "Pérdida de peso",
@@ -65,12 +54,8 @@ OPCIONES_DIAS_PLAN = [
 ]
 
 
-def _worksheet(gc: gspread.Client, sheet_id: str):
-    return sheet_cache.abrir_worksheet(gc, sheet_id, HOJA_NOMBRE, tuple(ENCABEZADOS))
-
-
 def guardar_perfil(
-    gc: gspread.Client, sheet_id: str, nombre: str,
+    engine: sqlalchemy.engine.Engine, nombre: str,
     enfoque: str | None = None, meta_grasa_pct: float | None = None, dias_plan_mes: int | None = None,
     condicion_metabolica: str | None = None, glp1_molecula: str | None = None,
     glp1_dosis: str | None = None, glp1_fecha_inicio: str | None = None,
@@ -82,41 +67,41 @@ def guardar_perfil(
     habían capturado antes (y viceversa). `nutriologo` es el "usuario"
     (ver usuarios_store.py) del nutriólogo dueño de este paciente --
     "" (string vacío, a propósito, no None) lo deja sin asignar."""
-    ws = _worksheet(gc, sheet_id)
-    registros = ws.get_all_values()
-    if not registros:
-        ws.append_row(ENCABEZADOS)
-        registros = [ENCABEZADOS]
-    ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
+    from datetime import date
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("""
+                INSERT INTO enfoque (
+                    nombre, enfoque, meta_grasa_pct, dias_plan_mes, condicion_metabolica,
+                    glp1_molecula, glp1_dosis, glp1_fecha_inicio, nutriologo, fecha
+                ) VALUES (
+                    :nombre, :enfoque, :meta_grasa_pct, :dias_plan_mes, :condicion_metabolica,
+                    :glp1_molecula, :glp1_dosis, :glp1_fecha_inicio, :nutriologo, :fecha
+                )
+                ON CONFLICT (nombre) DO UPDATE SET
+                    enfoque = COALESCE(EXCLUDED.enfoque, enfoque.enfoque),
+                    meta_grasa_pct = COALESCE(EXCLUDED.meta_grasa_pct, enfoque.meta_grasa_pct),
+                    dias_plan_mes = COALESCE(EXCLUDED.dias_plan_mes, enfoque.dias_plan_mes),
+                    condicion_metabolica = COALESCE(EXCLUDED.condicion_metabolica, enfoque.condicion_metabolica),
+                    glp1_molecula = COALESCE(EXCLUDED.glp1_molecula, enfoque.glp1_molecula),
+                    glp1_dosis = COALESCE(EXCLUDED.glp1_dosis, enfoque.glp1_dosis),
+                    glp1_fecha_inicio = COALESCE(EXCLUDED.glp1_fecha_inicio, enfoque.glp1_fecha_inicio),
+                    nutriologo = COALESCE(EXCLUDED.nutriologo, enfoque.nutriologo),
+                    fecha = EXCLUDED.fecha
+            """),
+            {
+                "nombre": nombre, "enfoque": enfoque, "meta_grasa_pct": meta_grasa_pct,
+                "dias_plan_mes": dias_plan_mes, "condicion_metabolica": condicion_metabolica,
+                "glp1_molecula": glp1_molecula, "glp1_dosis": glp1_dosis, "glp1_fecha_inicio": glp1_fecha_inicio,
+                "nutriologo": nutriologo, "fecha": date.today().strftime("%d.%m.%Y"),
+            },
+        )
 
-    for i, row in enumerate(registros[1:], start=2):
-        if row and row[0] == nombre:
-            actual = row + [""] * (len(ENCABEZADOS) - len(row))
-            nueva_fila = [
-                nombre,
-                enfoque if enfoque is not None else actual[1],
-                meta_grasa_pct if meta_grasa_pct is not None else actual[2],
-                dias_plan_mes if dias_plan_mes is not None else actual[3],
-                condicion_metabolica if condicion_metabolica is not None else actual[4],
-                glp1_molecula if glp1_molecula is not None else actual[5],
-                glp1_dosis if glp1_dosis is not None else actual[6],
-                glp1_fecha_inicio if glp1_fecha_inicio is not None else actual[7],
-                nutriologo if nutriologo is not None else actual[8],
-                date.today().strftime("%d.%m.%Y"),
-            ]
-            ws.update(f"A{i}:{ultima_col}{i}", [nueva_fila])
-            return
-    ws.append_row([
-        nombre, enfoque or "", meta_grasa_pct or "", dias_plan_mes or "",
-        condicion_metabolica or "", glp1_molecula or "", glp1_dosis or "", glp1_fecha_inicio or "",
-        nutriologo or "", date.today().strftime("%d.%m.%Y"),
-    ])
 
-
-def guardar_enfoque(gc: gspread.Client, sheet_id: str, nombre: str, enfoque: str) -> None:
+def guardar_enfoque(engine: sqlalchemy.engine.Engine, nombre: str, enfoque: str) -> None:
     """Compatibilidad con el flujo existente -- guarda solo el enfoque,
     sin tocar la meta de grasa ni los días de plan ya guardados."""
-    guardar_perfil(gc, sheet_id, nombre, enfoque=enfoque)
+    guardar_perfil(engine, nombre, enfoque=enfoque)
 
 
 def _a_float(v):
@@ -131,17 +116,7 @@ def _a_int(v):
     return int(f) if f is not None else None
 
 
-@st.cache_data(ttl=30, show_spinner=False)
-def _leer_todo(_gc: gspread.Client, sheet_id: str) -> pd.DataFrame:
-    """El perfil de TODOS los pacientes -- cacheado aparte del paciente
-    para que ver varios pacientes seguidos no dispare una lectura nueva
-    a Sheets por cada uno (ver notas_store._leer_todo)."""
-    ws = _worksheet(_gc, sheet_id)
-    registros = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
-    return pd.DataFrame(registros)
-
-
-def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
+def leer_perfil(engine: sqlalchemy.engine.Engine, nombre: str) -> dict:
     """{"enfoque", "meta_grasa_pct", "dias_plan_mes", "condicion_metabolica",
     "glp1_molecula", "glp1_dosis", "glp1_fecha_inicio", "nutriologo"}."""
     vacio = {
@@ -149,36 +124,35 @@ def leer_perfil(_gc: gspread.Client, sheet_id: str, nombre: str) -> dict:
         "condicion_metabolica": "Ninguna", "glp1_molecula": "No usa",
         "glp1_dosis": None, "glp1_fecha_inicio": None, "nutriologo": None,
     }
-    df = _leer_todo(_gc, sheet_id)
-    if df.empty or "Nombre" not in df.columns:
+    with engine.connect() as conn:
+        fila = conn.execute(
+            sqlalchemy.text("SELECT * FROM enfoque WHERE nombre = :nombre"), {"nombre": nombre},
+        ).mappings().first()
+    if fila is None:
         return vacio
-    fila = df[df["Nombre"] == nombre]
-    if fila.empty:
-        return vacio
-    ultima = fila.iloc[-1]
     return {
-        "enfoque": ultima.get("Enfoque") or None,
-        "meta_grasa_pct": _a_float(ultima.get("MetaGrasaPct")),
-        "dias_plan_mes": _a_int(ultima.get("DiasPlanMes")),
-        "condicion_metabolica": ultima.get("CondicionMetabolica") or "Ninguna",
-        "glp1_molecula": ultima.get("GLP1Molecula") or "No usa",
-        "glp1_dosis": ultima.get("GLP1Dosis") or None,
-        "glp1_fecha_inicio": ultima.get("GLP1FechaInicio") or None,
-        "nutriologo": ultima.get("Nutriologo") or None,
+        "enfoque": fila["enfoque"] or None,
+        "meta_grasa_pct": _a_float(fila["meta_grasa_pct"]),
+        "dias_plan_mes": _a_int(fila["dias_plan_mes"]),
+        "condicion_metabolica": fila["condicion_metabolica"] or "Ninguna",
+        "glp1_molecula": fila["glp1_molecula"] or "No usa",
+        "glp1_dosis": fila["glp1_dosis"] or None,
+        "glp1_fecha_inicio": fila["glp1_fecha_inicio"] or None,
+        "nutriologo": fila["nutriologo"] or None,
     }
 
 
-@st.cache_data(ttl=30, show_spinner=False)
-def leer_todas_las_asignaciones(_gc: gspread.Client, sheet_id: str) -> dict:
+def leer_todas_las_asignaciones(engine: sqlalchemy.engine.Engine) -> dict:
     """{nombre_paciente: usuario_nutriologo_asignado} de TODOS los
     pacientes de un jalón -- para filtrar el listado de la pantalla de
     selección según quién esté logueado, sin tener que leer_perfil()
     paciente por paciente. "" (sin asignar) para quien no tenga."""
-    ws = _worksheet(_gc, sheet_id)
-    return {row[0]: (row[8] if len(row) > 8 else "") for row in ws.get_all_values()[1:] if row and row[0]}
+    with engine.connect() as conn:
+        filas = conn.execute(sqlalchemy.text("SELECT nombre, nutriologo FROM enfoque")).all()
+    return {nombre: (nutriologo or "") for nombre, nutriologo in filas}
 
 
-def leer_enfoque(_gc: gspread.Client, sheet_id: str, nombre: str) -> str | None:
+def leer_enfoque(engine: sqlalchemy.engine.Engine, nombre: str) -> str | None:
     """Compatibilidad con el flujo existente (ai_analisis.py, etc.) --
     ver leer_perfil() para los campos nuevos."""
-    return leer_perfil(_gc, sheet_id, nombre)["enfoque"]
+    return leer_perfil(engine, nombre)["enfoque"]

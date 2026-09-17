@@ -1,93 +1,36 @@
 """Guarda el token de sesión de Garmin de cada paciente (el mismo que
-genera export_token.py en su propia computadora, pensado originalmente
-solo para publicar TU dashboard personal en Streamlit Cloud) en una
-pestaña separada ("TokensGarmin") de la misma hoja de Google -- para que
-sync_diario.py pueda jalar el dashboard de cada paciente todos los días
-sin que abra nada, igual que enfoque_store.py/notas_store.py guardan sus
-propios datos en su propia pestaña.
+genera export_token.py en su propia computadora) en la tabla
+"tokens_garmin" de Postgres -- para que sync_diario.py pueda jalar el
+dashboard de cada paciente todos los días sin que abra nada.
 
 Ese token equivale a estar conectado a la cuenta de Garmin del paciente
 (no es su contraseña, pero da acceso a los mismos datos) -- trátalo con
 el mismo cuidado: nunca lo escribas en el chat de Claude ni lo subas a
-ningún lado fuera de esta hoja de Google.
+ningún lado fuera de la base de datos.
 
-A diferencia del resto de los *_store.py, este módulo lo usan tanto
-dashboard_pacientes.py (dentro de Streamlit) como sync_diario.py (un
-script normal, sin Streamlit corriendo) -- por eso aquí no se usa
-sheet_cache.abrir_hoja ni @st.cache_data (que requieren Streamlit
-corriendo), solo gspread directo, con un caché propio hecho a mano
-(_worksheet_cacheado) que hace algo parecido a sheet_cache.py pero sin
-depender de streamlit -- y va un paso más allá: gspread.Spreadsheet.
-worksheet() NO cachea nada por su cuenta, así que cachear solo el
-Spreadsheet (como hace sheet_cache.py) no evita la llamada a la API en
-cada .worksheet()/row_values(1) -- aquí se cachea directo el Worksheet
-ya resuelto. Sin este caché, cada función de este archivo terminaba
-abriendo la hoja y revisando la pestaña desde cero, y Streamlit vuelve
-a ejecutar el script completo en cada clic (cada "rerun") -- bastaba
-abrir un par de paneles de Cruces clínicos seguido para pasarse del
-límite de lecturas por minuto de Google y tronar con "Quota exceeded"
-(pasó en producción, con Patricio, el 17 de septiembre).
-
-Ese primer fix solo evitaba las llamadas para RESOLVER la pestaña
-(fetch_sheet_metadata) -- pero leer_token()/listar_tokens() seguían
-haciendo su propio ws.get_all_values() sin caché alguno, uno distinto
-por cada paciente que se consultara. Eso significa que ver varios
-pacientes seguidos en Cruces Clínicos (que llama a leer_token() para
-cada uno) seguía sumando una llamada de LECTURA de datos por paciente,
-y con suficientes pacientes vistos rápido se vuelve a pasar la cuota
-igual (volvió a pasar, con ~10 pacientes seguidos, el mismo día).
-_leer_filas_cacheadas() cachea las filas completas (de TODOS los
-pacientes) por poco tiempo (20s, más corto que los 300s del Worksheet,
-porque los datos sí cambian seguido) -- así ver N pacientes en menos de
-20s cuesta 1 sola lectura a Sheets, no N. Cualquier escritura
-(guardar_token, eliminar_token, generar/invalidar_clave_conexion)
-invalida ese caché de inmediato para no arriesgarse a mostrar un dato
-desactualizado tras guardar algo.
+A diferencia del resto de los *_store.py durante la época de Google
+Sheets, este módulo necesitaba su propio caché manual porque también lo
+usa sync_diario.py (un script normal, sin Streamlit corriendo) y porque
+gspread no cachea nada por su cuenta -- con Postgres eso ya no aplica:
+no hay cuota de lecturas por minuto, así que aquí ya no hace falta
+ningún caché, solo el pool de conexiones normal de SQLAlchemy (ver
+db.py). Sigue funcionando igual dentro y fuera de Streamlit porque
+ambos le pasan un Engine ya armado (db.engine() o db.crear_engine()).
 
 También lo usa conectar_garmin_web.py -- la página web donde el propio
 paciente pega su correo/contraseña de Garmin una sola vez (sin Python ni
 terminal en su computadora) para activar la sincronización automática.
 Ese flujo usa una "ClaveConexion" de un solo uso (generar_clave_conexion/
 validar_clave_conexion/invalidar_clave_conexion) para que el link que le
-mandas por WhatsApp no sirva para nada una vez usado, y para no tener que
-exponer ahí la contraseña de tu hoja de Google ni un login compartido."""
+mandas por WhatsApp no sirva para nada una vez usado."""
 
 import re
-import secrets
-import time
 from datetime import date
 
-import gspread
-
-HOJA_NOMBRE = "TokensGarmin"
-
-ENCABEZADOS = ["Nombre", "Token", "FechaGuardado", "ClaveConexion"]
+import secrets
+import sqlalchemy
 
 _DELIMITADOR_RE = re.compile(r"-{10,}\s*\n(.*?)\n\s*-{10,}", re.S)
-
-_CACHE_TTL_SEGUNDOS = 300
-_cache_ws: dict[str, tuple[float, "gspread.Worksheet"]] = {}
-
-_CACHE_LECTURA_TTL_SEGUNDOS = 20
-_cache_filas: dict[str, tuple[float, list[list[str]]]] = {}
-
-
-def _worksheet_cacheado(gc: gspread.Client, sheet_id: str, resolver) -> "gspread.Worksheet":
-    """El Worksheet ya resuelto (spreadsheet abierto + pestaña encontrada
-    + encabezado revisado) reutilizado por 5 minutos en vez de repetir
-    esas 2-3 llamadas a la API cada vez -- ver la nota sobre "Quota
-    exceeded" arriba del módulo. `gspread.Spreadsheet.worksheet()` NO
-    cachea nada por su cuenta (siempre vuelve a pedir los metadatos a
-    Google), así que el caché tiene que vivir aquí. No usa
-    @st.cache_resource (sheet_cache.py) porque este archivo también
-    corre fuera de Streamlit, en sync_diario.py."""
-    ahora = time.time()
-    entrada = _cache_ws.get(sheet_id)
-    if entrada is not None and ahora - entrada[0] < _CACHE_TTL_SEGUNDOS:
-        return entrada[1]
-    ws = resolver()
-    _cache_ws[sheet_id] = (ahora, ws)
-    return ws
 
 
 def _extraer_token(texto_pegado: str) -> str:
@@ -100,132 +43,88 @@ def _extraer_token(texto_pegado: str) -> str:
     return (m.group(1) if m else texto_pegado).strip()
 
 
-def _resolver_worksheet(gc: gspread.Client, sheet_id: str):
-    sh = gc.open_by_key(sheet_id)
-    try:
-        ws = sh.worksheet(HOJA_NOMBRE)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title=HOJA_NOMBRE, rows=200, cols=len(ENCABEZADOS))
-        ws.append_row(ENCABEZADOS)
-        return ws
-    if ws.row_values(1) != ENCABEZADOS:
-        ultima_col = chr(ord("A") + len(ENCABEZADOS) - 1)
-        ws.update(f"A1:{ultima_col}1", [ENCABEZADOS])
-    return ws
-
-
-def _worksheet(gc: gspread.Client, sheet_id: str):
-    return _worksheet_cacheado(gc, sheet_id, lambda: _resolver_worksheet(gc, sheet_id))
-
-
-def _leer_filas_cacheadas(gc: gspread.Client, sheet_id: str) -> list[list[str]]:
-    """Todas las filas de la pestaña (de TODOS los pacientes), cacheadas
-    por poco tiempo -- ver la nota sobre "Quota exceeded" arriba del
-    módulo. Cualquier escritura invalida este caché de inmediato con
-    _invalidar_cache_lectura()."""
-    ahora = time.time()
-    entrada = _cache_filas.get(sheet_id)
-    if entrada is not None and ahora - entrada[0] < _CACHE_LECTURA_TTL_SEGUNDOS:
-        return entrada[1]
-    ws = _worksheet(gc, sheet_id)
-    filas = ws.get_all_values()
-    _cache_filas[sheet_id] = (ahora, filas)
-    return filas
-
-
-def _invalidar_cache_lectura(sheet_id: str) -> None:
-    _cache_filas.pop(sheet_id, None)
-
-
-def guardar_token(gc: gspread.Client, sheet_id: str, nombre: str, texto_pegado: str) -> None:
-    ws = _worksheet(gc, sheet_id)
+def guardar_token(engine: sqlalchemy.engine.Engine, nombre: str, texto_pegado: str) -> None:
     token = _extraer_token(texto_pegado)
-    fila = [nombre, token, date.today().strftime("%d.%m.%Y")]
-    registros = _leer_filas_cacheadas(gc, sheet_id)
-    for i, row in enumerate(registros):
-        if row and row[0] == nombre:
-            ws.update(f"A{i + 1}:C{i + 1}", [fila])
-            _invalidar_cache_lectura(sheet_id)
-            return
-    ws.append_row(fila)
-    _invalidar_cache_lectura(sheet_id)
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("""
+                INSERT INTO tokens_garmin (nombre, token, fecha_guardado)
+                VALUES (:nombre, :token, :fecha)
+                ON CONFLICT (nombre) DO UPDATE SET token = EXCLUDED.token, fecha_guardado = EXCLUDED.fecha_guardado
+            """),
+            {"nombre": nombre, "token": token, "fecha": date.today().strftime("%d.%m.%Y")},
+        )
 
 
-def leer_token(gc: gspread.Client, sheet_id: str, nombre: str) -> dict | None:
+def leer_token(engine: sqlalchemy.engine.Engine, nombre: str) -> dict | None:
     """{"token": str, "fecha": str} de este paciente, o None si nunca
     guardó uno (o lo quitó con eliminar_token)."""
-    for row in _leer_filas_cacheadas(gc, sheet_id)[1:]:
-        if row and row[0] == nombre and len(row) > 1 and row[1]:
-            return {"token": row[1], "fecha": row[2] if len(row) > 2 else None}
-    return None
+    with engine.connect() as conn:
+        fila = conn.execute(
+            sqlalchemy.text("SELECT token, fecha_guardado FROM tokens_garmin WHERE nombre = :nombre"),
+            {"nombre": nombre},
+        ).first()
+    if fila is None or not fila[0]:
+        return None
+    return {"token": fila[0], "fecha": fila[1]}
 
 
-def listar_tokens(gc: gspread.Client, sheet_id: str) -> list[dict]:
+def listar_tokens(engine: sqlalchemy.engine.Engine) -> list[dict]:
     """Todos los pacientes con token guardado -- lo usa sync_diario.py
     para saber a quién sincronizar cada día."""
-    pacientes = []
-    for row in _leer_filas_cacheadas(gc, sheet_id)[1:]:
-        if row and row[0] and len(row) > 1 and row[1]:
-            pacientes.append({"nombre": row[0], "token": row[1], "fecha": row[2] if len(row) > 2 else None})
-    return pacientes
+    with engine.connect() as conn:
+        filas = conn.execute(
+            sqlalchemy.text("SELECT nombre, token, fecha_guardado FROM tokens_garmin WHERE token IS NOT NULL AND token != ''"),
+        ).all()
+    return [{"nombre": n, "token": t, "fecha": f} for n, t, f in filas]
 
 
-def eliminar_token(gc: gspread.Client, sheet_id: str, nombre: str) -> None:
+def eliminar_token(engine: sqlalchemy.engine.Engine, nombre: str) -> None:
     """Apaga la sincronización automática de este paciente (no borra su
     fila, solo el token -- así no se corre el riesgo de que sync_diario.py
     intente usar un token viejo/inválido para alguien que ya no quiere
     esto activado)."""
-    ws = _worksheet(gc, sheet_id)
-    registros = _leer_filas_cacheadas(gc, sheet_id)
-    for i, row in enumerate(registros):
-        if row and row[0] == nombre:
-            ws.update(f"A{i + 1}:C{i + 1}", [[nombre, "", ""]])
-            _invalidar_cache_lectura(sheet_id)
-            return
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("UPDATE tokens_garmin SET token = '', fecha_guardado = '' WHERE nombre = :nombre"),
+            {"nombre": nombre},
+        )
 
 
-def generar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str) -> str:
+def generar_clave_conexion(engine: sqlalchemy.engine.Engine, nombre: str) -> str:
     """Genera una clave nueva de un solo uso para que este paciente se
-    conecte solo desde conectar_garmin_web.py -- reemplaza al flujo de
-    export_token.py (Python/terminal en su computadora) con un link que
-    abre en cualquier navegador. Sobrescribe cualquier clave anterior sin
-    usar (así un link viejo que mandaste por error deja de funcionar)."""
-    ws = _worksheet(gc, sheet_id)
+    conecte solo desde conectar_garmin_web.py -- sobrescribe cualquier
+    clave anterior sin usar (así un link viejo que mandaste por error
+    deja de funcionar)."""
     clave = secrets.token_urlsafe(16)
-    registros = _leer_filas_cacheadas(gc, sheet_id)
-    for i, row in enumerate(registros):
-        if row and row[0] == nombre:
-            actual = row + [""] * (len(ENCABEZADOS) - len(row))
-            actual[3] = clave
-            ws.update(f"A{i + 1}:D{i + 1}", [actual])
-            _invalidar_cache_lectura(sheet_id)
-            return clave
-    ws.append_row([nombre, "", "", clave])
-    _invalidar_cache_lectura(sheet_id)
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("""
+                INSERT INTO tokens_garmin (nombre, clave_conexion) VALUES (:nombre, :clave)
+                ON CONFLICT (nombre) DO UPDATE SET clave_conexion = EXCLUDED.clave_conexion
+            """),
+            {"nombre": nombre, "clave": clave},
+        )
     return clave
 
 
-def validar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str, clave: str) -> bool:
+def validar_clave_conexion(engine: sqlalchemy.engine.Engine, nombre: str, clave: str) -> bool:
     """True solo si `clave` es exactamente la que se generó para `nombre`
     y todavía no se usó (ver invalidar_clave_conexion)."""
     if not clave:
         return False
-    for row in _leer_filas_cacheadas(gc, sheet_id)[1:]:
-        if row and row[0] == nombre and len(row) > 3 and row[3] and row[3] == clave:
-            return True
-    return False
+    with engine.connect() as conn:
+        fila = conn.execute(
+            sqlalchemy.text("SELECT clave_conexion FROM tokens_garmin WHERE nombre = :nombre"), {"nombre": nombre},
+        ).first()
+    return fila is not None and fila[0] == clave
 
 
-def invalidar_clave_conexion(gc: gspread.Client, sheet_id: str, nombre: str) -> None:
+def invalidar_clave_conexion(engine: sqlalchemy.engine.Engine, nombre: str) -> None:
     """Se llama justo después de guardar el token con éxito -- para que
     el link de conexión no se pueda volver a usar (por ejemplo si se
     quedó visible en un chat de WhatsApp)."""
-    ws = _worksheet(gc, sheet_id)
-    registros = _leer_filas_cacheadas(gc, sheet_id)
-    for i, row in enumerate(registros):
-        if row and row[0] == nombre:
-            actual = row + [""] * (len(ENCABEZADOS) - len(row))
-            actual[3] = ""
-            ws.update(f"A{i + 1}:D{i + 1}", [actual])
-            _invalidar_cache_lectura(sheet_id)
-            return
+    with engine.begin() as conn:
+        conn.execute(
+            sqlalchemy.text("UPDATE tokens_garmin SET clave_conexion = '' WHERE nombre = :nombre"), {"nombre": nombre},
+        )
