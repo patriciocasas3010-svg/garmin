@@ -289,6 +289,34 @@ def parse_inbody_text(texto: str) -> dict:
         texto, re.IGNORECASE,
     )
     bmr_kcal = _a_float(bmr_m.group(1)) if bmr_m else None
+    if bmr_kcal is None:
+        # Algunos reportes (sobre todo exportados en inglés desde el
+        # portal web, no impresos del aparato) salen con esta fila tan
+        # mal leída que ni "kcal" queda legible ("Memocaa 1302 di" en
+        # vez de "Basal Metabolic Rate 1302 kcal") -- el patrón de
+        # arriba no tiene nada de qué agarrarse ahí. Como red de
+        # respaldo, se usa que esta fila SIEMPRE viene justo después de
+        # "Masa de Músculo Esquelético"/"Skeletal Muscle Mass" (que sí
+        # se lee bien, ver mme_m arriba) y se filtra por un rango de
+        # kcal humanamente posible para no agarrar los números de la
+        # regla de la gráfica que suele venir mezclada en la misma línea.
+        for i, linea in enumerate(lineas):
+            # \s*kg al final es lo que distingue la fila real (la de la
+            # sección "Parámetros de Investigación"/"Research
+            # Parameters", que sí trae el valor limpio) de la barra de
+            # la gráfica más arriba en el reporte, que también contiene
+            # las palabras "Skeletal Muscle Mass" pero sin ningún "kg".
+            if re.search(
+                r"(?:Masa\s*de\s*M[uú]sculo\s*Esquel[eé]tico|Skeletal\s*Muscle\s*Mass)\D*?\d[.,\d]*\s*kg",
+                linea, re.IGNORECASE,
+            ):
+                if i + 1 < len(lineas):
+                    for n in _numeros(lineas[i + 1]):
+                        valor = _a_float(n)
+                        if valor is not None and _RANGOS_PLAUSIBLES["bmr_kcal"][0] <= valor <= _RANGOS_PLAUSIBLES["bmr_kcal"][1]:
+                            bmr_kcal = valor
+                            break
+                break
     # primero=True: cuando la línea del valor viene contaminada con la
     # sección de al lado (Grasa Segmental), el valor de PGC queda primero,
     # no al final.
