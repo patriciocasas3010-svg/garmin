@@ -17,7 +17,7 @@ archivo que subas al repositorio de GitHub).
 from garmin_session import get_client
 
 client = get_client()
-token = client.garth.dumps()
+token = client.client.dumps()
 
 print(
     "\nCopia TODO el bloque de abajo (entre las líneas de guiones) y pégalo en:\n"

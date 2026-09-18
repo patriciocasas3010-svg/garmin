@@ -13,8 +13,6 @@ generada con export_token.py) en vez del archivo local.
 import os
 import sys
 
-from garth.exc import GarthHTTPError
-
 from garminconnect import Garmin, GarminConnectAuthenticationError
 
 # Por defecto, la sesión se guarda DENTRO de esta misma carpeta (no en el
@@ -63,7 +61,7 @@ def get_client() -> Garmin:
         client = Garmin()
         client.login(tokenstore)
         return client
-    except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError):
+    except (FileNotFoundError, GarminConnectAuthenticationError):
         sys.exit(
             "No hay una sesión de Garmin guardada o ya expiró.\n"
             "Corre primero: python3 connect_garmin.py"

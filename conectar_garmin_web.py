@@ -20,7 +20,7 @@ Seguridad: el correo/contraseña del paciente NUNCA se guardan ni se
 escriben en ningún lado (ni en la base de datos, ni en logs) -- viven
 solo en memoria durante esta sesión de Streamlit, el tiempo que tarda en
 completarse el login contra los servidores de Garmin. Lo único que se
-guarda es el token de sesión resultante (client.garth.dumps())."""
+guarda es el token de sesión resultante (client.client.dumps())."""
 
 import streamlit as st
 from garminconnect import (
@@ -43,7 +43,7 @@ def _engine():
 
 
 def _guardar_y_confirmar(client: Garmin, paciente: str) -> None:
-    token = client.garth.dumps()
+    token = client.client.dumps()
     token_store.guardar_token(_engine(), paciente, token)
     token_store.invalidar_clave_conexion(_engine(), paciente)
     st.session_state["mfa_pendiente"] = None

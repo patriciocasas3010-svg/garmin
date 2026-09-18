@@ -18,8 +18,6 @@ import getpass
 import os
 import sys
 
-from garth.exc import GarthHTTPError
-
 from garminconnect import (
     Garmin,
     GarminConnectAuthenticationError,
@@ -48,7 +46,7 @@ def connect():
         client.login(TOKENSTORE)
         print("Sesión previa encontrada y válida, no hace falta volver a iniciar sesión.\n")
         return client
-    except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError):
+    except (FileNotFoundError, GarminConnectAuthenticationError):
         print("No hay una sesión guardada válida, se pedirá iniciar sesión.\n")
 
     # 2. Pedir credenciales por terminal (nunca por chat) e iniciar sesión.
@@ -64,7 +62,7 @@ def connect():
         sys.exit(f"No se pudo conectar con los servidores de Garmin: {err}")
 
     os.makedirs(os.path.dirname(TOKENSTORE) or ".", exist_ok=True)
-    client.garth.dump(TOKENSTORE)
+    client.client.dump(TOKENSTORE)
     print(f"\nInicio de sesión correcto. Tokens guardados en '{TOKENSTORE}' para futuras ejecuciones.\n")
     return client
 

@@ -273,7 +273,6 @@ Guía paso a paso completa: [`PUBLICAR_DASHBOARD_PACIENTES.md`](PUBLICAR_DASHBOA
 - **No aparece mi reloj**: asegúrate de haberlo sincronizado antes con la
   app Garmin Connect Mobile o Garmin Express.
 - **`ERROR: Could not find a version that satisfies the requirement
-  garminconnect...`** o **`ModuleNotFoundError: No module named 'garth'`**:
-  tu Python es demasiado viejo (probablemente el 3.9 de Apple). Instala
-  Python 3.10+ como se indica arriba, borra `.venv` (`rm -rf .venv`), y
-  repite los pasos de instalación con el Python nuevo.
+  garminconnect...`**: tu Python es demasiado viejo (probablemente el 3.9
+  de Apple). Instala Python 3.10+ como se indica arriba, borra `.venv`
+  (`rm -rf .venv`), y repite los pasos de instalación con el Python nuevo.
