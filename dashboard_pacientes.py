@@ -608,11 +608,7 @@ _TEXTO_ACTUALIZACION = {
     "súbelo aquí abajo.",
     "Oura": "Su anillo sincroniza solo con la app de Oura en su teléfono (por Bluetooth, cuando estén "
     "cerca) -- solo tiene que volver a abrir `iniciar_paciente_oura.command`/`.bat`.",
-}.get(
-    fuente,
-    "Solo tiene que volver a abrir `iniciar_paciente.command`/`.bat` en su computadora -- su sesión de "
-    "Garmin ya está guardada.",
-)
+}.get(fuente, "")
 
 col_notas, col_wearable = st.columns(2)
 
@@ -769,7 +765,8 @@ with col_notas:
 
 with col_wearable:
     with st.expander(":material/watch: Wearable"):
-        st.caption(_TEXTO_ACTUALIZACION)
+        if fuente != "Garmin":
+            st.caption(_TEXTO_ACTUALIZACION)
 
         if fuente == "Garmin":
             st.divider()
