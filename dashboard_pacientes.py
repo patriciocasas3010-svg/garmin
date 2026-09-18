@@ -202,6 +202,57 @@ except Exception as e:
     st.error(f"No se pudo leer la hoja de Google. Revisa la configuración de Secrets. Detalle: {e}")
     st.stop()
 
+
+def _cargar_datos_completos_paciente(nombre: str) -> dict:
+    """Junta todo lo que usa _render_analisis_ia/armar_exportacion_completa
+    para un paciente, pero fuera del contexto de su propia página -- lo usa
+    el resumen conjunto de varios pacientes a la vez (parejas/familias que
+    el nutriólogo quiere planear juntos), donde no hay un solo `paciente`
+    de la página como en el resto de este archivo."""
+    engine = _engine()
+    fila = resumen_store.leer_uno(engine, nombre)
+    datos_json = (fila or {}).get("Datos")
+    data = None
+    if datos_json:
+        try:
+            data = gm.snapshot_from_json(json.loads(datos_json))
+        except Exception:
+            data = None
+    historial_inbody_p = inbody_store.leer_historial(engine, nombre)
+    historial_estudios_p = estudios_store.leer_historial(engine, nombre)
+    perfil_p = enfoque_store.leer_perfil(engine, nombre)
+    return {
+        "data": data,
+        "inbody": historial_inbody_p,
+        "antro": antropometria_store.leer_historial(engine, nombre),
+        "notas": notas_store.leer_historial(engine, nombre),
+        "estudios": historial_estudios_p,
+        "calorias": calorias_store.leer_historial(engine, nombre),
+        "enfoque": perfil_p["enfoque"],
+        "paneles_cruces": cruces_clinicos.calcular_paneles(historial_estudios_p, historial_inbody_p, data or {}),
+    }
+
+
+def _armar_resumen_conjunto(nombres_conjunto: list[str]) -> str:
+    """El historial completo de varios pacientes (mismo formato que
+    "Descargar TODO el historial completo" de cada uno) en un solo .txt,
+    para que el nutriólogo pueda armar un plan pensando en los dos a la
+    vez -- ej. una pareja que vive junta y cocina/come lo mismo."""
+    bloques = [
+        f"RESUMEN CONJUNTO -- {' + '.join(nombres_conjunto)}",
+        f"Generado el {date.today().strftime('%d.%m.%Y')} para planear en conjunto (pareja/familia/hogar) -- "
+        "cada quien con su propio historial completo, uno después del otro.",
+    ]
+    for nombre_c in nombres_conjunto:
+        info = _cargar_datos_completos_paciente(nombre_c)
+        bloques.append(f"\n\n{'=' * 70}\n{nombre_c.upper()}\n{'=' * 70}\n")
+        bloques.append(ai_analisis.armar_exportacion_completa(
+            nombre_c, info["data"], info["inbody"], info["antro"], info["notas"],
+            info["enfoque"], info["estudios"], info["paneles_cruces"], info["calorias"],
+        ))
+    return "\n".join(bloques)
+
+
 # ---------------------------------------------------------------------------
 # Pantalla de selección (landing)
 # ---------------------------------------------------------------------------
@@ -437,6 +488,38 @@ if st.session_state["paciente_actual"] is None:
                 st.cache_data.clear()
                 st.session_state["paciente_actual"] = nombre_nuevo
                 st.rerun()
+
+    if len(nombres) >= 2:
+        with st.expander(":material/group: Descargar resumen conjunto (ej. pareja/familia)"):
+            st.caption(
+                "Junta el historial completo de varios pacientes en un solo archivo descargable -- para "
+                "cuando el plan hay que pensarlo para los dos a la vez (ej. una pareja que cocina y come "
+                "junta)."
+            )
+            seleccionados_conjunto = st.multiselect(
+                "Pacientes a incluir", nombres, key="pacientes_resumen_conjunto",
+                placeholder="Selecciona 2 o más...",
+            )
+            if st.button(
+                ":material/inventory_2: Generar resumen conjunto",
+                key="generar_resumen_conjunto", disabled=len(seleccionados_conjunto) < 2,
+            ):
+                with st.spinner("Juntando el historial de cada paciente..."):
+                    st.session_state["resumen_conjunto_txt"] = _armar_resumen_conjunto(seleccionados_conjunto)
+                    st.session_state["resumen_conjunto_nombres"] = list(seleccionados_conjunto)
+
+            resumen_conjunto_txt = st.session_state.get("resumen_conjunto_txt")
+            if resumen_conjunto_txt:
+                nombres_archivo = "_".join(
+                    n.strip().replace(" ", "_") for n in st.session_state.get("resumen_conjunto_nombres", [])
+                )
+                st.download_button(
+                    ":material/download: Descargar resumen conjunto (.txt)",
+                    data=resumen_conjunto_txt,
+                    file_name=f"resumen_conjunto_{nombres_archivo}.txt",
+                    mime="text/plain",
+                    key="descargar_resumen_conjunto",
+                )
 
     st.stop()
 
