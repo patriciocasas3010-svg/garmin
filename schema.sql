@@ -149,3 +149,13 @@ CREATE TABLE IF NOT EXISTS tokens_garmin (
     fecha_guardado TEXT,
     clave_conexion TEXT
 );
+
+-- Sin clave_conexion (a diferencia de tokens_garmin): Oura no tiene login
+-- con correo/contraseña que automatizar por un link de un solo uso -- el
+-- paciente genera su propio Personal Access Token en
+-- cloud.ouraring.com/personal-access-tokens y lo pega directo.
+CREATE TABLE IF NOT EXISTS tokens_oura (
+    nombre TEXT PRIMARY KEY,
+    token TEXT,
+    fecha_guardado TEXT
+);

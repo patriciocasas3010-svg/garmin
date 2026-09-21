@@ -47,6 +47,8 @@ import inbody_store
 import libre_metrics
 import libre_store
 import notas_store
+import oura_metrics as om
+import oura_store
 import paciente_admin
 import resumen_store
 import token_store
@@ -607,7 +609,9 @@ _TEXTO_ACTUALIZACION = {
     "perfil → \"Exportar todos los datos de salud\") y reemplaza el `.zip` en su carpeta, o mándatelo y "
     "súbelo aquí abajo.",
     "Oura": "Su anillo sincroniza solo con la app de Oura en su teléfono (por Bluetooth, cuando estén "
-    "cerca) -- solo tiene que volver a abrir `iniciar_paciente_oura.command`/`.bat`.",
+    "cerca). Para actualizar el dashboard: si tiene el token guardado aquí abajo, dale \"Forzar "
+    "actualización ahora\"; si lo conectaste con el método viejo, que vuelva a abrir "
+    "`iniciar_paciente_oura.command`/`.bat`.",
 }.get(fuente, "")
 
 col_notas, col_wearable = st.columns(2)
@@ -763,13 +767,20 @@ with col_notas:
                 for _, fila_nota in historial_notas.iloc[::-1].iterrows():
                     st.markdown(f"**{fila_nota.get('Fecha')}** — {fila_nota.get('Nota')}")
 
+_TIPOS_WEARABLE = ["Garmin", "Apple Health", "Oura"]
+
 with col_wearable:
     with st.expander(":material/watch: Wearable"):
-        if fuente != "Garmin":
-            st.caption(_TEXTO_ACTUALIZACION)
+        indice_tipo_wearable = _TIPOS_WEARABLE.index(fuente) if fuente in _TIPOS_WEARABLE else 0
+        tipo_wearable = st.selectbox(
+            "Tipo de wearable", _TIPOS_WEARABLE, index=indice_tipo_wearable, key=f"tipo_wearable_{paciente}",
+        )
 
-        if fuente == "Garmin":
-            st.divider()
+        if tipo_wearable == fuente:
+            st.caption(_TEXTO_ACTUALIZACION)
+        st.divider()
+
+        if tipo_wearable == "Garmin":
             token_actual = token_store.leer_token(_engine(), paciente)
             if token_actual:
                 st.caption(f":material/check_circle: Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
@@ -853,25 +864,76 @@ with col_wearable:
                         st.success("Token guardado -- desde la próxima sincronización diaria ya no depende de que abra nada.")
                         st.rerun()
 
-        st.divider()
-        st.caption("¿Te mandó el .zip de Apple Health (por WhatsApp, correo)? Súbelo aquí directo:")
-        archivo_apple = st.file_uploader(
-            "Archivo .zip de la exportación de Salud", type=["zip"], key=f"apple_upload_{paciente}",
-            label_visibility="collapsed",
-        )
-        if archivo_apple is not None and st.button("Procesar y guardar", key=f"apple_procesar_{paciente}"):
-            with st.spinner("Leyendo el archivo de Salud y calculando el dashboard (puede tardar un poco)..."):
-                try:
-                    with tempfile.TemporaryDirectory() as tmp:
-                        zip_path = Path(tmp) / "export.zip"
-                        zip_path.write_bytes(archivo_apple.getvalue())
-                        runtime_data = apple_health.build_runtime_data(str(zip_path))
-                    resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Apple Health")
-                    st.cache_data.clear()
-                    st.success("Listo -- se guardó el dashboard de este paciente.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"No se pudo leer o guardar el archivo: {e}")
+        if tipo_wearable == "Apple Health":
+            st.caption("¿Te mandó el .zip de Apple Health (por WhatsApp, correo)? Súbelo aquí directo:")
+            archivo_apple = st.file_uploader(
+                "Archivo .zip de la exportación de Salud", type=["zip"], key=f"apple_upload_{paciente}",
+                label_visibility="collapsed",
+            )
+            if archivo_apple is not None and st.button("Procesar y guardar", key=f"apple_procesar_{paciente}"):
+                with st.spinner("Leyendo el archivo de Salud y calculando el dashboard (puede tardar un poco)..."):
+                    try:
+                        with tempfile.TemporaryDirectory() as tmp:
+                            zip_path = Path(tmp) / "export.zip"
+                            zip_path.write_bytes(archivo_apple.getvalue())
+                            runtime_data = apple_health.build_runtime_data(str(zip_path))
+                        resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Apple Health")
+                        st.cache_data.clear()
+                        st.success("Listo -- se guardó el dashboard de este paciente.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"No se pudo leer o guardar el archivo: {e}")
+
+        if tipo_wearable == "Oura":
+            token_actual_oura = oura_store.leer_token(_engine(), paciente)
+            if token_actual_oura:
+                st.caption(f":material/check_circle: Token guardado el {token_actual_oura['fecha']}.")
+                col_forzar_oura, col_quitar_oura = st.columns(2)
+                with col_forzar_oura:
+                    if st.button(":material/refresh: Forzar actualización ahora", key=f"forzar_sync_oura_{paciente}"):
+                        with st.spinner("Conectando con Oura y actualizando (puede tardar un poco)..."):
+                            try:
+                                runtime_data = om.build_runtime_data(token_actual_oura["token"])
+                                resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Oura")
+                                st.cache_data.clear()
+                                st.success("Listo -- se actualizó con lo más reciente de Oura.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(
+                                    f"No se pudo actualizar: {e}. Si el token ya no sirve, quítalo (a la "
+                                    "derecha) y pide que generen uno nuevo en cloud.ouraring.com/personal-access-tokens."
+                                )
+                with col_quitar_oura:
+                    if st.button("Quitar token", key=f"quitar_token_oura_{paciente}"):
+                        oura_store.eliminar_token(_engine(), paciente)
+                        st.cache_data.clear()
+                        st.success("Listo, se quitó.")
+                        st.rerun()
+            else:
+                st.caption(
+                    "Pídele que genere su Personal Access Token en "
+                    "**cloud.ouraring.com/personal-access-tokens** (\"Create New Personal Access Token\") "
+                    "y que te lo mande -- nunca es su contraseña, es una llave de un solo propósito. Pégalo aquí:"
+                )
+                token_pegado_oura = st.text_input(
+                    "Personal Access Token de Oura", key=f"token_pegado_oura_{paciente}",
+                    label_visibility="collapsed", type="password",
+                    placeholder="Pega aquí el token...",
+                )
+                if st.button(
+                    "Guardar y sincronizar", key=f"guardar_token_oura_{paciente}",
+                    disabled=not token_pegado_oura.strip(),
+                ):
+                    with st.spinner("Conectando con Oura por primera vez (puede tardar un poco)..."):
+                        try:
+                            runtime_data = om.build_runtime_data(token_pegado_oura.strip())
+                            oura_store.guardar_token(_engine(), paciente, token_pegado_oura)
+                            resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Oura")
+                            st.cache_data.clear()
+                            st.success("Listo -- se guardó el token y el dashboard de este paciente.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ese token no funcionó: {e}. Revisa que se haya copiado completo, sin espacios.")
 
 def _render_calorias_comidas():
     """Captura manual de calorías comidas por día -- vive dentro de la
