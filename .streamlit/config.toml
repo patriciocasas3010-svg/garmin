@@ -8,3 +8,10 @@ font = "sans serif"
 
 [browser]
 gatherUsageStats = false
+
+[client]
+# Quita el menú de "Fork"/GitHub/Deploy que Streamlit Cloud pone por
+# default en la esquina -- no se ve profesional en una página que abre
+# un paciente directo (conectar_garmin_web.py), y tampoco aporta nada
+# en el dashboard de la nutrióloga.
+toolbarMode = "minimal"
