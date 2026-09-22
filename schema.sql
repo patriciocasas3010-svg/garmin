@@ -150,12 +150,18 @@ CREATE TABLE IF NOT EXISTS tokens_garmin (
     clave_conexion TEXT
 );
 
--- Sin clave_conexion (a diferencia de tokens_garmin): Oura no tiene login
--- con correo/contraseña que automatizar por un link de un solo uso -- el
--- paciente genera su propio Personal Access Token en
--- cloud.ouraring.com/personal-access-tokens y lo pega directo.
+-- Oura dejó de permitir Personal Access Tokens en diciembre de 2025 --
+-- ahora es OAuth2 (ver oura_store.py/conectar_oura_web.py), con el mismo
+-- mecanismo de clave_conexion de un solo uso que tokens_garmin, que aquí
+-- también sirve como el "state" que Oura regresa intacto al autorizar.
+-- access_token/refresh_token reemplazan al "token" simple de antes
+-- (expira_en permite refrescar solo, sin que el paciente vuelva a
+-- autorizar nada).
 CREATE TABLE IF NOT EXISTS tokens_oura (
     nombre TEXT PRIMARY KEY,
-    token TEXT,
-    fecha_guardado TEXT
+    access_token TEXT,
+    refresh_token TEXT,
+    expira_en TIMESTAMPTZ,
+    fecha_guardado TEXT,
+    clave_conexion TEXT
 );

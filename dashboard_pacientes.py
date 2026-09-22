@@ -609,9 +609,7 @@ _TEXTO_ACTUALIZACION = {
     "perfil → \"Exportar todos los datos de salud\") y reemplaza el `.zip` en su carpeta, o mándatelo y "
     "súbelo aquí abajo.",
     "Oura": "Su anillo sincroniza solo con la app de Oura en su teléfono (por Bluetooth, cuando estén "
-    "cerca). Para actualizar el dashboard: si tiene el token guardado aquí abajo, dale \"Forzar "
-    "actualización ahora\"; si lo conectaste con el método viejo, que vuelva a abrir "
-    "`iniciar_paciente_oura.command`/`.bat`.",
+    "cerca). Para actualizar el dashboard, dale \"Forzar actualización ahora\" aquí abajo.",
 }.get(fuente, "")
 
 col_notas, col_wearable = st.columns(2)
@@ -885,55 +883,74 @@ with col_wearable:
                         st.error(f"No se pudo leer o guardar el archivo: {e}")
 
         if tipo_wearable == "Oura":
-            token_actual_oura = oura_store.leer_token(_engine(), paciente)
-            if token_actual_oura:
-                st.caption(f":material/check_circle: Token guardado el {token_actual_oura['fecha']}.")
+            oura_client_id = st.secrets.get("OURA_CLIENT_ID")
+            oura_client_secret = st.secrets.get("OURA_CLIENT_SECRET")
+            conectar_url_oura = st.secrets.get("CONECTAR_OURA_URL")
+
+            conexion_oura = oura_store.leer_conexion(_engine(), paciente)
+            if conexion_oura:
+                st.caption(f":material/check_circle: Conectado desde el {conexion_oura['fecha']} (se renueva solo).")
                 col_forzar_oura, col_quitar_oura = st.columns(2)
                 with col_forzar_oura:
                     if st.button(":material/refresh: Forzar actualización ahora", key=f"forzar_sync_oura_{paciente}"):
                         with st.spinner("Conectando con Oura y actualizando (puede tardar un poco)..."):
                             try:
-                                runtime_data = om.build_runtime_data(token_actual_oura["token"])
-                                resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Oura")
-                                st.cache_data.clear()
-                                st.success("Listo -- se actualizó con lo más reciente de Oura.")
-                                st.rerun()
+                                access_token = oura_store.token_valido(_engine(), paciente, oura_client_id, oura_client_secret)
+                                if not access_token:
+                                    st.error(
+                                        "La conexión con Oura ya venció -- genera un link nuevo (quita la "
+                                        "conexión de la derecha y vuelve a mandarle un link)."
+                                    )
+                                else:
+                                    runtime_data = om.build_runtime_data(access_token)
+                                    resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Oura")
+                                    st.cache_data.clear()
+                                    st.success("Listo -- se actualizó con lo más reciente de Oura.")
+                                    st.rerun()
                             except Exception as e:
-                                st.error(
-                                    f"No se pudo actualizar: {e}. Si el token ya no sirve, quítalo (a la "
-                                    "derecha) y pide que generen uno nuevo en cloud.ouraring.com/personal-access-tokens."
-                                )
+                                st.error(f"No se pudo actualizar: {e}.")
                 with col_quitar_oura:
-                    if st.button("Quitar token", key=f"quitar_token_oura_{paciente}"):
+                    if st.button("Quitar conexión", key=f"quitar_token_oura_{paciente}"):
                         oura_store.eliminar_token(_engine(), paciente)
                         st.cache_data.clear()
                         st.success("Listo, se quitó.")
                         st.rerun()
             else:
                 st.caption(
-                    "Pídele que genere su Personal Access Token en "
-                    "**cloud.ouraring.com/personal-access-tokens** (\"Create New Personal Access Token\") "
-                    "y que te lo mande -- nunca es su contraseña, es una llave de un solo propósito. Pégalo aquí:"
+                    "¿Que se actualice solo, sin que tenga que hacer nada más? Mándale un link -- lo abre "
+                    "en su celular o computadora, inicia sesión en Oura y autoriza la conexión una sola "
+                    "vez, y ya queda conectado."
                 )
-                token_pegado_oura = st.text_input(
-                    "Personal Access Token de Oura", key=f"token_pegado_oura_{paciente}",
-                    label_visibility="collapsed", type="password",
-                    placeholder="Pega aquí el token...",
-                )
-                if st.button(
-                    "Guardar y sincronizar", key=f"guardar_token_oura_{paciente}",
-                    disabled=not token_pegado_oura.strip(),
-                ):
-                    with st.spinner("Conectando con Oura por primera vez (puede tardar un poco)..."):
-                        try:
-                            runtime_data = om.build_runtime_data(token_pegado_oura.strip())
-                            oura_store.guardar_token(_engine(), paciente, token_pegado_oura)
-                            resumen_store.guardar_snapshot(_engine(), paciente, runtime_data, fuente="Oura")
-                            st.cache_data.clear()
-                            st.success("Listo -- se guardó el token y el dashboard de este paciente.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Ese token no funcionó: {e}. Revisa que se haya copiado completo, sin espacios.")
+                if not conectar_url_oura:
+                    st.warning(
+                        "Falta configurar el Secret CONECTAR_OURA_URL -- pega ahí la URL pública que te da "
+                        "Streamlit Cloud/Render al publicar conectar_oura_web.py como una app aparte (mismo "
+                        "Secret DATABASE_URL, sin APP_PASSWORD, más OURA_CLIENT_ID/OURA_CLIENT_SECRET).",
+                        icon=":material/warning:",
+                    )
+                elif not oura_client_id or not oura_client_secret:
+                    st.warning(
+                        "Falta configurar OURA_CLIENT_ID/OURA_CLIENT_SECRET (los datos de la app registrada "
+                        "en cloud.ouraring.com/oauth/applications).",
+                        icon=":material/warning:",
+                    )
+                else:
+                    if st.button(":material/link: Generar link de conexión", key=f"generar_link_oura_{paciente}"):
+                        clave_oura = oura_store.generar_clave_conexion(_engine(), paciente)
+                        st.session_state[f"link_conexion_oura_{paciente}"] = (
+                            f"{conectar_url_oura.rstrip('/')}/?{urlencode({'p': paciente, 'k': clave_oura})}"
+                        )
+
+                    link_generado_oura = st.session_state.get(f"link_conexion_oura_{paciente}")
+                    if link_generado_oura:
+                        st.text_input(
+                            "Mándale este link (funciona una sola vez)", value=link_generado_oura,
+                            key=f"link_mostrado_oura_{paciente}",
+                        )
+                        st.caption(
+                            "Cópialo y mándaselo por WhatsApp o correo -- en cuanto lo use para autorizar "
+                            "la conexión, el link deja de funcionar solo."
+                        )
 
 def _render_calorias_comidas():
     """Captura manual de calorías comidas por día -- vive dentro de la

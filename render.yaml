@@ -26,6 +26,12 @@ services:
         sync: false
       - key: LIBRE_PASSWORD
         sync: false
+      - key: OURA_CLIENT_ID
+        sync: false
+      - key: OURA_CLIENT_SECRET
+        sync: false
+      - key: CONECTAR_OURA_URL
+        sync: false
 
   - type: web
     name: aura-conectar-garmin
@@ -34,4 +40,19 @@ services:
     plan: free
     envVars:
       - key: DATABASE_URL
+        sync: false
+
+  - type: web
+    name: aura-conectar-oura
+    runtime: docker
+    dockerCommand: streamlit run conectar_oura_web.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: OURA_CLIENT_ID
+        sync: false
+      - key: OURA_CLIENT_SECRET
+        sync: false
+      - key: CONECTAR_OURA_URL
         sync: false

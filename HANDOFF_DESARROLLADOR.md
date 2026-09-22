@@ -177,6 +177,10 @@ LIBRE_PASSWORD = "..."
 CONECTAR_GARMIN_URL = "..."       # URL pública de conectar_garmin_web.py
 GARMIN_TOKEN_B64 = "..."          # solo para dashboard.py (personal, no el central)
 OURA_TOKEN = "..."                # solo para dashboard_oura.py (personal)
+OURA_CLIENT_ID = "..."            # app OAuth2 registrada en cloud.ouraring.com/oauth/applications
+OURA_CLIENT_SECRET = "..."
+CONECTAR_OURA_URL = "..."         # URL pública de conectar_oura_web.py -- debe ser IDÉNTICA
+                                   # al "Redirect URI" registrado en la app de Oura
 ```
 
 `requirements.txt` tiene las versiones mínimas -- correr con
