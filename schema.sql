@@ -157,6 +157,62 @@ CREATE TABLE IF NOT EXISTS tokens_garmin (
 -- access_token/refresh_token reemplazan al "token" simple de antes
 -- (expira_en permite refrescar solo, sin que el paciente vuelva a
 -- autorizar nada).
+-- "Cerebro científico" de AURA -- el objetivo es que las reglas y su
+-- justificación vivan en la base de datos, no solo dentro del código de
+-- cruces_clinicos.py (donde hoy están, correctas pero sin rastro de
+-- "por qué" ni forma de que un nutriólogo las consulte). Esto NO
+-- reemplaza los 10 paneles que ya están probados y en producción -- es
+-- la capa de trazabilidad/evidencia que se les puede ir conectando
+-- encima, sin tocar la lógica que ya funciona antes del lanzamiento.
+
+-- Capa 1: de dónde sale cada regla (guía clínica, estudio, consenso).
+CREATE TABLE IF NOT EXISTS evidencia_clinica (
+    id BIGSERIAL PRIMARY KEY,
+    fuente TEXT NOT NULL,
+    tipo TEXT,
+    poblacion TEXT,
+    nivel_evidencia TEXT,
+    url TEXT,
+    fecha_publicacion DATE,
+    notas TEXT
+);
+
+-- Capa 2: reglas como dato, no como código -- para reglas NUEVAS que se
+-- vayan agregando de aquí en adelante (los 10 paneles actuales de
+-- cruces_clinicos.py se quedan como están; migrarlos aquí es un
+-- proyecto aparte, después del lanzamiento).
+CREATE TABLE IF NOT EXISTS reglas_clinicas (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    marcador TEXT,
+    condicion TEXT,
+    contexto TEXT,
+    interpretacion TEXT,
+    recomendacion TEXT,
+    evidencia_id BIGINT REFERENCES evidencia_clinica(id),
+    estado TEXT DEFAULT 'borrador',
+    version INT DEFAULT 1,
+    fecha_revision DATE
+);
+
+-- Capa 3: trazabilidad -- cada vez que se le muestra al nutriólogo una
+-- recomendación (venga de un panel fijo o de una regla de arriba), se
+-- guarda qué datos la dispararon. Así "¿por qué AURA muestra esto?"
+-- siempre tiene una respuesta consultable, no solo la salida de un LLM.
+CREATE TABLE IF NOT EXISTS recomendaciones_generadas (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    fecha TIMESTAMPTZ DEFAULT now(),
+    panel TEXT,
+    regla_id BIGINT REFERENCES reglas_clinicas(id),
+    datos_usados JSONB,
+    texto TEXT,
+    version_sistema TEXT,
+    revisado_por TEXT,
+    fecha_revision TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS recomendaciones_nombre_idx ON recomendaciones_generadas (nombre);
+
 CREATE TABLE IF NOT EXISTS tokens_oura (
     nombre TEXT PRIMARY KEY,
     access_token TEXT,
