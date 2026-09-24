@@ -213,6 +213,76 @@ CREATE TABLE IF NOT EXISTS recomendaciones_generadas (
 );
 CREATE INDEX IF NOT EXISTS recomendaciones_nombre_idx ON recomendaciones_generadas (nombre);
 
+-- AURA Recipes -- capa de EJECUCIÓN, no la biblioteca de 30,000 recetas
+-- de un competidor: arranca chica (100-300 recetas reales, revisadas por
+-- un nutriólogo antes de "aprobada") y vive conectada al cerebro
+-- científico de arriba, no suelta. Cada receta puede citar por qué se
+-- recomienda (evidencia_id) y quedar ligada a la recomendación exacta
+-- que la sugirió (recomendaciones_generadas), para que "por qué le
+-- dieron esto a este paciente" siempre sea trazable.
+CREATE TABLE IF NOT EXISTS recetas (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    ingredientes JSONB,             -- [{"item":"pechuga de pollo","cantidad":150,"unidad":"g"}, ...]
+    kcal NUMERIC,
+    proteina_g NUMERIC,
+    carbohidratos_g NUMERIC,
+    grasa_g NUMERIC,
+    fibra_g NUMERIC,
+    sodio_mg NUMERIC,
+    tiempo_prep_min NUMERIC,
+    dificultad TEXT,                -- facil / media / dificil
+    costo_aprox TEXT,               -- bajo / medio / alto
+    tipo_comida TEXT,               -- desayuno / comida / cena / snack
+    cocina TEXT,                    -- mexicana / mediterranea / asiatica / ...
+    tags_clinicos TEXT[],           -- {diabetes, renal, hipertension, ...}
+    tags_deportivos TEXT[],         -- {alto_en_proteina, pre_entreno, ...}
+    tags_conductuales TEXT[],       -- {rapido, batch_cooking, bajo_presupuesto, ...}
+    tags_culturales TEXT[],         -- {vegetariano, sin_gluten, halal, ...}
+    sustituciones JSONB,            -- [{"de":"arroz blanco","por":"arroz integral","razon":"..."}]
+    fuente TEXT,
+    version INT DEFAULT 1,
+    evidencia_id BIGINT REFERENCES evidencia_clinica(id),
+    estado TEXT DEFAULT 'borrador', -- nunca sale a un paciente sin que un nutriólogo la revise y la pase a "aprobada"
+    fecha_revision DATE
+);
+CREATE INDEX IF NOT EXISTS recetas_tags_clinicos_idx ON recetas USING GIN (tags_clinicos);
+CREATE INDEX IF NOT EXISTS recetas_tags_culturales_idx ON recetas USING GIN (tags_culturales);
+CREATE INDEX IF NOT EXISTS recetas_tags_conductuales_idx ON recetas USING GIN (tags_conductuales);
+
+-- Qué receta se le asignó a qué paciente y por qué (liga a la
+-- recomendación que la sugirió cuando aplica -- puede ser NULL si el
+-- nutriólogo la agregó a mano, sin pasar por una recomendación de AURA).
+CREATE TABLE IF NOT EXISTS plan_recetas (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    receta_id BIGINT REFERENCES recetas(id),
+    fecha_asignada TIMESTAMPTZ DEFAULT now(),
+    tipo_comida TEXT,
+    recomendacion_id BIGINT REFERENCES recomendaciones_generadas(id),
+    activa BOOLEAN DEFAULT true
+);
+CREATE INDEX IF NOT EXISTS plan_recetas_nombre_idx ON plan_recetas (nombre);
+
+-- El otro lado del loop: lo que el paciente reporta haber comido (foto o
+-- captura manual), cruzado contra lo que el plan le asignó ese tipo de
+-- comida. A propósito se llama "consumo_observado" y no "adherencia" --
+-- si el paciente no registra todo lo que come, no podemos decir que
+-- siguió el plan al pie de la letra, solo que lo que SÍ registró
+-- coincide o no coincide con lo indicado.
+CREATE TABLE IF NOT EXISTS consumo_observado (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    fecha TIMESTAMPTZ DEFAULT now(),
+    plan_receta_id BIGINT REFERENCES plan_recetas(id),
+    foto_url TEXT,
+    descripcion_detectada TEXT,
+    kcal_estimadas NUMERIC,
+    coincide_con_plan BOOLEAN,
+    notas TEXT
+);
+CREATE INDEX IF NOT EXISTS consumo_observado_nombre_idx ON consumo_observado (nombre);
+
 CREATE TABLE IF NOT EXISTS tokens_oura (
     nombre TEXT PRIMARY KEY,
     access_token TEXT,

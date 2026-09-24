@@ -55,6 +55,50 @@ def _fmt_dia_es(d: pd.Timestamp) -> str:
 # Helpers de gráficas
 # ---------------------------------------------------------------------------
 
+def narrativa_delta(serie: pd.Series, unidad: str, decimales: int = 1, ventana: int = 7) -> str | None:
+    """Frase corta de contexto para una métrica diaria (sueño, FC en
+    reposo, calorías...) -- en vez de solo mostrar el número, compara el
+    promedio de los últimos `ventana` días con el de los `ventana` días
+    anteriores a esos, y dice cuánto cambió y si se concentra en los
+    días más recientes.
+
+    Devuelve None (no se muestra nada, la pantalla se queda solo con el
+    número de siempre) cuando no hay suficientes datos para comparar sin
+    inventar una tendencia, o cuando el cambio es tan chico que reportarlo
+    sería ruido día a día, no una señal real."""
+    reciente = serie.tail(ventana).dropna()
+    anterior = serie.iloc[-(ventana * 2):-ventana].dropna()
+    minimo = max(3, ventana // 2)
+    if reciente.shape[0] < minimo or anterior.shape[0] < minimo:
+        return None
+
+    prom_reciente = reciente.mean()
+    prom_anterior = anterior.mean()
+    delta = prom_reciente - prom_anterior
+    # Un cambio menor al 5% del promedio anterior (con un mínimo absoluto
+    # para cuando ese promedio es chico o cero) no se reporta -- evita
+    # frases como "subió 0.1" que no son más que ruido normal.
+    umbral = max(abs(prom_anterior) * 0.05, 0.05)
+    if abs(delta) < umbral:
+        return None
+
+    flecha = "↑" if delta > 0 else "↓"
+    frase = f"{flecha} {abs(delta):.{decimales}f} {unidad} vs. los {ventana} días anteriores"
+
+    # ¿El cambio es pareja en toda la ventana reciente, o se concentra en
+    # los últimos días? Solo se agrega esa segunda parte si de verdad hay
+    # una diferencia clara entre la primera y la segunda mitad de
+    # `reciente` -- si no, se omite en vez de forzar una frase vacía.
+    mitad = max(2, ventana // 2)
+    ultima_mitad = reciente.tail(mitad)
+    primera_mitad = reciente.head(reciente.shape[0] - mitad)
+    if primera_mitad.shape[0] >= 2 and ultima_mitad.shape[0] >= 2:
+        delta_reciente = ultima_mitad.mean() - primera_mitad.mean()
+        if abs(delta_reciente) >= umbral and (delta_reciente > 0) == (delta > 0):
+            frase += f" -- se concentra en los últimos {ultima_mitad.shape[0]} días"
+    return frase
+
+
 def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float | None = None, fmt: str = ".1f", height: int = 220):
     """Línea de una sola serie, con línea de referencia punteada opcional."""
     data = series.dropna().reset_index()
@@ -883,19 +927,29 @@ def render_dashboard_body(
     resumen_mes = data["resumen_mes"]
     wellness_days = data["wellness_days"]
 
+    # Orden de pestañas: Resumen y Cruces clínicos primero (nivel 1 -- son
+    # las que convierten datos en decisión, el corazón de AURA), el resto
+    # después (nivel 2 -- los datos de soporte que sustentan esa lectura).
+    # Cruces clínicos iba históricamente después de Composición/Estudios;
+    # se sube a la 2ª posición para que no se sienta "uno de ocho módulos
+    # iguales" (ver dashboard_pacientes.py y la jerarquía de marca de AURA).
     etiquetas = [":material/summarize: Resumen"]
+    if cruces_clinicos_renderer is not None:
+        etiquetas.append(":material/call_merge: Cruces clínicos")
     if composicion_corporal_renderer is not None:
         etiquetas.append(":material/monitor_weight: Composición corporal")
     if estudios_clinicos_renderer is not None:
         etiquetas.append(":material/biotech: Estudios clínicos")
-    if cruces_clinicos_renderer is not None:
-        etiquetas.append(":material/call_merge: Cruces clínicos")
     if glp1_activo and glp1_resumen_fn is not None:
         etiquetas.append(":material/medication: GLP-1 y Diabéticos")
     etiquetas += [":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas", ":material/bedtime: Sueño y Bienestar", "Calorías", "Alertas"]
     tabs = st.tabs(etiquetas)
     tab_resumen = tabs[0]
     idx = 1
+    tab_cruces = None
+    if cruces_clinicos_renderer is not None:
+        tab_cruces = tabs[idx]
+        idx += 1
     tab_composicion = None
     if composicion_corporal_renderer is not None:
         tab_composicion = tabs[idx]
@@ -903,10 +957,6 @@ def render_dashboard_body(
     tab_estudios = None
     if estudios_clinicos_renderer is not None:
         tab_estudios = tabs[idx]
-        idx += 1
-    tab_cruces = None
-    if cruces_clinicos_renderer is not None:
-        tab_cruces = tabs[idx]
         idx += 1
     tab_glp1 = None
     if glp1_activo and glp1_resumen_fn is not None:
@@ -1323,6 +1373,9 @@ def render_dashboard_body(
             if chart is not None:
                 st.altair_chart(chart, width="stretch")
             st.metric("Promedio últimos 7 días", f"{rhr_avg:.0f} lpm" if rhr_avg is not None else "sin datos")
+            contexto_rhr = narrativa_delta(rhr_series, "lpm", decimales=0)
+            if contexto_rhr:
+                st.caption(contexto_rhr)
         with col4:
             if recovery_df.empty:
                 st.info("No se pudo calcular recuperación post-esfuerzo (requiere FC continua del día del entreno).")
@@ -1349,6 +1402,9 @@ def render_dashboard_body(
                 chart = line_with_rule(sleep_df["hours"], "Horas", BLUE, rule_value=7)
                 st.altair_chart(chart, width="stretch")
                 st.metric("Promedio", f"{sleep_df['hours'].dropna().mean():.1f} h/noche")
+                contexto_sueno = narrativa_delta(sleep_df["hours"], "h", decimales=1)
+                if contexto_sueno:
+                    st.caption(contexto_sueno)
                 if sleep_df["score"].notna().any():
                     st.metric("Sleep Score promedio", f"{sleep_df['score'].dropna().mean():.0f}/100")
             else:
@@ -1486,6 +1542,9 @@ def render_dashboard_body(
                 "Total", f"{avg_total:.0f} kcal/día" if pd.notna(avg_total) else "N/D",
                 help=f"Total en {wellness_days} días: {sum_total:.0f} kcal" if pd.notna(sum_total) else None,
             )
+            contexto_calorias = narrativa_delta(calories_df["total_kcal"], "kcal/día", decimales=0)
+            if contexto_calorias:
+                st.caption(contexto_calorias)
         else:
             st.info("No hay datos de calorías disponibles en el periodo.")
 
