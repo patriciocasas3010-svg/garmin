@@ -201,7 +201,7 @@ if "paciente_actual" not in st.session_state:
 try:
     df = _load_df()
 except Exception as e:
-    st.error(f"No se pudo leer la hoja de Google. Revisa la configuración de Secrets. Detalle: {e}")
+    st.error(f"No se pudo conectar con la base de datos. Revisa el Secret DATABASE_URL. Detalle: {e}")
     st.stop()
 
 
