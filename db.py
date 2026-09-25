@@ -26,7 +26,18 @@ import sqlalchemy
 def crear_engine(database_url: str) -> sqlalchemy.engine.Engine:
     """Para sync_diario.py y cualquier script que corra fuera de
     Streamlit -- ellos mismos leen DATABASE_URL de su propia variable de
-    entorno y llaman esta función directo, sin pasar por engine()."""
+    entorno y llaman esta función directo, sin pasar por engine().
+
+    Si la URL viene en el formato genérico "postgresql://" (el que da
+    Supabase), se reescribe a "postgresql+psycopg://" para forzar el
+    driver psycopg (versión 3) en vez del driver psycopg2 por default de
+    SQLAlchemy -- psycopg2 está en mantenimiento desde hace años y en la
+    práctica tarda mucho más en publicar el instalable compilado para
+    cada versión nueva de Python, lo que rompió el arranque en Streamlit
+    Cloud ("No module named 'psycopg2'") en cuanto esa plataforma subió
+    de versión de Python. psycopg (3) sí lo publica al día."""
+    if database_url.startswith("postgresql://"):
+        database_url = "postgresql+psycopg://" + database_url[len("postgresql://"):]
     return sqlalchemy.create_engine(database_url, pool_pre_ping=True)
 
 
