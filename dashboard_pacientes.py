@@ -780,6 +780,8 @@ with col_wearable:
 
         if tipo_wearable == "Garmin":
             token_actual = token_store.leer_token(_engine(), paciente)
+            conectar_url = st.secrets.get("CONECTAR_GARMIN_URL")
+
             if token_actual:
                 st.caption(f":material/check_circle: Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
                 col_forzar, col_quitar = st.columns(2)
@@ -804,8 +806,8 @@ with col_wearable:
                                 else:
                                     st.error(
                                         f"No se pudo actualizar: {texto_error}. Si el token ya venció, "
-                                        "genera un link de conexión nuevo (arriba) o pídele que corra "
-                                        "`export_token.py` otra vez."
+                                        "genera un link de conexión nuevo (abajo, \"¿Se desconectó el "
+                                        "reloj?\") o pídele que corra `export_token.py` otra vez."
                                     )
                 with col_quitar:
                     if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
@@ -813,6 +815,31 @@ with col_wearable:
                         st.cache_data.clear()
                         st.success("Listo, se quitó -- vuelve a depender de que abra su programa.")
                         st.rerun()
+
+                with st.expander(":material/link: ¿Se desconectó el reloj? Genera un link nuevo"):
+                    st.caption(
+                        "Para cuando el token guardado ya no sirve (por ejemplo, si Garmin le pidió "
+                        "volver a iniciar sesión en su reloj) -- genera un link nuevo, se lo mandas, y en "
+                        "cuanto lo use el token de arriba se reemplaza solo, sin que tengas que \"quitar\" "
+                        "nada primero."
+                    )
+                    if not conectar_url:
+                        st.warning(
+                            "Falta configurar el Secret CONECTAR_GARMIN_URL.", icon=":material/warning:",
+                        )
+                    else:
+                        if st.button(":material/link: Generar link de conexión nuevo", key=f"generar_link_reconexion_{paciente}"):
+                            clave = token_store.generar_clave_conexion(_engine(), paciente)
+                            st.session_state[f"link_conexion_{paciente}"] = (
+                                f"{conectar_url.rstrip('/')}/?{urlencode({'p': paciente, 'k': clave})}"
+                            )
+
+                        link_generado_reconexion = st.session_state.get(f"link_conexion_{paciente}")
+                        if link_generado_reconexion:
+                            st.text_input(
+                                "Mándale este link (funciona una sola vez)", value=link_generado_reconexion,
+                                key=f"link_mostrado_reconexion_{paciente}",
+                            )
             else:
                 st.caption(
                     "¿Que se actualice solo, todos los días, sin que tenga que abrir nada? Mándale un "
@@ -820,7 +847,6 @@ with col_wearable:
                     "Garmin una sola vez (nunca se guardan), y ya queda conectado. No necesita instalar "
                     "nada ni usar Python."
                 )
-                conectar_url = st.secrets.get("CONECTAR_GARMIN_URL")
                 if not conectar_url:
                     st.warning(
                         "Falta configurar el Secret CONECTAR_GARMIN_URL -- pega ahí la URL pública que te "
