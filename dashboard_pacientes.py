@@ -1619,6 +1619,14 @@ def _render_analisis_ia(data: dict):
         ultimo_inbody_plan = inbody_ultimo_registro(historial_inbody)
         resumen_mes_plan = (data or {}).get("resumen_mes")
 
+        antro_ultimo_plan = None
+        if historial_antro is not None and not historial_antro.empty:
+            antro_valido = historial_antro.copy()
+            antro_valido["_fecha"] = pd.to_datetime(antro_valido["Fecha"], dayfirst=True, errors="coerce")
+            antro_valido = antro_valido.dropna(subset=["_fecha"]).sort_values("_fecha")
+            if not antro_valido.empty:
+                antro_ultimo_plan = antro_valido.iloc[-1].to_dict()
+
         opciones_formula = [("automatico", "Automático (AURA: wearable > InBody > Mifflin-St Jeor)")]
         opciones_formula += plan_nutricional.OPCIONES_FORMULA_GEB
         etiquetas_formula = dict(opciones_formula)
@@ -1632,7 +1640,7 @@ def _render_analisis_ia(data: dict):
 
         macros_sugeridos = plan_nutricional.sugerir_macros(
             ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"], paneles_cruces, resumen_mes_plan,
-            formula_elegida,
+            formula_elegida, meta_grasa_pct=perfil_actual["meta_grasa_pct"], antro_ultimo=antro_ultimo_plan,
         )
         if macros_sugeridos is None:
             st.info(
@@ -1667,6 +1675,15 @@ def _render_analisis_ia(data: dict):
             )
             if supuestos.get("geb_aviso"):
                 st.info(f":material/info: {supuestos['geb_aviso']}")
+            meta_grasa_info = supuestos.get("meta_grasa_info")
+            if meta_grasa_info:
+                st.caption(
+                    f":material/track_changes: Su % de grasa actual ({meta_grasa_info['pgc_actual']:.1f}%, InBody/"
+                    f"antropometría) está {meta_grasa_info['brecha_pp']:.1f} puntos arriba de su meta "
+                    f"({meta_grasa_info['meta_grasa_pct']:.1f}%) -- por eso el ajuste por objetivo se inclinó a "
+                    f"{meta_grasa_info['mult_aplicado']} en vez de quedarse en mantenimiento plano (1.0), sin "
+                    "dejar de ser mantenimiento deportivo. Ajústalo si no aplica."
+                )
 
             comparativa_geb = plan_nutricional.comparar_formulas_geb(ultimo_inbody_plan, resumen_mes_plan)
             with st.expander(":material/balance: Ver comparativa de fórmulas de calorías de reposo"):
@@ -1701,18 +1718,38 @@ def _render_analisis_ia(data: dict):
                 for c in cruces_a_considerar:
                     icono = ":material/error:" if c["estado"] == "alerta" else ":material/warning:"
                     st.caption(f"{icono} {c['titulo']} -- {c['hallazgo']}")
+            # Firma de la sugerencia actual -- se anexa a la key de cada
+            # number_input para que, en cuanto CUALQUIER cosa que alimenta a
+            # sugerir_macros cambie (enfoque, fórmula elegida, meta de
+            # grasa, un InBody nuevo, wearable, etc.), Streamlit trate los
+            # widgets como nuevos y los vuelva a inicializar con el número
+            # recién calculado -- si se deja la key fija, Streamlit conserva
+            # el valor que ya tenía en session_state y el widget se queda
+            # mostrando la sugerencia vieja aunque macros_sugeridos ya haya
+            # cambiado (justo el bug reportado: "si le cambias el enfoque no
+            # cambia los macros"). Mientras nada de eso cambie, la firma se
+            # mantiene igual entre reruns y cualquier edición manual del
+            # nutriólogo se conserva con normalidad.
+            firma_sugerencia = (
+                f"{macros_sugeridos['kcal_objetivo']}_{macros_sugeridos['proteina_g_objetivo']}_"
+                f"{macros_sugeridos['carbohidratos_g_objetivo']}_{macros_sugeridos['grasa_g_objetivo']}"
+            )
             mk1, mk2, mk3, mk4 = st.columns(4)
             kcal_edit = mk1.number_input(
-                "Kcal objetivo", value=float(macros_sugeridos["kcal_objetivo"]), step=10.0, key=f"plan_kcal_{paciente}",
+                "Kcal objetivo", value=float(macros_sugeridos["kcal_objetivo"]), step=10.0,
+                key=f"plan_kcal_{paciente}_{firma_sugerencia}",
             )
             proteina_edit = mk2.number_input(
-                "Proteína (g)", value=float(macros_sugeridos["proteina_g_objetivo"]), step=5.0, key=f"plan_prot_{paciente}",
+                "Proteína (g)", value=float(macros_sugeridos["proteina_g_objetivo"]), step=5.0,
+                key=f"plan_prot_{paciente}_{firma_sugerencia}",
             )
             carbos_edit = mk3.number_input(
-                "Carbohidratos (g)", value=float(macros_sugeridos["carbohidratos_g_objetivo"]), step=5.0, key=f"plan_carb_{paciente}",
+                "Carbohidratos (g)", value=float(macros_sugeridos["carbohidratos_g_objetivo"]), step=5.0,
+                key=f"plan_carb_{paciente}_{firma_sugerencia}",
             )
             grasa_edit = mk4.number_input(
-                "Grasa (g)", value=float(macros_sugeridos["grasa_g_objetivo"]), step=5.0, key=f"plan_gras_{paciente}",
+                "Grasa (g)", value=float(macros_sugeridos["grasa_g_objetivo"]), step=5.0,
+                key=f"plan_gras_{paciente}_{firma_sugerencia}",
             )
             macros_finales = {
                 "kcal_objetivo": kcal_edit, "proteina_g_objetivo": proteina_edit,

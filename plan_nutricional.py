@@ -37,7 +37,21 @@ Dos formas en que los cruces entran aquí:
    junto a los macros -- el nutriólogo los ve ANTES de mover los
    números, y decide él cómo ajustarlos. No se inventan más reglas
    automáticas de ajuste de macros por cruce -- eso sí es criterio
-   clínico fino, y AURA apoya la lectura, no la reemplaza."""
+   clínico fino, y AURA apoya la lectura, no la reemplaza.
+
+Una tercera entrada, del mismo tipo que el ajuste por enfoque (no es
+criterio clínico fino, es la misma clase de ajuste direccional que ya
+aplica el enfoque): si el paciente tiene una meta de % de grasa corporal
+capturada en su perfil Y su enfoque es de los que ya arrancan en
+mantenimiento puro ("Rendimiento deportivo / atleta" o "Mantenimiento /
+bienestar general"), se cruza esa meta contra el % de grasa que
+reportan su InBody/antropometría más recientes -- si está notablemente
+arriba de la meta, se inclina el multiplicador hacia un déficit leve
+(nunca tan agresivo como el de "Pérdida de peso"), en vez de quedarse en
+mantenimiento plano ignorando una meta que el propio paciente/nutriólogo
+ya declaró. Siempre queda expuesto en "supuestos.meta_grasa_info" para
+que se vea el porqué, y sigue siendo editable como cualquier otro
+macro."""
 
 _FACTOR_ACTIVIDAD = [
     (0, 1.2),    # sedentario
@@ -61,6 +75,25 @@ _AJUSTE_POR_ENFOQUE = {
     "Mantenimiento / bienestar general": (1.00, 1.6),
 }
 _AJUSTE_DEFAULT = (1.00, 1.6)
+
+# Solo estos dos enfoques arrancan en mantenimiento puro (1.00) -- "Pérdida
+# de peso"/"Ganancia muscular" ya traen su propia intención direccional
+# explícita en _AJUSTE_POR_ENFOQUE, no se les debe imponer otro ajuste
+# encima por la meta de grasa; "condición médica" se deja fuera a propósito,
+# ahí el número lo decide el criterio médico, no una meta estética/de
+# recomposición.
+_ENFOQUES_AJUSTABLES_POR_META_GRASA = {"Rendimiento deportivo / atleta", "Mantenimiento / bienestar general"}
+
+# (brecha mínima en puntos porcentuales sobre la meta, multiplicador) --
+# tope conservador: nunca más agresivo que -10%, muy por arriba del -20%
+# de "Pérdida de peso" -- sigue siendo mantenimiento deportivo, solo
+# inclinado hacia una ligera recomposición.
+_AJUSTE_BRECHA_GRASA = [
+    (3, 0.97),
+    (6, 0.93),
+    (10, 0.90),
+]
+_BRECHA_GRASA_MINIMA_PP = 3
 
 # Prefijos de "titulo" (ver cruces_clinicos.py) de los paneles con relación
 # directa a nutrición/macros -- se muestran como contexto junto a la
@@ -179,6 +212,54 @@ def _get_kcal(geb: float, dias_plan_mes: float | None, resumen_mes: dict | None)
     }
 
 
+def _num_valido(v) -> float | None:
+    """float(v), o None si v es None, no convertible, o NaN -- v puede
+    venir de un dict plano o de una fila de pandas.DataFrame/Series (un
+    campo vacío ahí es NaN, no None, y "if v" es ambiguo o hasta
+    engañoso sobre un Series/NaN -- por eso todo lo que toca
+    inbody_ultimo/antro_ultimo pasa por aquí en vez de un "if v" o
+    "v is not None" directo)."""
+    if v is None:
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return v if v == v else None  # v != v solo cuando v es NaN
+
+
+def _pgc_actual(inbody_ultimo: dict | None, antro_ultimo: dict | None) -> float | None:
+    """% de grasa corporal más reciente -- primero el que ya trae el
+    InBody directo ("PGC_pct"); si no lo tiene, se calcula desde su
+    propia masa grasa / peso; si tampoco hay, se usa el % de la medición
+    antropométrica más reciente (Faulkner). Cruza InBody Y antropometría
+    en vez de quedarse solo con el primero que encuentre vacío."""
+    if inbody_ultimo is not None:
+        pgc = _num_valido(inbody_ultimo.get("PGC_pct"))
+        if pgc is not None:
+            return pgc
+        peso = _num_valido(inbody_ultimo.get("Peso_kg"))
+        masa_grasa = _num_valido(inbody_ultimo.get("MasaGrasa_kg"))
+        if peso and masa_grasa is not None:
+            try:
+                return masa_grasa / peso * 100
+            except ZeroDivisionError:
+                pass
+    if antro_ultimo is not None:
+        pgc = _num_valido(antro_ultimo.get("GrasaFaulkner_pct"))
+        if pgc is not None:
+            return pgc
+    return None
+
+
+def _mult_por_meta_grasa(brecha_pp: float) -> float:
+    mult = 1.00
+    for umbral, m in _AJUSTE_BRECHA_GRASA:
+        if brecha_pp >= umbral:
+            mult = m
+    return mult
+
+
 def _cruces_relevantes(paneles_cruces: list[dict] | None) -> list[dict]:
     """Paneles nutricionalmente relevantes que están en "riesgo" o
     "alerta" -- lo que el nutriólogo debe ver antes de fijar los macros,
@@ -261,7 +342,8 @@ def comparar_formulas_geb(inbody_ultimo: dict | None, resumen_mes: dict | None =
 def sugerir_macros(
     inbody_ultimo: dict | None, enfoque: str | None, dias_plan_mes: float | None,
     paneles_cruces: list[dict] | None = None, resumen_mes: dict | None = None,
-    formula_geb: str | None = None,
+    formula_geb: str | None = None, meta_grasa_pct: float | None = None,
+    antro_ultimo: dict | None = None,
 ) -> dict | None:
     """inbody_ultimo: fila del último InBody (dict o pandas.Series) con
     "Peso_kg", "Altura_cm", "Edad", "Sexo" (y opcionalmente "MasaGrasa_kg",
@@ -285,7 +367,13 @@ def sugerir_macros(
     paneles_cruces: los 10 paneles ya calculados (ver
     cruces_clinicos.calcular_paneles / _calcular_paneles_cruces en
     dashboard_pacientes.py) -- opcional, si no se pasa simplemente no
-    hay ajuste de seguridad ni lista de "cruces a considerar"."""
+    hay ajuste de seguridad ni lista de "cruces a considerar".
+
+    meta_grasa_pct / antro_ultimo: la meta de % de grasa corporal del
+    perfil del paciente (enfoque_store.leer_perfil) y su medición
+    antropométrica más reciente -- opcionales, solo se usan para el
+    ajuste por brecha de grasa (ver docstring del módulo) cuando el
+    enfoque es de los que arrancan en mantenimiento puro."""
     if inbody_ultimo is None:
         return None
     peso = inbody_ultimo.get("Peso_kg")
@@ -325,6 +413,18 @@ def sugerir_macros(
 
     mult_objetivo, proteina_g_kg = _AJUSTE_POR_ENFOQUE.get(enfoque or "", _AJUSTE_DEFAULT)
 
+    meta_grasa_info = None
+    if enfoque in _ENFOQUES_AJUSTABLES_POR_META_GRASA and meta_grasa_pct:
+        pgc_actual = _pgc_actual(inbody_ultimo, antro_ultimo)
+        if pgc_actual is not None:
+            brecha_pp = pgc_actual - meta_grasa_pct
+            if brecha_pp >= _BRECHA_GRASA_MINIMA_PP:
+                mult_objetivo = _mult_por_meta_grasa(brecha_pp)
+                meta_grasa_info = {
+                    "pgc_actual": round(pgc_actual, 1), "meta_grasa_pct": meta_grasa_pct,
+                    "brecha_pp": round(brecha_pp, 1), "mult_aplicado": mult_objetivo,
+                }
+
     tope_renal_aplicado = False
     if _panel_renal_en_alerta(paneles_cruces) and proteina_g_kg > _PROTEINA_TOPE_RENAL_G_KG:
         proteina_g_kg = _PROTEINA_TOPE_RENAL_G_KG
@@ -352,6 +452,7 @@ def sugerir_macros(
             "multiplicador_objetivo": mult_objetivo,
             "proteina_g_por_kg": proteina_g_kg,
             "grasa_pct_kcal": 0.25,
+            "meta_grasa_info": meta_grasa_info,
             **af_info,
         },
     }
