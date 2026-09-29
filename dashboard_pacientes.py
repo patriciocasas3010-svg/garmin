@@ -1618,8 +1618,21 @@ def _render_analisis_ia(data: dict):
     with st.expander("Crear un plan nuevo"):
         ultimo_inbody_plan = inbody_ultimo_registro(historial_inbody)
         resumen_mes_plan = (data or {}).get("resumen_mes")
+
+        opciones_formula = [("automatico", "Automático (AURA: wearable > InBody > Mifflin-St Jeor)")]
+        opciones_formula += plan_nutricional.OPCIONES_FORMULA_GEB
+        etiquetas_formula = dict(opciones_formula)
+        formula_elegida = st.selectbox(
+            "Fórmula para calorías de reposo", options=[k for k, _ in opciones_formula],
+            format_func=lambda k: etiquetas_formula[k], key=f"formula_geb_{paciente}",
+            help="Déjalo en \"Automático\" para que AURA use el dato más preciso disponible. Fuérzalo a una "
+                 "fórmula específica solo como respaldo -- por ejemplo si no confías en el dato del wearable "
+                 "ese mes, o quieres comparar contra otra fórmula.",
+        )
+
         macros_sugeridos = plan_nutricional.sugerir_macros(
             ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"], paneles_cruces, resumen_mes_plan,
+            formula_elegida,
         )
         if macros_sugeridos is None:
             st.info(
@@ -1630,9 +1643,13 @@ def _render_analisis_ia(data: dict):
             supuestos = macros_sugeridos["supuestos"]
             etiqueta_geb = {
                 "wearable": "calorías de reposo medidas por su wearable (promedio del mes)",
-                "inbody_masa_magra": "calorías de reposo estimadas con su masa magra del InBody (Katch-McArdle)",
-                "formula_mifflin": "calorías de reposo estimadas con la fórmula Mifflin-St Jeor",
+                "katch_mcardle": "calorías de reposo estimadas con su masa magra del InBody (Katch-McArdle)",
+                "mifflin": "calorías de reposo estimadas con la fórmula Mifflin-St Jeor",
+                "harris_benedict": "calorías de reposo estimadas con la fórmula Harris-Benedict",
+                "fao_oms_onu": "calorías de reposo estimadas con la fórmula FAO/OMS/ONU",
             }[supuestos["geb_fuente"]]
+            if supuestos["geb_manual"]:
+                etiqueta_geb += " -- fórmula elegida a mano, no automática"
             if supuestos["af_fuente"] == "wearable":
                 etiqueta_af = (
                     f"+ {supuestos['af_kcal']:.0f} kcal de actividad medidas por su wearable (promedio del mes) "
@@ -1648,6 +1665,8 @@ def _render_analisis_ia(data: dict):
                 f"{supuestos['geb_kcal']:.0f} kcal ({etiqueta_geb}) {etiqueta_af} = "
                 f"{supuestos['get_kcal']:.0f} kcal x ajuste por objetivo {supuestos['multiplicador_objetivo']}."
             )
+            if supuestos.get("geb_aviso"):
+                st.info(f":material/info: {supuestos['geb_aviso']}")
             if macros_sugeridos["tope_renal_aplicado"]:
                 st.warning(
                     ":material/priority_high: El panel de Carga Renal está en alerta -- se topó la "

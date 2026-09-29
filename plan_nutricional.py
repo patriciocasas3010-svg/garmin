@@ -8,7 +8,11 @@ fórmula genérica de población:
    (más preciso que Mifflin cuando hay datos reales de composición
    corporal, sobre todo en gente muy musculosa o con % de grasa atípico)
    > Mifflin-St Jeor (fórmula genérica, el mínimo que se puede calcular
-   solo con InBody básico: peso/altura/edad/sexo).
+   solo con InBody básico: peso/altura/edad/sexo). El nutriólogo puede
+   forzar una fórmula específica en vez del automático (ver
+   OPCIONES_FORMULA_GEB) como respaldo -- por ejemplo si no confía en el
+   dato del wearable ese mes, o quiere comparar contra Harris-Benedict o
+   FAO/OMS/ONU.
 2. Actividad física: prioridad a las calorías activas que el wearable ya
    mide en promedio (dato real de ESTE paciente) sobre un "factor de
    actividad" genérico (sedentario/ligero/moderado/activo) calculado a
@@ -82,20 +86,78 @@ def _factor_actividad(dias_plan_mes: float | None) -> float:
     return factor
 
 
+def _es_hombre(sexo: str) -> bool:
+    return str(sexo).strip().lower().startswith(("m", "h"))  # Masculino/Hombre
+
+
+def _geb_mifflin(peso: float, altura: float, edad: float, sexo: str, masa_grasa: float | None) -> float:
+    if _es_hombre(sexo):
+        return 10 * peso + 6.25 * altura - 5 * edad + 5
+    return 10 * peso + 6.25 * altura - 5 * edad - 161
+
+
+def _geb_harris_benedict(peso: float, altura: float, edad: float, sexo: str, masa_grasa: float | None) -> float:
+    if _es_hombre(sexo):
+        return 88.362 + 13.397 * peso + 4.799 * altura - 5.677 * edad
+    return 447.593 + 9.247 * peso + 3.098 * altura - 4.330 * edad
+
+
+def _geb_fao_oms_onu(peso: float, altura: float, edad: float, sexo: str, masa_grasa: float | None) -> float:
+    """FAO/OMS/ONU (1985) -- por banda de edad, solo depende del peso (no
+    usa altura)."""
+    if _es_hombre(sexo):
+        if edad < 30:
+            return 15.3 * peso + 679
+        if edad < 60:
+            return 11.6 * peso + 879
+        return 13.5 * peso + 487
+    if edad < 30:
+        return 14.7 * peso + 496
+    if edad < 60:
+        return 8.7 * peso + 829
+    return 10.5 * peso + 596
+
+
+def _geb_katch_mcardle(peso: float, altura: float, edad: float, sexo: str, masa_grasa: float | None) -> float | None:
+    """Requiere la masa grasa del InBody -- None si no está disponible
+    (quien llama decide si cae a otra fórmula)."""
+    if masa_grasa is None:
+        return None
+    masa_magra = peso - masa_grasa
+    if masa_magra <= 0:
+        return None
+    return 370 + 21.6 * masa_magra
+
+
+# (clave, etiqueta) -- para un selectbox en el dashboard. "automatico" no
+# está aquí a propósito: no es una fórmula, es la prioridad de
+# _geb_kcal() (wearable > Katch-McArdle > Mifflin), maneja aparte.
+OPCIONES_FORMULA_GEB = [
+    ("mifflin", "Mifflin-St Jeor"),
+    ("harris_benedict", "Harris-Benedict"),
+    ("fao_oms_onu", "FAO/OMS/ONU"),
+    ("katch_mcardle", "Katch-McArdle (usa la masa grasa del InBody)"),
+]
+
+_FORMULAS_GEB = {
+    "mifflin": _geb_mifflin,
+    "harris_benedict": _geb_harris_benedict,
+    "fao_oms_onu": _geb_fao_oms_onu,
+    "katch_mcardle": _geb_katch_mcardle,
+}
+
+
 def _geb_kcal(peso: float, altura: float, edad: float, sexo: str, masa_grasa: float | None,
               resumen_mes: dict | None) -> tuple[float, str]:
     resting_wearable = (resumen_mes or {}).get("resting_kcal_avg")
     if resting_wearable:
         return float(resting_wearable), "wearable"
 
-    if masa_grasa is not None:
-        masa_magra = peso - masa_grasa
-        if masa_magra > 0:
-            return 370 + 21.6 * masa_magra, "inbody_masa_magra"  # Katch-McArdle
+    geb_katch = _geb_katch_mcardle(peso, altura, edad, sexo, masa_grasa)
+    if geb_katch is not None:
+        return geb_katch, "katch_mcardle"
 
-    if str(sexo).strip().lower().startswith(("m", "h")):  # Masculino/Hombre
-        return 10 * peso + 6.25 * altura - 5 * edad + 5, "formula_mifflin"
-    return 10 * peso + 6.25 * altura - 5 * edad - 161, "formula_mifflin"  # Femenino/Mujer
+    return _geb_mifflin(peso, altura, edad, sexo, masa_grasa), "mifflin"
 
 
 def _get_kcal(geb: float, dias_plan_mes: float | None, resumen_mes: dict | None) -> tuple[float, dict]:
@@ -146,6 +208,7 @@ def _panel_renal_en_alerta(paneles_cruces: list[dict] | None) -> bool:
 def sugerir_macros(
     inbody_ultimo: dict | None, enfoque: str | None, dias_plan_mes: float | None,
     paneles_cruces: list[dict] | None = None, resumen_mes: dict | None = None,
+    formula_geb: str | None = None,
 ) -> dict | None:
     """inbody_ultimo: fila del último InBody (dict o pandas.Series) con
     "Peso_kg", "Altura_cm", "Edad", "Sexo" (y opcionalmente "MasaGrasa_kg",
@@ -158,6 +221,13 @@ def sugerir_macros(
     dashboard_pacientes.py) -- opcional, si no se pasa (o el paciente no
     tiene wearable conectado) se usa Katch-McArdle/Mifflin y el factor de
     actividad por categoría, igual que antes.
+
+    formula_geb: None (o "automatico") deja la prioridad automática de
+    _geb_kcal() (wearable > Katch-McArdle > Mifflin) -- forzar una clave
+    de OPCIONES_FORMULA_GEB aquí la usa en su lugar, como respaldo manual
+    para cuando el nutriólogo no confía en el dato automático o quiere
+    comparar contra otra fórmula. Si se pide Katch-McArdle y el InBody no
+    trae masa grasa, cae a Mifflin y "geb_aviso" en la respuesta lo dice.
 
     paneles_cruces: los 10 paneles ya calculados (ver
     cruces_clinicos.calcular_paneles / _calcular_paneles_cruces en
@@ -182,7 +252,22 @@ def sugerir_macros(
     except (TypeError, ValueError):
         masa_grasa = None
 
-    geb, geb_fuente = _geb_kcal(peso, altura, edad, sexo, masa_grasa, resumen_mes)
+    geb_manual = False
+    geb_aviso = None
+    if formula_geb and formula_geb != "automatico":
+        fn = _FORMULAS_GEB.get(formula_geb)
+        geb_forzado = fn(peso, altura, edad, sexo, masa_grasa) if fn else None
+        if geb_forzado is not None:
+            geb, geb_fuente, geb_manual = geb_forzado, formula_geb, True
+        else:
+            geb, geb_fuente = _geb_mifflin(peso, altura, edad, sexo, masa_grasa), "mifflin"
+            geb_manual = True
+            geb_aviso = (
+                "Katch-McArdle necesita la masa grasa del InBody, que este paciente no tiene capturada -- "
+                "se usó Mifflin-St Jeor en su lugar."
+            )
+    else:
+        geb, geb_fuente = _geb_kcal(peso, altura, edad, sexo, masa_grasa, resumen_mes)
     get, af_info = _get_kcal(geb, dias_plan_mes, resumen_mes)
 
     mult_objetivo, proteina_g_kg = _AJUSTE_POR_ENFOQUE.get(enfoque or "", _AJUSTE_DEFAULT)
@@ -207,6 +292,8 @@ def sugerir_macros(
         "supuestos": {
             "geb_kcal": round(geb),
             "geb_fuente": geb_fuente,
+            "geb_manual": geb_manual,
+            "geb_aviso": geb_aviso,
             "get_kcal": round(get),
             "multiplicador_objetivo": mult_objetivo,
             "proteina_g_por_kg": proteina_g_kg,
