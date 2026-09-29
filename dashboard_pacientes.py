@@ -1611,8 +1611,9 @@ def _render_analisis_ia(data: dict):
                 st.rerun()
 
     with st.expander("Crear un plan nuevo"):
+        ultimo_inbody_plan = inbody_ultimo_registro(historial_inbody)
         macros_sugeridos = plan_nutricional.sugerir_macros(
-            ultimo_inbody, enfoque_actual, perfil_actual["dias_plan_mes"],
+            ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"],
         )
         if macros_sugeridos is None:
             st.info(
