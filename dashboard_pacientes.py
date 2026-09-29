@@ -47,10 +47,12 @@ import inbody_ocr
 import inbody_store
 import libre_metrics
 import libre_store
+import equivalentes
 import notas_store
 import oura_metrics as om
 import oura_store
 import paciente_admin
+import plan_generador
 import plan_nutricional
 import planes_store
 import recetas_store
@@ -1603,6 +1605,9 @@ def _render_analisis_ia(data: dict):
         )
         if plan_existente["recetas"]:
             st.caption("Recetas incluidas: " + ", ".join(r["nombre"] for r in plan_existente["recetas"]))
+        if plan_existente.get("contenido"):
+            with st.expander(":material/calendar_month: Ver menú de 2 semanas"):
+                st.markdown(plan_existente["contenido"])
         if plan_existente["estado"] == "borrador":
             if st.button(":material/check_circle: Aprobar este plan", key=f"aprobar_plan_{paciente}"):
                 planes_store.aprobar_plan(_engine(), plan_existente["id"], usuario_actual["usuario"])
@@ -1652,6 +1657,27 @@ def _render_analisis_ia(data: dict):
             grasa_edit = mk4.number_input(
                 "Grasa (g)", value=float(macros_sugeridos["grasa_g_objetivo"]), step=5.0, key=f"plan_gras_{paciente}",
             )
+            macros_finales = {
+                "kcal_objetivo": kcal_edit, "proteina_g_objetivo": proteina_edit,
+                "carbohidratos_g_objetivo": carbos_edit, "grasa_g_objetivo": grasa_edit,
+            }
+            equivalentes_calc = equivalentes.calcular_equivalentes(macros_finales)
+            with st.expander(":material/list_alt: Ver también en equivalentes (SMAE)"):
+                st.caption(
+                    "Sistema Mexicano de Alimentos Equivalentes -- la misma distribución de arriba, en "
+                    "porciones en vez de gramos. Es un punto de partida (redondeado a equivalentes "
+                    "enteros, por eso casi nunca cae exacto en el objetivo), ajústala con tu criterio."
+                )
+                for grupo, cantidad in equivalentes_calc["equivalentes"].items():
+                    if cantidad:
+                        st.caption(f"- {equivalentes.nombre_grupo(grupo)}: {cantidad} equivalente(s)")
+                st.caption(
+                    f"Total: {equivalentes_calc['totales']['kcal']:.0f} kcal "
+                    f"({equivalentes_calc['diferencia_kcal']:+.0f} kcal vs. objetivo), "
+                    f"{equivalentes_calc['totales']['proteina_g']:.0f}g proteína, "
+                    f"{equivalentes_calc['totales']['carbohidratos_g']:.0f}g carbohidratos, "
+                    f"{equivalentes_calc['totales']['grasa_g']:.0f}g grasa."
+                )
 
             if recetas_disponibles:
                 st.caption(f"Recetas de la biblioteca que aplican a este perfil: {len(recetas_disponibles)}.")
@@ -1661,20 +1687,56 @@ def _render_analisis_ia(data: dict):
                     "los macros, sin recetas asignadas (agrégalas después conforme se carguen recetas)."
                 )
 
-            if st.button(":material/restaurant_menu: Crear plan con estos macros", key=f"crear_plan_{paciente}"):
-                macros_finales = {
-                    "kcal_objetivo": kcal_edit, "proteina_g_objetivo": proteina_edit,
-                    "carbohidratos_g_objetivo": carbos_edit, "grasa_g_objetivo": grasa_edit,
-                }
-                receta_ids = [r["id"] for r in (recetas_disponibles or [])]
-                plan_id = planes_store.crear_borrador(
-                    _engine(), paciente, macros_finales, receta_ids,
-                    notas="Plan creado desde el dashboard con macros sugeridos por AURA.",
-                    creado_por=usuario_actual["usuario"],
+            col_crear, col_2sem = st.columns(2)
+            with col_crear:
+                if st.button(":material/restaurant_menu: Crear plan con estos macros", key=f"crear_plan_{paciente}"):
+                    receta_ids = [r["id"] for r in (recetas_disponibles or [])]
+                    plan_id = planes_store.crear_borrador(
+                        _engine(), paciente, macros_finales, receta_ids,
+                        notas="Plan creado desde el dashboard con macros sugeridos por AURA.",
+                        creado_por=usuario_actual["usuario"],
+                    )
+                    st.cache_data.clear()
+                    st.success(f"Plan #{plan_id} creado como borrador -- revísalo arriba y dale \"Aprobar\" cuando esté listo.")
+                    st.rerun()
+            with col_2sem:
+                if _ES_ADMIN:
+                    puede_generar_plan, usados_plan, limite_plan = True, 0, None
+                else:
+                    puede_generar_plan, usados_plan, limite_plan = analisis_ia_store.puede_generar(
+                        _engine(), usuario_actual["usuario"],
+                    )
+                generar_2sem = st.button(
+                    ":material/calendar_month: Generar plan de 2 semanas con estos macros",
+                    key=f"generar_2sem_{paciente}", disabled=not puede_generar_plan,
+                    help="Usa la API de Claude para armar el menú día por día de las 2 semanas -- cuenta "
+                         "para el mismo cupo mensual de análisis con IA (misma llamada centralizada).",
                 )
-                st.cache_data.clear()
-                st.success(f"Plan #{plan_id} creado como borrador -- revísalo arriba y dale \"Aprobar\" cuando esté listo.")
-                st.rerun()
+                if limite_plan is not None:
+                    st.caption(f":material/analytics: Llevas {usados_plan} de {limite_plan} análisis/planes con IA este mes.")
+                if generar_2sem:
+                    with st.spinner("Armando el menú de las 2 semanas..."):
+                        try:
+                            contenido = plan_generador.generar_plan_2_semanas(
+                                paciente, macros_finales, equivalentes_calc, enfoque_actual,
+                                historial_notas, recetas_disponibles,
+                            )
+                            receta_ids = [r["id"] for r in (recetas_disponibles or [])]
+                            plan_id = planes_store.crear_borrador(
+                                _engine(), paciente, macros_finales, receta_ids,
+                                notas="Plan de 2 semanas generado por AURA con macros sugeridos.",
+                                creado_por=usuario_actual["usuario"], contenido=contenido,
+                            )
+                            if not _ES_ADMIN:
+                                analisis_ia_store.registrar_uso(_engine(), usuario_actual["usuario"], paciente)
+                            st.cache_data.clear()
+                            st.success(
+                                f"Plan #{plan_id} con menú de 2 semanas creado como borrador -- revísalo "
+                                "arriba y dale \"Aprobar\" cuando esté listo."
+                            )
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"No se pudo generar el plan de 2 semanas: {e}")
 
 
 def _placeholder_requiere_wearable(titulo: str, descripcion: str) -> None:

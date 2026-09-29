@@ -282,6 +282,10 @@ CREATE TABLE IF NOT EXISTS planes_nutricionales (
     carbohidratos_g_objetivo NUMERIC,
     grasa_g_objetivo NUMERIC,
     notas TEXT,
+    -- Menú día por día de las 2 semanas (markdown), generado por
+    -- plan_generador.py -- NULL cuando el plan se creó solo con
+    -- macros/recetas, sin pedirle a Claude el menú completo.
+    contenido TEXT,
     estado TEXT DEFAULT 'borrador',
     creado_por TEXT,
     aprobado_por TEXT,

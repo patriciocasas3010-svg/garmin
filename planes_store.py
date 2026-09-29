@@ -11,21 +11,22 @@ import sqlalchemy
 
 def crear_borrador(
     engine: sqlalchemy.engine.Engine, paciente: str, macros: dict, receta_ids: list[int],
-    notas: str, creado_por: str,
+    notas: str, creado_por: str, contenido: str | None = None,
 ) -> int:
     with engine.begin() as conn:
         plan_id = conn.execute(
             sqlalchemy.text("""
                 INSERT INTO planes_nutricionales
                     (nombre, kcal_objetivo, proteina_g_objetivo, carbohidratos_g_objetivo,
-                     grasa_g_objetivo, notas, estado, creado_por)
-                VALUES (:nombre, :kcal, :proteina, :carbos, :grasa, :notas, 'borrador', :creado_por)
+                     grasa_g_objetivo, notas, contenido, estado, creado_por)
+                VALUES (:nombre, :kcal, :proteina, :carbos, :grasa, :notas, :contenido, 'borrador', :creado_por)
                 RETURNING id
             """),
             {
                 "nombre": paciente, "kcal": macros.get("kcal_objetivo"),
                 "proteina": macros.get("proteina_g_objetivo"), "carbos": macros.get("carbohidratos_g_objetivo"),
-                "grasa": macros.get("grasa_g_objetivo"), "notas": notas, "creado_por": creado_por,
+                "grasa": macros.get("grasa_g_objetivo"), "notas": notas, "contenido": contenido,
+                "creado_por": creado_por,
             },
         ).scalar_one()
         for receta_id in receta_ids:
@@ -58,7 +59,7 @@ def leer_ultimo_plan(engine: sqlalchemy.engine.Engine, paciente: str) -> dict | 
         fila = conn.execute(
             sqlalchemy.text("""
                 SELECT id, fecha, kcal_objetivo, proteina_g_objetivo, carbohidratos_g_objetivo,
-                       grasa_g_objetivo, notas, estado, creado_por, aprobado_por, fecha_aprobacion
+                       grasa_g_objetivo, notas, contenido, estado, creado_por, aprobado_por, fecha_aprobacion
                 FROM planes_nutricionales
                 WHERE nombre = :nombre
                 ORDER BY fecha DESC
