@@ -1,11 +1,25 @@
 """Sugiere macros de arranque (kcal/proteína/carbohidratos/grasa) para un
-paciente, usando la fórmula estándar Mifflin-St Jeor (peso, altura, edad,
-sexo del último InBody) x un factor de actividad (según los días de
-entrenamiento planeados) x un ajuste según el enfoque principal --
-DESPUÉS cruzado contra los 10 paneles de cruces_clinicos.py, que es el
-verdadero diferenciador de AURA: la fórmula no es la ley, es un punto de
-partida genérico que cualquier app de fitness calcula igual; el cruce
-clínico es lo que la ajusta a este paciente en concreto.
+paciente -- cruzando datos REALES del paciente en vez de solo aplicar una
+fórmula genérica de población:
+
+1. Calorías de reposo (GEB/BMR): prioridad a lo que el wearable ya mide
+   día a día (Garmin/Oura calculan su propio BMR con datos fisiológicos
+   reales de esta persona) > Katch-McArdle con la masa magra del InBody
+   (más preciso que Mifflin cuando hay datos reales de composición
+   corporal, sobre todo en gente muy musculosa o con % de grasa atípico)
+   > Mifflin-St Jeor (fórmula genérica, el mínimo que se puede calcular
+   solo con InBody básico: peso/altura/edad/sexo).
+2. Actividad física: prioridad a las calorías activas que el wearable ya
+   mide en promedio (dato real de ESTE paciente) sobre un "factor de
+   actividad" genérico (sedentario/ligero/moderado/activo) calculado a
+   partir de los días de entrenamiento planeados -- ese factor por
+   categorías se queda solo como respaldo para cuando el paciente
+   todavía no conecta wearable.
+
+DESPUÉS, todo eso se cruza contra los 10 paneles de cruces_clinicos.py,
+que es el otro diferenciador de AURA: ni la fórmula ni el wearable son la
+ley, son el punto de partida más preciso posible; el cruce clínico es lo
+que lo ajusta a este paciente en concreto.
 
 Dos formas en que los cruces entran aquí:
 
@@ -28,6 +42,12 @@ _FACTOR_ACTIVIDAD = [
     (24, 1.725), # activo  (~4-6 días/semana)
 ]
 _FACTOR_ACTIVIDAD_MAX = 1.9  # muy activo (~6-7 días/semana)
+
+# Efecto térmico de los alimentos -- ~10% del GEB, estándar en el cálculo
+# de gasto energético total. Solo se suma aparte cuando la actividad viene
+# de datos reales del wearable (modelo aditivo GEB + ETA + activas); en el
+# modelo por factor (sin wearable), el multiplicador ya lo trae implícito.
+_TEF_PCT_GEB = 0.10
 
 _AJUSTE_POR_ENFOQUE = {
     "Pérdida de peso": (0.80, 2.0),               # (multiplicador de TDEE, proteína g/kg)
@@ -62,6 +82,41 @@ def _factor_actividad(dias_plan_mes: float | None) -> float:
     return factor
 
 
+def _geb_kcal(peso: float, altura: float, edad: float, sexo: str, masa_grasa: float | None,
+              resumen_mes: dict | None) -> tuple[float, str]:
+    resting_wearable = (resumen_mes or {}).get("resting_kcal_avg")
+    if resting_wearable:
+        return float(resting_wearable), "wearable"
+
+    if masa_grasa is not None:
+        masa_magra = peso - masa_grasa
+        if masa_magra > 0:
+            return 370 + 21.6 * masa_magra, "inbody_masa_magra"  # Katch-McArdle
+
+    if str(sexo).strip().lower().startswith(("m", "h")):  # Masculino/Hombre
+        return 10 * peso + 6.25 * altura - 5 * edad + 5, "formula_mifflin"
+    return 10 * peso + 6.25 * altura - 5 * edad - 161, "formula_mifflin"  # Femenino/Mujer
+
+
+def _get_kcal(geb: float, dias_plan_mes: float | None, resumen_mes: dict | None) -> tuple[float, dict]:
+    """GET (gasto energético total) -- si el wearable ya mide calorías
+    activas reales, se suman directo (modelo aditivo GEB + ETA + activas
+    medidas); si no hay wearable conectado, se usa el factor de actividad
+    por categoría (modelo multiplicativo, respaldo)."""
+    active_wearable = (resumen_mes or {}).get("active_kcal_avg")
+    if active_wearable:
+        eta = geb * _TEF_PCT_GEB
+        get = geb + eta + float(active_wearable)
+        return get, {
+            "af_fuente": "wearable", "af_kcal": round(float(active_wearable)),
+            "eta_kcal": round(eta), "factor_actividad": None,
+        }
+    factor = _factor_actividad(dias_plan_mes)
+    return geb * factor, {
+        "af_fuente": "dias_plan_mes", "af_kcal": None, "eta_kcal": None, "factor_actividad": factor,
+    }
+
+
 def _cruces_relevantes(paneles_cruces: list[dict] | None) -> list[dict]:
     """Paneles nutricionalmente relevantes que están en "riesgo" o
     "alerta" -- lo que el nutriólogo debe ver antes de fijar los macros,
@@ -90,12 +145,19 @@ def _panel_renal_en_alerta(paneles_cruces: list[dict] | None) -> bool:
 
 def sugerir_macros(
     inbody_ultimo: dict | None, enfoque: str | None, dias_plan_mes: float | None,
-    paneles_cruces: list[dict] | None = None,
+    paneles_cruces: list[dict] | None = None, resumen_mes: dict | None = None,
 ) -> dict | None:
     """inbody_ultimo: fila del último InBody (dict o pandas.Series) con
-    "Peso_kg", "Altura_cm", "Edad", "Sexo". None si falta cualquiera de
-    los 4 -- sin eso no se puede calcular Mifflin-St Jeor sin inventar,
-    y quien llama debe pedirle al nutriólogo que capture InBody primero.
+    "Peso_kg", "Altura_cm", "Edad", "Sexo" (y opcionalmente "MasaGrasa_kg",
+    para Katch-McArdle). None si falta cualquiera de los 4 primeros -- sin
+    eso no se puede calcular nada sin inventar, y quien llama debe pedirle
+    al nutriólogo que capture InBody primero.
+
+    resumen_mes: el resumen mensual del wearable de este paciente (ver
+    garmin_metrics.compute_monthly_score / data["resumen_mes"] en
+    dashboard_pacientes.py) -- opcional, si no se pasa (o el paciente no
+    tiene wearable conectado) se usa Katch-McArdle/Mifflin y el factor de
+    actividad por categoría, igual que antes.
 
     paneles_cruces: los 10 paneles ya calculados (ver
     cruces_clinicos.calcular_paneles / _calcular_paneles_cruces en
@@ -114,13 +176,14 @@ def sugerir_macros(
     except (TypeError, ValueError):
         return None
 
-    if str(sexo).strip().lower().startswith(("m", "h")):  # Masculino/Hombre
-        bmr = 10 * peso + 6.25 * altura - 5 * edad + 5
-    else:  # Femenino/Mujer
-        bmr = 10 * peso + 6.25 * altura - 5 * edad - 161
+    masa_grasa = inbody_ultimo.get("MasaGrasa_kg")
+    try:
+        masa_grasa = float(masa_grasa) if masa_grasa is not None else None
+    except (TypeError, ValueError):
+        masa_grasa = None
 
-    factor_actividad = _factor_actividad(dias_plan_mes)
-    tdee = bmr * factor_actividad
+    geb, geb_fuente = _geb_kcal(peso, altura, edad, sexo, masa_grasa, resumen_mes)
+    get, af_info = _get_kcal(geb, dias_plan_mes, resumen_mes)
 
     mult_objetivo, proteina_g_kg = _AJUSTE_POR_ENFOQUE.get(enfoque or "", _AJUSTE_DEFAULT)
 
@@ -129,7 +192,7 @@ def sugerir_macros(
         proteina_g_kg = _PROTEINA_TOPE_RENAL_G_KG
         tope_renal_aplicado = True
 
-    kcal_objetivo = tdee * mult_objetivo
+    kcal_objetivo = get * mult_objetivo
     proteina_g = peso * proteina_g_kg
     grasa_g = (kcal_objetivo * 0.25) / 9
     carbohidratos_g = max(0.0, (kcal_objetivo - proteina_g * 4 - grasa_g * 9) / 4)
@@ -142,10 +205,12 @@ def sugerir_macros(
         "cruces_a_considerar": _cruces_relevantes(paneles_cruces),
         "tope_renal_aplicado": tope_renal_aplicado,
         "supuestos": {
-            "bmr_mifflin_st_jeor": round(bmr),
-            "factor_actividad": factor_actividad,
+            "geb_kcal": round(geb),
+            "geb_fuente": geb_fuente,
+            "get_kcal": round(get),
             "multiplicador_objetivo": mult_objetivo,
             "proteina_g_por_kg": proteina_g_kg,
             "grasa_pct_kcal": 0.25,
+            **af_info,
         },
     }

@@ -425,6 +425,13 @@ def compute_monthly_score(client, days: int = WELLNESS_DAYS_DEFAULT) -> dict:
     active_kcal_avg = calories_df["active_kcal"].dropna().mean() if calories_df["active_kcal"].notna().any() else None
     activity_score = score_ramp(active_kcal_avg, 400)
 
+    # Calorías de reposo (BMR) que el reloj ya calcula día a día -- más
+    # preciso que una fórmula genérica (Mifflin/Harris) porque refleja el
+    # metabolismo real de esta persona en vez de una población promedio.
+    # plan_nutricional.py la usa como primera opción para "calorías de
+    # reposo" cuando hay wearable conectado.
+    resting_kcal_avg = calories_df["resting_kcal"].dropna().mean() if calories_df["resting_kcal"].notna().any() else None
+
     # Si faltan 2 de los 3 componentes (o los 3), promediar el único que
     # queda da una "calificación" completa con un solo dato real detrás --
     # engañoso. Se necesitan al menos 2 de 3 para calcular algo.
@@ -456,6 +463,7 @@ def compute_monthly_score(client, days: int = WELLNESS_DAYS_DEFAULT) -> dict:
         "sleep_hours_avg": sleep_hours_avg,
         "activity_score": activity_score,
         "active_kcal_avg": active_kcal_avg,
+        "resting_kcal_avg": resting_kcal_avg,
         "total_dias": total_dias,
         "dias_con_actividad": len(dias_activos),
         "dias_sin_actividad": total_dias - len(dias_activos),
@@ -963,7 +971,7 @@ _SCALAR_KEYS = [
 
 _RESUMEN_MES_NUM_KEYS = [
     "overall_score", "recovery_score", "sleep_score", "sleep_score_garmin",
-    "sleep_hours_avg", "activity_score", "active_kcal_avg", "rhr_avg_7d",
+    "sleep_hours_avg", "activity_score", "active_kcal_avg", "resting_kcal_avg", "rhr_avg_7d",
 ]
 
 

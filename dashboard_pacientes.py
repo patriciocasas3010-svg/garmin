@@ -1617,8 +1617,9 @@ def _render_analisis_ia(data: dict):
 
     with st.expander("Crear un plan nuevo"):
         ultimo_inbody_plan = inbody_ultimo_registro(historial_inbody)
+        resumen_mes_plan = (data or {}).get("resumen_mes")
         macros_sugeridos = plan_nutricional.sugerir_macros(
-            ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"], paneles_cruces,
+            ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"], paneles_cruces, resumen_mes_plan,
         )
         if macros_sugeridos is None:
             st.info(
@@ -1626,11 +1627,26 @@ def _render_analisis_ia(data: dict):
                 "Composición corporal para que AURA pueda sugerir macros de arranque."
             )
         else:
+            supuestos = macros_sugeridos["supuestos"]
+            etiqueta_geb = {
+                "wearable": "calorías de reposo medidas por su wearable (promedio del mes)",
+                "inbody_masa_magra": "calorías de reposo estimadas con su masa magra del InBody (Katch-McArdle)",
+                "formula_mifflin": "calorías de reposo estimadas con la fórmula Mifflin-St Jeor",
+            }[supuestos["geb_fuente"]]
+            if supuestos["af_fuente"] == "wearable":
+                etiqueta_af = (
+                    f"+ {supuestos['af_kcal']:.0f} kcal de actividad medidas por su wearable (promedio del mes) "
+                    f"+ {supuestos['eta_kcal']:.0f} kcal de efecto térmico de los alimentos (~10% del GEB)"
+                )
+            else:
+                etiqueta_af = (
+                    f"x factor de actividad {supuestos['factor_actividad']} (sin wearable conectado -- "
+                    "según los días de entrenamiento planeados que capturaste en el perfil)"
+                )
             st.caption(
-                f"Sugerencia inicial de AURA -- muévela si quieres, es un punto de partida: BMR "
-                f"{macros_sugeridos['supuestos']['bmr_mifflin_st_jeor']:.0f} kcal x factor de actividad "
-                f"{macros_sugeridos['supuestos']['factor_actividad']} x ajuste por objetivo "
-                f"{macros_sugeridos['supuestos']['multiplicador_objetivo']}."
+                f"Sugerencia inicial de AURA -- muévela si quieres, es un punto de partida: "
+                f"{supuestos['geb_kcal']:.0f} kcal ({etiqueta_geb}) {etiqueta_af} = "
+                f"{supuestos['get_kcal']:.0f} kcal x ajuste por objetivo {supuestos['multiplicador_objetivo']}."
             )
             if macros_sugeridos["tope_renal_aplicado"]:
                 st.warning(
