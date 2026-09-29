@@ -1718,6 +1718,28 @@ def _render_analisis_ia(data: dict):
                 "kcal_objetivo": kcal_edit, "proteina_g_objetivo": proteina_edit,
                 "carbohidratos_g_objetivo": carbos_edit, "grasa_g_objetivo": grasa_edit,
             }
+
+            peso_kg_plan = macros_sugeridos["peso_kg"]
+            get_kcal_plan = supuestos["get_kcal"]
+            diferencia_vs_get = kcal_edit - get_kcal_plan
+            pct_vs_get = (diferencia_vs_get / get_kcal_plan * 100) if get_kcal_plan else 0
+            if pct_vs_get > 3:
+                etiqueta_balance = (
+                    f"superávit de {diferencia_vs_get:.0f} kcal ({pct_vs_get:.0f}%) vs. su gasto total "
+                    f"estimado ({get_kcal_plan:.0f} kcal)"
+                )
+            elif pct_vs_get < -3:
+                etiqueta_balance = (
+                    f"déficit de {abs(diferencia_vs_get):.0f} kcal ({abs(pct_vs_get):.0f}%) vs. su gasto total "
+                    f"estimado ({get_kcal_plan:.0f} kcal)"
+                )
+            else:
+                etiqueta_balance = f"prácticamente en mantenimiento (gasto total estimado: {get_kcal_plan:.0f} kcal)"
+            st.caption(
+                f"{proteina_edit / peso_kg_plan:.2f} g/kg proteína · {carbos_edit / peso_kg_plan:.2f} g/kg "
+                f"carbohidratos · {grasa_edit / peso_kg_plan:.2f} g/kg grasa -- {etiqueta_balance}."
+            )
+
             equivalentes_calc = equivalentes.calcular_equivalentes(macros_finales)
             with st.expander(":material/list_alt: Ver también en equivalentes (SMAE)"):
                 st.caption(

@@ -340,6 +340,7 @@ def sugerir_macros(
         "proteina_g_objetivo": round(proteina_g),
         "carbohidratos_g_objetivo": round(carbohidratos_g),
         "grasa_g_objetivo": round(grasa_g),
+        "peso_kg": peso,
         "cruces_a_considerar": _cruces_relevantes(paneles_cruces),
         "tope_renal_aplicado": tope_renal_aplicado,
         "supuestos": {
