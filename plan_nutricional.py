@@ -1,13 +1,25 @@
 """Sugiere macros de arranque (kcal/proteína/carbohidratos/grasa) para un
-paciente nuevo, usando la fórmula estándar Mifflin-St Jeor (peso, altura,
-edad, sexo del último InBody) x un factor de actividad (según los días
-de entrenamiento planeados) x un ajuste según el enfoque principal.
+paciente, usando la fórmula estándar Mifflin-St Jeor (peso, altura, edad,
+sexo del último InBody) x un factor de actividad (según los días de
+entrenamiento planeados) x un ajuste según el enfoque principal --
+DESPUÉS cruzado contra los 10 paneles de cruces_clinicos.py, que es el
+verdadero diferenciador de AURA: la fórmula no es la ley, es un punto de
+partida genérico que cualquier app de fitness calcula igual; el cruce
+clínico es lo que la ajusta a este paciente en concreto.
 
-Es un PUNTO DE PARTIDA, no una prescripción cerrada -- el nutriólogo
-ve estos números en campos editables y los puede mover antes de crear
-el plan (ver planes_store.py). No usa laboratorio ni cruces clínicos
-todavía; eso lo sigue leyendo el nutriólogo en el Resumen/Cruces antes
-de aprobar."""
+Dos formas en que los cruces entran aquí:
+
+1. Ajuste de seguridad automático (solo donde hay evidencia sólida y
+   establecida, no criterio clínico fino): si el panel de Carga Renal
+   está en "alerta", se topa la proteína a un nivel conservador --
+   recomendar proteína alta a alguien con función renal comprometida es
+   un riesgo real, no una preferencia de estilo.
+2. Todo lo demás (sensibilidad a la insulina, perfil lipídico,
+   inflamación, función hepática) se surge como "cruces a considerar"
+   junto a los macros -- el nutriólogo los ve ANTES de mover los
+   números, y decide él cómo ajustarlos. No se inventan más reglas
+   automáticas de ajuste de macros por cruce -- eso sí es criterio
+   clínico fino, y AURA apoya la lectura, no la reemplaza."""
 
 _FACTOR_ACTIVIDAD = [
     (0, 1.2),    # sedentario
@@ -26,6 +38,18 @@ _AJUSTE_POR_ENFOQUE = {
 }
 _AJUSTE_DEFAULT = (1.00, 1.6)
 
+# Prefijos de "titulo" (ver cruces_clinicos.py) de los paneles con relación
+# directa a nutrición/macros -- se muestran como contexto junto a la
+# sugerencia. Se dejan fuera los de entrenamiento/recuperación puros
+# (2, 8, 9, 10) porque no cambian directamente kcal/macros.
+_PANELES_NUTRICION_RELEVANTES = {"1.", "3.", "4.", "5.", "6.", "7."}
+
+# Tope conservador de proteína (g/kg) cuando el panel renal está en
+# "alerta" -- proteína alta con función renal comprometida es un riesgo
+# real establecido, no un ajuste fino de estilo. El nutriólogo/médico
+# tratante sigue siendo quien decide el valor final.
+_PROTEINA_TOPE_RENAL_G_KG = 1.0
+
 
 def _factor_actividad(dias_plan_mes: float | None) -> float:
     dias = dias_plan_mes or 0
@@ -38,11 +62,45 @@ def _factor_actividad(dias_plan_mes: float | None) -> float:
     return factor
 
 
-def sugerir_macros(inbody_ultimo: dict | None, enfoque: str | None, dias_plan_mes: float | None) -> dict | None:
+def _cruces_relevantes(paneles_cruces: list[dict] | None) -> list[dict]:
+    """Paneles nutricionalmente relevantes que están en "riesgo" o
+    "alerta" -- lo que el nutriólogo debe ver antes de fijar los macros,
+    no antes de que AURA los calcule por su cuenta."""
+    if not paneles_cruces:
+        return []
+    relevantes = []
+    for p in paneles_cruces:
+        titulo = p.get("titulo") or ""
+        if not any(titulo.startswith(pref) for pref in _PANELES_NUTRICION_RELEVANTES):
+            continue
+        resumen = p.get("resumen") or {}
+        if resumen.get("estado") in ("riesgo", "alerta"):
+            relevantes.append({"titulo": titulo, "estado": resumen["estado"], "hallazgo": resumen.get("hallazgo")})
+    return relevantes
+
+
+def _panel_renal_en_alerta(paneles_cruces: list[dict] | None) -> bool:
+    if not paneles_cruces:
+        return False
+    for p in paneles_cruces:
+        if (p.get("titulo") or "").startswith("5.") and (p.get("resumen") or {}).get("estado") == "alerta":
+            return True
+    return False
+
+
+def sugerir_macros(
+    inbody_ultimo: dict | None, enfoque: str | None, dias_plan_mes: float | None,
+    paneles_cruces: list[dict] | None = None,
+) -> dict | None:
     """inbody_ultimo: fila del último InBody (dict o pandas.Series) con
     "Peso_kg", "Altura_cm", "Edad", "Sexo". None si falta cualquiera de
     los 4 -- sin eso no se puede calcular Mifflin-St Jeor sin inventar,
-    y quien llama debe pedirle al nutriólogo que capture InBody primero."""
+    y quien llama debe pedirle al nutriólogo que capture InBody primero.
+
+    paneles_cruces: los 10 paneles ya calculados (ver
+    cruces_clinicos.calcular_paneles / _calcular_paneles_cruces en
+    dashboard_pacientes.py) -- opcional, si no se pasa simplemente no
+    hay ajuste de seguridad ni lista de "cruces a considerar"."""
     if inbody_ultimo is None:
         return None
     peso = inbody_ultimo.get("Peso_kg")
@@ -65,8 +123,13 @@ def sugerir_macros(inbody_ultimo: dict | None, enfoque: str | None, dias_plan_me
     tdee = bmr * factor_actividad
 
     mult_objetivo, proteina_g_kg = _AJUSTE_POR_ENFOQUE.get(enfoque or "", _AJUSTE_DEFAULT)
-    kcal_objetivo = tdee * mult_objetivo
 
+    tope_renal_aplicado = False
+    if _panel_renal_en_alerta(paneles_cruces) and proteina_g_kg > _PROTEINA_TOPE_RENAL_G_KG:
+        proteina_g_kg = _PROTEINA_TOPE_RENAL_G_KG
+        tope_renal_aplicado = True
+
+    kcal_objetivo = tdee * mult_objetivo
     proteina_g = peso * proteina_g_kg
     grasa_g = (kcal_objetivo * 0.25) / 9
     carbohidratos_g = max(0.0, (kcal_objetivo - proteina_g * 4 - grasa_g * 9) / 4)
@@ -76,6 +139,8 @@ def sugerir_macros(inbody_ultimo: dict | None, enfoque: str | None, dias_plan_me
         "proteina_g_objetivo": round(proteina_g),
         "carbohidratos_g_objetivo": round(carbohidratos_g),
         "grasa_g_objetivo": round(grasa_g),
+        "cruces_a_considerar": _cruces_relevantes(paneles_cruces),
+        "tope_renal_aplicado": tope_renal_aplicado,
         "supuestos": {
             "bmr_mifflin_st_jeor": round(bmr),
             "factor_actividad": factor_actividad,

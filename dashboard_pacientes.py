@@ -1613,7 +1613,7 @@ def _render_analisis_ia(data: dict):
     with st.expander("Crear un plan nuevo"):
         ultimo_inbody_plan = inbody_ultimo_registro(historial_inbody)
         macros_sugeridos = plan_nutricional.sugerir_macros(
-            ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"],
+            ultimo_inbody_plan, enfoque_actual, perfil_actual["dias_plan_mes"], paneles_cruces,
         )
         if macros_sugeridos is None:
             st.info(
@@ -1627,6 +1627,18 @@ def _render_analisis_ia(data: dict):
                 f"{macros_sugeridos['supuestos']['factor_actividad']} x ajuste por objetivo "
                 f"{macros_sugeridos['supuestos']['multiplicador_objetivo']}."
             )
+            if macros_sugeridos["tope_renal_aplicado"]:
+                st.warning(
+                    ":material/priority_high: El panel de Carga Renal está en alerta -- se topó la "
+                    f"proteína sugerida a {macros_sugeridos['supuestos']['proteina_g_por_kg']:.1f} g/kg "
+                    "por seguridad. Confirma el valor final con criterio clínico/médico antes de aprobar.",
+                )
+            cruces_a_considerar = macros_sugeridos["cruces_a_considerar"]
+            if cruces_a_considerar:
+                st.markdown("**Cruces clínicos a considerar antes de fijar los macros:**")
+                for c in cruces_a_considerar:
+                    icono = ":material/error:" if c["estado"] == "alerta" else ":material/warning:"
+                    st.caption(f"{icono} {c['titulo']} -- {c['hallazgo']}")
             mk1, mk2, mk3, mk4 = st.columns(4)
             kcal_edit = mk1.number_input(
                 "Kcal objetivo", value=float(macros_sugeridos["kcal_objetivo"]), step=10.0, key=f"plan_kcal_{paciente}",
