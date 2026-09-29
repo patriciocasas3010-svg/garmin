@@ -132,7 +132,12 @@ CREATE TABLE IF NOT EXISTS usuarios (
     password_hash TEXT,
     salt TEXT,
     rol TEXT,
-    fecha TEXT
+    fecha TEXT,
+    -- Tope de análisis con IA al mes para este nutriólogo -- NULL usa el
+    -- default global (ver analisis_ia_store.LIMITE_DEFAULT). Claude lo
+    -- paga AURA de forma centralizada, así que cada usuario tiene un
+    -- número definido de interacciones, no acceso ilimitado.
+    limite_analisis_mes INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
@@ -212,6 +217,20 @@ CREATE TABLE IF NOT EXISTS recomendaciones_generadas (
     fecha_revision TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS recomendaciones_nombre_idx ON recomendaciones_generadas (nombre);
+
+-- Cuota de análisis con IA por nutriólogo -- un renglón por cada vez que
+-- alguien le da clic a "Generar análisis" (ver analisis_ia_store.py).
+-- Sirve para contar cuántos lleva cada quien este mes y frenarlo si pasa
+-- su límite (usuarios.limite_analisis_mes) -- Claude lo paga AURA de
+-- forma centralizada, no cada nutriólogo, así que el control de gasto
+-- tiene que vivir aquí.
+CREATE TABLE IF NOT EXISTS uso_analisis_ia (
+    id BIGSERIAL PRIMARY KEY,
+    usuario TEXT NOT NULL,
+    paciente TEXT NOT NULL,
+    fecha TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS uso_analisis_ia_usuario_idx ON uso_analisis_ia (usuario);
 
 -- AURA Recipes -- capa de EJECUCIÓN, no la biblioteca de 30,000 recetas
 -- de un competidor: arranca chica (100-300 recetas reales, revisadas por

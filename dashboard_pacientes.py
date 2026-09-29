@@ -28,6 +28,7 @@ import pandas as pd
 import streamlit as st
 
 import ai_analisis
+import analisis_ia_store
 import antropometria_parser
 import antropometria_store
 import apple_health
@@ -50,6 +51,7 @@ import notas_store
 import oura_metrics as om
 import oura_store
 import paciente_admin
+import recetas_store
 import resumen_store
 import token_store
 import usuarios_store
@@ -1520,10 +1522,13 @@ def _render_analisis_ia(data: dict):
     )
 
     paneles_cruces = _calcular_paneles_cruces(data)
+    recetas_disponibles = recetas_store.buscar_compatibles(
+        _engine(), enfoque_actual, perfil_actual["condicion_metabolica"], perfil_actual["glp1_molecula"],
+    )
 
     mensaje_para_pegar = ai_analisis.armar_mensaje_para_pegar(
         paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual, historial_estudios,
-        paneles_cruces,
+        paneles_cruces, recetas_disponibles,
     )
     col_pegar, col_todo = st.columns(2)
     with col_pegar:
@@ -1556,13 +1561,27 @@ def _render_analisis_ia(data: dict):
 
     with st.expander("O generar automático aquí mismo (tiene un costo mínimo de API)"):
         cache_key = f"analisis_ia_{paciente}"
-        if st.button("Generar análisis", key=f"generar_ia_{paciente}"):
+        if _ES_ADMIN:
+            puede_generar, usados, limite = True, 0, None
+        else:
+            puede_generar, usados, limite = analisis_ia_store.puede_generar(_engine(), usuario_actual["usuario"])
+        if limite is not None:
+            st.caption(f":material/analytics: Llevas {usados} de {limite} análisis este mes.")
+        if not puede_generar:
+            st.warning(
+                f"Ya usaste tus {limite} análisis con IA de este mes -- vuelve a estar disponible el "
+                "mes que entra. Mientras tanto, puedes usar el botón gratis de arriba (descargar y "
+                "pegar en Claude directo, sin costo ni límite)."
+            )
+        elif st.button("Generar análisis", key=f"generar_ia_{paciente}"):
             with st.spinner("Cruzando los datos del paciente..."):
                 try:
                     st.session_state[cache_key] = ai_analisis.generar_analisis(
                         paciente, data, historial_inbody, historial_antro, historial_notas, enfoque_actual,
-                        historial_estudios, paneles_cruces,
+                        historial_estudios, paneles_cruces, recetas_disponibles,
                     )
+                    if not _ES_ADMIN:
+                        analisis_ia_store.registrar_uso(_engine(), usuario_actual["usuario"], paciente)
                 except Exception as e:
                     st.error(f"No se pudo generar el análisis: {e}")
         texto = st.session_state.get(cache_key)

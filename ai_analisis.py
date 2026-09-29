@@ -172,6 +172,21 @@ def _resumen_enfoque(enfoque: str | None) -> str:
     return enfoque or "Sin enfoque principal declarado -- trátalo como un caso general."
 
 
+def _resumen_recetas_disponibles(recetas: list[dict] | None) -> str:
+    """Recetas de la biblioteca de AURA (recetas_store.buscar_compatibles())
+    ya filtradas para el perfil de este paciente -- si viene vacía (la
+    biblioteca todavía no tiene nada que aplique, o está vacía) se dice
+    tal cual, para que el system prompt sepa que le toca usar su propio
+    criterio en vez de inventar que sí hay opciones."""
+    if not recetas:
+        return "Sin recetas de la biblioteca de AURA disponibles todavía para este perfil."
+    lineas = []
+    for r in recetas:
+        macros = f"{_fmt(r.get('kcal'), ' kcal', 0)}, proteína {_fmt(r.get('proteina_g'), ' g', 0)}"
+        lineas.append(f"- {r.get('nombre')} ({r.get('tipo_comida') or 'sin tipo'}): {macros}")
+    return "\n".join(lineas)
+
+
 def _resumen_notas(historial: pd.DataFrame | None) -> str:
     """Historial de observaciones que el nutriólogo fue guardando sobre
     este paciente (gustos, lesiones, adherencia al plan, etc.) -- ver
@@ -215,6 +230,10 @@ ajuste por una lesión, objetivo de composición corporal) -- la dirección clí
 ni calorías/macros exactos) que le sirvan al nutriólogo como punto de partida al armar el plan en \
 Avena -- qué tipo de comida, en qué momento (ej. antes/después de entrenar, antes de dormir) y por \
 qué, siempre coherente con los gustos, disgustos y contexto de las notas del paciente.
+- Si la sección "Recetas de la biblioteca de AURA" trae opciones, PRIMERO elige y adapta de esas \
+(son recetas ya revisadas por un nutriólogo) -- menciónalas por nombre. Solo complementa con tus \
+propias ideas si la biblioteca no tiene nada que aplique bien a este paciente, y en ese caso dilo \
+explícito (ej. "la biblioteca todavía no tiene una opción para esto, te propongo:").
 
 **Recomendaciones para el paciente:**
 - 4 a 6 bullets, en lenguaje sencillo y accionable (no técnico), que el paciente se pueda llevar a \
@@ -248,7 +267,7 @@ actividad" como si nada."""
 
 def _armar_contexto(
     paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None, recetas_disponibles=None,
 ) -> str:
     return (
         f"Paciente: {paciente_nombre}\n\n"
@@ -258,6 +277,7 @@ def _armar_contexto(
         f"--- Estudios clínicos de laboratorio ---\n{_resumen_estudios(estudios_historial)}\n\n"
         f"--- Wearable (últimos {(data or {}).get('wellness_days', 30)} días) ---\n{_resumen_wearable(data)}\n\n"
         f"--- Cruces clínicos (10 paneles: labs + InBody + wearable) ---\n{_resumen_cruces(paneles_cruces)}\n\n"
+        f"--- Recetas de la biblioteca de AURA compatibles con este perfil ---\n{_resumen_recetas_disponibles(recetas_disponibles)}\n\n"
         f"--- Notas del nutriólogo (historial, la más reciente al final) ---\n{_resumen_notas(notas_historial)}"
     )
 
@@ -273,7 +293,7 @@ _NOTAS_PLACEHOLDER = (
 
 def armar_mensaje_para_pegar(
     paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None, recetas_disponibles=None,
 ) -> str:
     """Mismo contenido que se le manda a la API, pero como un solo texto
     listo para pegar directo en una conversación normal de Claude (la app
@@ -284,7 +304,7 @@ def armar_mensaje_para_pegar(
     escribir ningún prompt aparte."""
     contexto = _armar_contexto(
         paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque, estudios_historial,
-        paneles_cruces,
+        paneles_cruces, recetas_disponibles,
     )
     return f"{_SYSTEM_PROMPT}\n\n---\n\n{contexto}{_NOTAS_PLACEHOLDER}"
 
@@ -411,7 +431,7 @@ def armar_exportacion_completa(
 
 def generar_analisis(
     paciente_nombre: str, data: dict | None, inbody_historial, antro_historial, notas_historial=None,
-    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None,
+    enfoque: str | None = None, estudios_historial=None, paneles_cruces=None, recetas_disponibles=None,
 ) -> str:
     """Arma el contexto del paciente y le pide a Claude una lectura rápida +
     recomendaciones vía la API (tiene costo, requiere el Secret
@@ -431,7 +451,7 @@ def generar_analisis(
 
     contexto = _armar_contexto(
         paciente_nombre, data, inbody_historial, antro_historial, notas_historial, enfoque, estudios_historial,
-        paneles_cruces,
+        paneles_cruces, recetas_disponibles,
     )
 
     client = anthropic.Anthropic(api_key=api_key)
