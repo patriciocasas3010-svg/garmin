@@ -54,7 +54,7 @@ def buscar_compatibles(
     with engine.connect() as conn:
         filas = conn.execute(
             sqlalchemy.text("""
-                SELECT nombre, ingredientes, kcal, proteina_g, carbohidratos_g, grasa_g, tipo_comida,
+                SELECT id, nombre, ingredientes, kcal, proteina_g, carbohidratos_g, grasa_g, tipo_comida,
                        cocina, tags_clinicos, tags_deportivos, tags_conductuales, tags_culturales, sustituciones
                 FROM recetas
                 WHERE estado = 'aprobada'
@@ -64,7 +64,7 @@ def buscar_compatibles(
             {"tags": tags, "limit": limit},
         ).all()
     columnas = [
-        "nombre", "ingredientes", "kcal", "proteina_g", "carbohidratos_g", "grasa_g", "tipo_comida",
+        "id", "nombre", "ingredientes", "kcal", "proteina_g", "carbohidratos_g", "grasa_g", "tipo_comida",
         "cocina", "tags_clinicos", "tags_deportivos", "tags_conductuales", "tags_culturales", "sustituciones",
     ]
     return [dict(zip(columnas, fila)) for fila in filas]

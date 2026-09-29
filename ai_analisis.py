@@ -240,6 +240,10 @@ explícito (ej. "la biblioteca todavía no tiene una opción para esto, te propo
 su casa. Cada bullet debe ser concreto (qué hacer, no solo "mejorar el sueño").
 
 Reglas:
+- Esto lo lee el nutriólogo, no el paciente directamente (aunque la sección "Recomendaciones para el \
+paciente" esté pensada para que se la pase tal cual). Habla del paciente en tercera persona (ej. \
+"Juan mantiene una tendencia..."), nunca en segunda persona como si le hablaras a él directo (nunca \
+"mantienes una tendencia..."). Usa su nombre o "el paciente", no "tú".
 - Si un dato viene como "sin dato", no lo menciones ni inventes un valor -- trabaja con lo que sí hay.
 - Los estudios de laboratorio son para orientar el enfoque nutriológico y las ideas de alimentos \
 (ej. triglicéridos altos -> menos azúcares simples y grasas saturadas; glucosa alta -> cuidar \

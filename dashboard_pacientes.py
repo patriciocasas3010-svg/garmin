@@ -51,6 +51,8 @@ import notas_store
 import oura_metrics as om
 import oura_store
 import paciente_admin
+import plan_nutricional
+import planes_store
 import recetas_store
 import resumen_store
 import token_store
@@ -1587,6 +1589,79 @@ def _render_analisis_ia(data: dict):
         texto = st.session_state.get(cache_key)
         if texto:
             st.markdown(texto)
+
+    st.divider()
+    st.subheader(":material/restaurant_menu: Crear plan")
+
+    plan_existente = planes_store.leer_ultimo_plan(_engine(), paciente)
+    if plan_existente:
+        etiqueta_estado = "✅ Aprobado" if plan_existente["estado"] == "aprobado" else "📝 Borrador (pendiente de aprobar)"
+        st.caption(
+            f"Último plan ({plan_existente['fecha']}): {etiqueta_estado} -- "
+            f"{plan_existente['kcal_objetivo']:.0f} kcal, {plan_existente['proteina_g_objetivo']:.0f}g proteína, "
+            f"{plan_existente['carbohidratos_g_objetivo']:.0f}g carbohidratos, {plan_existente['grasa_g_objetivo']:.0f}g grasa."
+        )
+        if plan_existente["recetas"]:
+            st.caption("Recetas incluidas: " + ", ".join(r["nombre"] for r in plan_existente["recetas"]))
+        if plan_existente["estado"] == "borrador":
+            if st.button(":material/check_circle: Aprobar este plan", key=f"aprobar_plan_{paciente}"):
+                planes_store.aprobar_plan(_engine(), plan_existente["id"], usuario_actual["usuario"])
+                st.cache_data.clear()
+                st.success("Plan aprobado.")
+                st.rerun()
+
+    with st.expander("Crear un plan nuevo"):
+        macros_sugeridos = plan_nutricional.sugerir_macros(
+            ultimo_inbody, enfoque_actual, perfil_actual["dias_plan_mes"],
+        )
+        if macros_sugeridos is None:
+            st.info(
+                "Captura el InBody de este paciente (peso, altura, edad, sexo) en la pestaña de "
+                "Composición corporal para que AURA pueda sugerir macros de arranque."
+            )
+        else:
+            st.caption(
+                f"Sugerencia inicial de AURA -- muévela si quieres, es un punto de partida: BMR "
+                f"{macros_sugeridos['supuestos']['bmr_mifflin_st_jeor']:.0f} kcal x factor de actividad "
+                f"{macros_sugeridos['supuestos']['factor_actividad']} x ajuste por objetivo "
+                f"{macros_sugeridos['supuestos']['multiplicador_objetivo']}."
+            )
+            mk1, mk2, mk3, mk4 = st.columns(4)
+            kcal_edit = mk1.number_input(
+                "Kcal objetivo", value=float(macros_sugeridos["kcal_objetivo"]), step=10.0, key=f"plan_kcal_{paciente}",
+            )
+            proteina_edit = mk2.number_input(
+                "Proteína (g)", value=float(macros_sugeridos["proteina_g_objetivo"]), step=5.0, key=f"plan_prot_{paciente}",
+            )
+            carbos_edit = mk3.number_input(
+                "Carbohidratos (g)", value=float(macros_sugeridos["carbohidratos_g_objetivo"]), step=5.0, key=f"plan_carb_{paciente}",
+            )
+            grasa_edit = mk4.number_input(
+                "Grasa (g)", value=float(macros_sugeridos["grasa_g_objetivo"]), step=5.0, key=f"plan_gras_{paciente}",
+            )
+
+            if recetas_disponibles:
+                st.caption(f"Recetas de la biblioteca que aplican a este perfil: {len(recetas_disponibles)}.")
+            else:
+                st.caption(
+                    "La biblioteca todavía no tiene recetas para este perfil -- el plan se crea solo con "
+                    "los macros, sin recetas asignadas (agrégalas después conforme se carguen recetas)."
+                )
+
+            if st.button(":material/restaurant_menu: Crear plan con estos macros", key=f"crear_plan_{paciente}"):
+                macros_finales = {
+                    "kcal_objetivo": kcal_edit, "proteina_g_objetivo": proteina_edit,
+                    "carbohidratos_g_objetivo": carbos_edit, "grasa_g_objetivo": grasa_edit,
+                }
+                receta_ids = [r["id"] for r in (recetas_disponibles or [])]
+                plan_id = planes_store.crear_borrador(
+                    _engine(), paciente, macros_finales, receta_ids,
+                    notas="Plan creado desde el dashboard con macros sugeridos por AURA.",
+                    creado_por=usuario_actual["usuario"],
+                )
+                st.cache_data.clear()
+                st.success(f"Plan #{plan_id} creado como borrador -- revísalo arriba y dale \"Aprobar\" cuando esté listo.")
+                st.rerun()
 
 
 def _placeholder_requiere_wearable(titulo: str, descripcion: str) -> None:

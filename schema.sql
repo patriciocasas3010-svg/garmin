@@ -269,9 +269,31 @@ CREATE INDEX IF NOT EXISTS recetas_tags_clinicos_idx ON recetas USING GIN (tags_
 CREATE INDEX IF NOT EXISTS recetas_tags_culturales_idx ON recetas USING GIN (tags_culturales);
 CREATE INDEX IF NOT EXISTS recetas_tags_conductuales_idx ON recetas USING GIN (tags_conductuales);
 
+-- El plan en sí: macros objetivo (sugeridos por plan_nutricional.py,
+-- editables por el nutriólogo antes de crear el plan) + estado de
+-- aprobación. Nunca sale a un paciente en "borrador" -- necesita que el
+-- nutriólogo le dé "Aprobar" explícitamente (ver planes_store.py).
+CREATE TABLE IF NOT EXISTS planes_nutricionales (
+    id BIGSERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    fecha TIMESTAMPTZ DEFAULT now(),
+    kcal_objetivo NUMERIC,
+    proteina_g_objetivo NUMERIC,
+    carbohidratos_g_objetivo NUMERIC,
+    grasa_g_objetivo NUMERIC,
+    notas TEXT,
+    estado TEXT DEFAULT 'borrador',
+    creado_por TEXT,
+    aprobado_por TEXT,
+    fecha_aprobacion TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS planes_nutricionales_nombre_idx ON planes_nutricionales (nombre);
+
 -- Qué receta se le asignó a qué paciente y por qué (liga a la
 -- recomendación que la sugirió cuando aplica -- puede ser NULL si el
 -- nutriólogo la agregó a mano, sin pasar por una recomendación de AURA).
+-- plan_id liga esta fila al plan completo (planes_nutricionales) del que
+-- forma parte -- NULL para recetas sueltas asignadas fuera de un plan.
 CREATE TABLE IF NOT EXISTS plan_recetas (
     id BIGSERIAL PRIMARY KEY,
     nombre TEXT NOT NULL,
@@ -279,9 +301,11 @@ CREATE TABLE IF NOT EXISTS plan_recetas (
     fecha_asignada TIMESTAMPTZ DEFAULT now(),
     tipo_comida TEXT,
     recomendacion_id BIGINT REFERENCES recomendaciones_generadas(id),
+    plan_id BIGINT REFERENCES planes_nutricionales(id),
     activa BOOLEAN DEFAULT true
 );
 CREATE INDEX IF NOT EXISTS plan_recetas_nombre_idx ON plan_recetas (nombre);
+CREATE INDEX IF NOT EXISTS plan_recetas_plan_id_idx ON plan_recetas (plan_id);
 
 -- El otro lado del loop: lo que el paciente reporta haber comido (foto o
 -- captura manual), cruzado contra lo que el plan le asignó ese tipo de
