@@ -205,6 +205,59 @@ def _panel_renal_en_alerta(paneles_cruces: list[dict] | None) -> bool:
     return False
 
 
+def comparar_formulas_geb(inbody_ultimo: dict | None, resumen_mes: dict | None = None) -> list[dict] | None:
+    """Calorías de reposo (GEB) según cada fórmula clásica (Mifflin,
+    Harris-Benedict, FAO/OMS/ONU, Katch-McArdle si hay masa grasa) más lo
+    que mide el wearable si hay uno conectado -- para que el nutriólogo
+    vea la comparativa completa en vez de confiar a ciegas en el número
+    que AURA ya eligió. None si falta InBody básico (mismo requisito que
+    sugerir_macros).
+
+    Ninguna fórmula "le atina" a la calorimetría indirecta real de una
+    persona -- son ecuaciones ajustadas a un promedio de población, con
+    +-10-15% de margen de error incluso en el mejor caso. Por eso AURA
+    prioriza lo que se mide (wearable) sobre lo que se estima (fórmula)
+    cuando hay wearable conectado -- pero la comparativa deja ver qué tan
+    cerca o lejos está cada fórmula clásica de ese dato medido, para que
+    el nutriólogo decida con el panorama completo, no a ciegas."""
+    if inbody_ultimo is None:
+        return None
+    peso = inbody_ultimo.get("Peso_kg")
+    altura = inbody_ultimo.get("Altura_cm")
+    edad = inbody_ultimo.get("Edad")
+    sexo = inbody_ultimo.get("Sexo")
+    if peso is None or altura is None or edad is None or not sexo:
+        return None
+    try:
+        peso, altura, edad = float(peso), float(altura), float(edad)
+    except (TypeError, ValueError):
+        return None
+    masa_grasa = inbody_ultimo.get("MasaGrasa_kg")
+    try:
+        masa_grasa = float(masa_grasa) if masa_grasa is not None else None
+    except (TypeError, ValueError):
+        masa_grasa = None
+
+    _, fuente_automatica = _geb_kcal(peso, altura, edad, sexo, masa_grasa, resumen_mes)
+
+    filas = []
+    resting_wearable = (resumen_mes or {}).get("resting_kcal_avg")
+    if resting_wearable:
+        filas.append({
+            "clave": "wearable", "etiqueta": "Medido por el wearable (promedio del mes)",
+            "geb_kcal": round(float(resting_wearable)), "es_lo_que_aura_propone": fuente_automatica == "wearable",
+        })
+    for clave, etiqueta in OPCIONES_FORMULA_GEB:
+        geb = _FORMULAS_GEB[clave](peso, altura, edad, sexo, masa_grasa)
+        if geb is None:  # ej. Katch-McArdle sin masa grasa en el InBody
+            continue
+        filas.append({
+            "clave": clave, "etiqueta": etiqueta, "geb_kcal": round(geb),
+            "es_lo_que_aura_propone": fuente_automatica == clave,
+        })
+    return filas
+
+
 def sugerir_macros(
     inbody_ultimo: dict | None, enfoque: str | None, dias_plan_mes: float | None,
     paneles_cruces: list[dict] | None = None, resumen_mes: dict | None = None,

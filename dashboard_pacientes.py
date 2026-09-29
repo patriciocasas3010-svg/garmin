@@ -1667,6 +1667,28 @@ def _render_analisis_ia(data: dict):
             )
             if supuestos.get("geb_aviso"):
                 st.info(f":material/info: {supuestos['geb_aviso']}")
+
+            comparativa_geb = plan_nutricional.comparar_formulas_geb(ultimo_inbody_plan, resumen_mes_plan)
+            with st.expander(":material/balance: Ver comparativa de fórmulas de calorías de reposo"):
+                st.caption(
+                    "Ninguna fórmula le atina a la calorimetría real de una persona -- son ecuaciones "
+                    "ajustadas a un promedio de población, con +-10-15% de margen de error incluso en el "
+                    "mejor caso. Por eso AURA prioriza lo que se MIDE (wearable) sobre lo que se ESTIMA "
+                    "(cualquier fórmula) cuando hay wearable conectado -- esta tabla es para que veas qué "
+                    "tan cerca o lejos está cada fórmula clásica de lo que AURA está proponiendo, no para "
+                    "reemplazar tu criterio."
+                )
+                tabla_geb = pd.DataFrame([
+                    {
+                        "Fórmula": f["etiqueta"],
+                        "Kcal de reposo": f["geb_kcal"],
+                        "vs. lo que AURA propone": "Es esto" if f["es_lo_que_aura_propone"]
+                        else f"{f['geb_kcal'] - supuestos['geb_kcal']:+d} kcal",
+                    }
+                    for f in (comparativa_geb or [])
+                ])
+                st.dataframe(tabla_geb, hide_index=True, use_container_width=True)
+
             if macros_sugeridos["tope_renal_aplicado"]:
                 st.warning(
                     ":material/priority_high: El panel de Carga Renal está en alerta -- se topó la "
