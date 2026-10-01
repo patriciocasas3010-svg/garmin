@@ -10,7 +10,7 @@ funciona con los laboratorios que ya se agregaron aquí -- si llega un
 PDF de un laboratorio nuevo, hay que mandarlo para agregar su lector.
 
 Laboratorios soportados: SYNLAB/MédicaSur, Chopo (Grupo Diagnóstico
-Médico PROA), Laboratorio Clínico RIO. El estado (bajo/normal/alto) no
+Médico PROA), Salud Digna, Laboratorio Clínico RIO. El estado (bajo/normal/alto) no
 se lee de ningún ícono o columna de color del PDF -- se calcula
 comparando el resultado contra el rango de referencia impreso, que es
 lo mismo que hace el laboratorio para poner su propio ícono, así que da
@@ -47,10 +47,10 @@ def _parsear_rango(rango: str | None) -> tuple[float | None, float | None]:
     m = re.match(r"^(-?\d+(?:[.,]\d+)?)\s*[-–]\s*(-?\d+(?:[.,]\d+)?)$", rango)
     if m:
         return _a_float(m.group(1)), _a_float(m.group(2))
-    if rango.startswith(">="):
-        return _a_float(rango[2:]), None
-    if rango.startswith("<="):
-        return None, _a_float(rango[2:])
+    if rango.startswith((">=", "≥")):
+        return _a_float(rango[2:] if rango.startswith(">=") else rango[1:]), None
+    if rango.startswith(("<=", "≤")):
+        return None, _a_float(rango[2:] if rango.startswith("<=") else rango[1:])
     if rango.startswith(">"):
         return _a_float(rango[1:]), None
     if rango.startswith("<"):
@@ -178,6 +178,77 @@ def _fecha_chopo(texto: str) -> str | None:
         texto,
         r"Fecha de toma:\s*(\d{1,2}/\d{1,2}/\d{4})",
         r"Fecha de Registro:\s*(\d{1,2}/\d{1,2}/\d{4})",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Salud Digna
+# ---------------------------------------------------------------------------
+#
+# Cada prueba viene en un solo renglón "Nombre  valor [*]  unidad  rango",
+# pero a diferencia de Chopo/SYNLAB el espacio entre el nombre y el valor NO
+# siempre es de 2+ (un nombre largo, como "TSH (HORMONA ESTIMULANTE DE LA
+# TIROIDES)", empuja el valor hasta quedar pegado con solo 1 espacio) -- por
+# eso aquí el corte nombre/valor solo exige 1+ espacio, y lo que sí se exige
+# en 2+ es el espacio ANTES de "unidad + rango" (esa columna nunca se corre).
+# El rango se extrae anclado al final del renglón (regex con $) en vez de
+# separarlo del lado izquierdo -- así "unidad" puede traer sus propios
+# espacios internos (p. ej. "µg / L", "ng / ml") sin romper el corte.
+_FILA_SALUD_DIGNA_RE = re.compile(
+    r"^[ ]*[+]?[ ]*(?P<nombre>\S.*?)[ ]+"
+    r"(?P<valor>[<>≤≥]?[ ]*-?\d+(?:[.,]\d+)?)[ ]*(?P<alerta>\*{1,2})?[ ]{2,}"
+    r"(?P<resto>\S.*\S)[ ]*$"
+)
+_RANGO_FINAL_SALUD_DIGNA_RE = re.compile(
+    r"(?P<rango>[<>≤≥]?[ ]*-?\d+(?:[.,]\d+)?(?:[ ]*[-–][ ]*-?\d+(?:[.,]\d+)?)?)[ ]*$"
+)
+
+
+def _es_salud_digna(texto: str) -> bool:
+    # No todos los reportes de este laboratorio imprimen literalmente "Salud
+    # Digna" (algunos solo dicen "Centro Analítico Mariano Otero", el mismo
+    # centro acreditado con el mismo número "CL-251") -- se detecta por
+    # cualquiera de las dos señales, probado contra 2 reportes reales.
+    low = texto.lower()
+    return "salud digna" in low or "centro analítico mariano otero" in low
+
+
+def _parse_salud_digna(texto: str) -> list[dict]:
+    # Cuando el paciente ya tiene estudios previos, el PDF agrega al final
+    # una hoja de "resumen comparativo" con los mismos nombres de prueba
+    # pero de OTRAS fechas (visitas anteriores) en columnas aparte -- nada
+    # de eso es el resultado de ESTE estudio, así que se corta el texto
+    # ahí mismo antes de buscar filas (si no, esos valores viejos se cuelan
+    # como si fueran el resultado actual).
+    corte = re.search(r"resumen comparativo", texto, re.IGNORECASE)
+    if corte:
+        texto = texto[:corte.start()]
+
+    filas = []
+    for linea in texto.splitlines():
+        if "Reimpresión de resultados" in linea:
+            continue
+        m = _FILA_SALUD_DIGNA_RE.match(linea)
+        if not m:
+            continue
+        nombre = m.group("nombre").strip()
+        if len(nombre) < 3 or nombre.endswith(":"):
+            continue
+        resto = m.group("resto").strip()
+        m2 = _RANGO_FINAL_SALUD_DIGNA_RE.search(resto)
+        if m2:
+            rango, unidad = m2.group("rango").strip(), resto[:m2.start()].strip() or None
+        else:
+            rango, unidad = None, resto or None
+        filas.append(_fila(nombre, m.group("valor"), unidad, rango))
+    return filas
+
+
+def _fecha_salud_digna(texto: str) -> str | None:
+    return _fecha_normalizada(
+        texto,
+        r"Fecha de Toma:\s*(\d{1,2}/\d{1,2}/\d{4})",
+        r"Fecha de Validaci[oó]n:\s*(\d{1,2}/\d{1,2}/\d{4})",
     )
 
 
@@ -389,6 +460,7 @@ def _fecha_rio(texto: str) -> str | None:
 _LABORATORIOS = [
     ("SYNLAB/MédicaSur", _es_synlab, _parse_synlab, _fecha_synlab),
     ("Chopo", _es_chopo, _parse_chopo, _fecha_chopo),
+    ("Salud Digna", _es_salud_digna, _parse_salud_digna, _fecha_salud_digna),
     ("Laboratorio Clínico RIO", _es_rio, _parse_rio, _fecha_rio),
 ]
 
@@ -412,5 +484,5 @@ def extraer_estudio(pdf_bytes: bytes) -> dict:
 
     raise RuntimeError(
         "Este PDF no es de ningún laboratorio que ya sepamos leer (por ahora: SYNLAB/MédicaSur, "
-        "Chopo). Mándalo para agregar su formato."
+        "Chopo, Salud Digna, Laboratorio Clínico RIO). Mándalo para agregar su formato."
     )

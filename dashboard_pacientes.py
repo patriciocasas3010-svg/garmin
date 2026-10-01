@@ -1097,8 +1097,9 @@ def _render_estudios_clinicos():
     """Estudios clínicos (sangre, orina, etc.) -- sección propia,
     independiente de Composición corporal."""
     st.caption(
-        "Sube el PDF del laboratorio -- por ahora lee automático SYNLAB/MédicaSur y Chopo (los más "
-        "comunes). Si llega uno de otro laboratorio, avisa para agregarlo. Es gratis, no usa ninguna API de pago."
+        "Sube el PDF del laboratorio -- por ahora lee automático SYNLAB/MédicaSur, Chopo, Salud Digna y "
+        "Laboratorio Clínico RIO. Si llega uno de otro laboratorio, avisa para agregarlo. Es gratis, no usa "
+        "ninguna API de pago."
     )
 
     with st.expander("Subir nuevo estudio"):
