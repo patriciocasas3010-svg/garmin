@@ -1356,6 +1356,21 @@ def _render_cruces_clinicos(data: dict | None):
         _mostrar_referencia_cruces()
 
 
+# Campos del borrador de OCR (inbody_ocr.parse_inbody_text) donde un
+# None real de verdad importa -- un valor de 0 es físicamente imposible
+# para todos estos (nadie pesa 0kg ni tiene 0% de grasa), así que la
+# ausencia nunca debe confundirse con "la lectura dio 0". "fecha"/"sexo"
+# entran también porque sin eso ni siquiera se puede calcular el
+# resumen de Composición corporal/Resumen o los macros sugeridos.
+_CAMPOS_INBODY_OCR = {
+    "fecha": "Fecha", "sexo": "Sexo", "altura_cm": "Altura", "edad": "Edad",
+    "peso_kg": "Peso", "masa_grasa_kg": "Masa grasa", "mme_kg": "MME (masa muscular)",
+    "grasa_visceral": "Grasa visceral", "agua_total_l": "Agua total",
+    "agua_intra_l": "Agua intracelular", "agua_extra_l": "Agua extracelular",
+    "imc": "IMC", "pgc_pct": "PGC (% de grasa)", "bmr_kcal": "BMR",
+}
+
+
 def _render_composicion_corporal(data: dict | None):
     """InBody + mediciones antropométricas de este paciente -- se llama ya
     sea dentro de la pestaña "Composición corporal" del dashboard completo
@@ -1386,6 +1401,14 @@ def _render_composicion_corporal(data: dict | None):
                 "La lectura automática puede tener errores, sobre todo en números (a veces se pierde "
                 "un punto decimal, por ejemplo). Revisa y corrige antes de guardar."
             )
+            campos_sin_leer = [etiqueta for campo, etiqueta in _CAMPOS_INBODY_OCR.items() if draft.get(campo) is None]
+            if campos_sin_leer:
+                st.warning(
+                    f":material/priority_high: La lectura automática NO pudo leer: {', '.join(campos_sin_leer)}. "
+                    "Abajo aparecen en 0 (o vacío) -- eso NO significa que el valor real sea 0, es que no se "
+                    "encontró nada. Revisa la foto/PDF original y complétalos a mano antes de guardar, o ese "
+                    "campo se va a guardar vacío y no va a aparecer en Resumen ni en las gráficas."
+                )
             with st.form(f"inbody_form_{paciente}"):
                 col1, col2, col3 = st.columns(3)
                 fecha = col1.text_input("Fecha (DD.MM.AAAA)", value=draft.get("fecha") or "")
@@ -1429,6 +1452,16 @@ def _render_composicion_corporal(data: dict | None):
                     st.cache_data.clear()
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
+
+    if historial_inbody is not None and not historial_inbody.empty:
+        invalidos = len(historial_inbody) - len(inbody_historial_valido(historial_inbody))
+        if invalidos > 0:
+            st.warning(
+                f":material/priority_high: {invalidos} registro(s) de InBody tienen una fecha que no se "
+                "pudo reconocer (el formato esperado es DD.MM.AAAA) -- por eso no cuentan como \"más "
+                "reciente\": no aparecen en Resumen ni en las gráficas de peso/grasa/músculo hasta que "
+                "corrijas la fecha. Revisa la columna Fecha abajo."
+            )
 
     render_inbody_section(historial_inbody)
     render_composicion_avanzada(historial_inbody, data=data)
