@@ -528,11 +528,53 @@ if st.session_state["paciente_actual"] is None:
 
     if "mostrar_form_nuevo_paciente" not in st.session_state:
         st.session_state["mostrar_form_nuevo_paciente"] = False
-    if st.button(
-        ":material/person_add: Agregar paciente nuevo", key="toggle_nuevo_paciente",
-        type="primary", use_container_width=True,
-    ):
-        st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
+
+    # Tile de "agregar" con borde punteado -- mismo lenguaje visual que
+    # las tarjetas del mosaico de arriba (círculo + texto centrado) en
+    # vez de una barra de color plana. ".st-key-<key>" es la clase
+    # estable que Streamlit le pone al contenedor de un widget/container
+    # con ese key (no un hash de build) -- confirmado con una inspección
+    # de DOM antes de usarla, igual que el resto del rediseño.
+    st.markdown(
+        """<style>
+        .st-key-tile_agregar_paciente {
+            border-style: dashed !important;
+            border-width: 2px !important;
+            border-color: #2B6CB0 !important;
+            border-radius: 14px !important;
+            background: #EFF6FC;
+            transition: background .15s ease;
+        }
+        .st-key-tile_agregar_paciente:hover {
+            background: #E3EEFA;
+        }
+        .st-key-tile_agregar_paciente .stButton > button {
+            background: transparent; border: 1px solid #2B6CB0; color: #2B6CB0;
+        }
+        .st-key-tile_agregar_paciente .stButton > button:hover {
+            background: #2B6CB0; color: #FFFFFF;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    col_izq, col_centro, col_der = st.columns([1, 2, 1])
+    with col_centro:
+        with st.container(key="tile_agregar_paciente", border=True):
+            st.markdown(
+                " ".join(
+                    """<div style="text-align:center; padding:6px 0 2px 0;">
+                    <div style="width:48px; height:48px; border-radius:50%; border:2px dashed #2B6CB0;
+                        display:flex; align-items:center; justify-content:center; margin:0 auto 10px auto;
+                        font-family:'Syne',sans-serif; font-weight:800; font-size:26px; color:#2B6CB0;
+                        line-height:1;">+</div>
+                    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:600; font-size:0.95rem;
+                        color:#2A3439; margin-bottom:12px;">Agregar paciente nuevo</div>
+                </div>""".split()
+                ),
+                unsafe_allow_html=True,
+            )
+            if st.button("Crear paciente", key="toggle_nuevo_paciente", use_container_width=True):
+                st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
 
     if st.session_state["mostrar_form_nuevo_paciente"]:
       with st.container(border=True):
