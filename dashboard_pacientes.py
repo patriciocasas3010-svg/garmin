@@ -2008,8 +2008,6 @@ def _render_resumen_sin_wearable() -> None:
         for _, fila_nota in historial_notas.iloc[::-1].head(3).iterrows():
             st.caption(f"**{fila_nota.get('Fecha')}** -- {fila_nota.get('Nota')}")
 
-    _render_analisis_ia(None)
-
 
 _DESCRIPCIONES_TABS_WEARABLE = {
     ":material/balance: Carga y Preparación": (
@@ -2040,7 +2038,8 @@ if not datos_json:
 
     glp1_activo_actual = glp1_diabetes.activo(perfil_actual)
     etiquetas_sw = [
-        ":material/summarize: Resumen", ":material/monitor_weight: Composición corporal",
+        ":material/summarize: Resumen", ":material/auto_awesome: Análisis y plan",
+        ":material/monitor_weight: Composición corporal",
         ":material/biotech: Estudios clínicos", ":material/call_merge: Cruces clínicos",
     ]
     if glp1_activo_actual:
@@ -2054,13 +2053,15 @@ if not datos_json:
     with tabs_sw[0]:
         _render_resumen_sin_wearable()
     with tabs_sw[1]:
-        _render_composicion_corporal(None)
+        _render_analisis_ia(None)
     with tabs_sw[2]:
-        _render_estudios_clinicos()
+        _render_composicion_corporal(None)
     with tabs_sw[3]:
+        _render_estudios_clinicos()
+    with tabs_sw[4]:
         _render_cruces_clinicos(None)
 
-    idx_sw = 4
+    idx_sw = 5
     if glp1_activo_actual:
         with tabs_sw[idx_sw]:
             _render_glp1_diabetes(_calcular_glp1_resumen(), _render_glucosa_libre)

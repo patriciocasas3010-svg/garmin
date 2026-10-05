@@ -1,6 +1,6 @@
 """Identidad visual del dashboard -- marca "AURA CLINICAL" (Human
 Coherence System): arquitectura visual clínica y cálida en vez de "dark
-tech" -- fondo Clinical Pure White, acentos Warm Sage Green / Soft Sand
+tech" -- fondo Clinical Pure White, acentos Azure Blue / Soft Sand
 Linen, texto Charcoal Slate, y un semáforo clínico (Optimum Green /
 Warning Amber / Critical Coral) para estados de salud. Tipografía Syne
 (titulares H1/H2) / Plus Jakarta Sans (UI, cuerpo de texto y tablas) /
@@ -46,7 +46,8 @@ with open(os.path.join(_ASSETS_DIR, "aura_clinical_logo.svg"), encoding="utf-8")
     )
 
 CLINICAL_WHITE = "#FFFFFF"
-SAGE_GREEN = "#6B8E78"
+AZURE_BLUE = "#2B6CB0"
+SKY_TINT = "#EFF6FC"
 SAND_LINEN = "#F4F1EA"
 CHARCOAL_SLATE = "#2A3439"
 
@@ -78,11 +79,53 @@ def apply_theme() -> None:
         [data-testid="stMetricLabel"] {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; font-size: 0.75rem; }}
 
         .stTabs [data-baseweb="tab"], [data-testid="stTab"] {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; color: {INK_SOFT}; }}
-        .stTabs [aria-selected="true"], [data-testid="stTab"][aria-selected="true"] {{ color: {SAGE_GREEN} !important; }}
-        .stTabs [data-baseweb="tab-highlight"], .react-aria-SelectionIndicator {{ background-color: {SAGE_GREEN} !important; }}
+        .stTabs [aria-selected="true"], [data-testid="stTab"][aria-selected="true"] {{ color: {AZURE_BLUE} !important; }}
+        .stTabs [data-baseweb="tab-highlight"], .react-aria-SelectionIndicator {{ background-color: {AZURE_BLUE} !important; }}
 
         .stButton > button {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; }}
-        .stButton > button[kind="primary"] {{ background-color: {SAGE_GREEN}; border-color: {SAGE_GREEN}; }}
+        .stButton > button[kind="primary"] {{ background-color: {AZURE_BLUE}; border-color: {AZURE_BLUE}; }}
+
+        /* Navegación de secciones en el lado izquierdo, estilo Buildpeer
+        -- puro CSS sobre el st.tabs() nativo, sin tocar la lógica de
+        contenido: el wrapper interno de BaseUI pasa de fila (tablist
+        arriba, panel abajo) a columna (tablist a la izquierda, panel a
+        la derecha). Selectores anclados solo en atributos estables
+        (data-testid, data-orientation, role) -- las clases
+        st-emotion-cache-* son hashes de build, no se deben usar. */
+        [data-testid="stTabs"] > div[data-orientation="horizontal"] {{
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 2rem;
+        }}
+        [data-testid="stTabs"] [role="tablist"] {{
+            flex: 0 0 230px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
+            border-bottom: none;
+            overflow-x: visible;
+            overflow-y: visible;
+        }}
+        [data-testid="stTabs"] [role="tab"] {{
+            justify-content: flex-start;
+            text-align: left;
+            width: 100%;
+            border-radius: 10px;
+            padding: 10px 14px;
+            border-bottom: none !important;
+        }}
+        [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
+            background-color: {SKY_TINT};
+        }}
+        [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        [data-testid="stTabs"] .react-aria-SelectionIndicator {{
+            display: none;
+        }}
+        [data-testid="stTabs"] [role="tabpanel"] {{
+            flex: 1 1 auto;
+            min-width: 0;
+        }}
 
         /* Semáforo clínico en las alertas nativas de Streamlit --
         Critical Coral para st.error, Warning Amber para st.warning,
