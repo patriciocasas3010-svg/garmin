@@ -176,6 +176,35 @@ def apply_theme() -> None:
         }}
         .aura-kpi-caption {{ font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.72rem; color: #9AA5AD; margin-top: 2px; }}
 
+        /* Barra superior -- fecha de hoy + avatar del nutriólogo con
+        sesión iniciada, estilo HealthLine+/Buildpeer. La campana es un
+        st.button real (ver render_topbar()) para poder saltar a
+        Alertas -- "st-key-<key>" es la clase estable que Streamlit le
+        pone al contenedor de un widget con ese key (no un hash de
+        build), así que es seguro anclar CSS en ella.*/
+        div[data-testid="stColumn"]:has(.st-key-aura_topbar_bell) {{
+            display: flex; justify-content: flex-end;
+        }}
+        .st-key-aura_topbar_bell button {{
+            border-radius: 50%; width: 38px; height: 38px; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+        }}
+        .aura-topbar-user {{ display: flex; align-items: center; justify-content: flex-end; gap: 12px; height: 38px; }}
+        .aura-topbar-date {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.78rem; color: {INK_SOFT}; white-space: nowrap;
+        }}
+        .aura-topbar-avatar {{
+            width: 32px; height: 32px; border-radius: 50%; background: {AZURE_BLUE}; color: #FFFFFF;
+            display: flex; align-items: center; justify-content: center; font-weight: 700;
+            font-size: 0.82rem; font-family: 'Syne', sans-serif; flex-shrink: 0;
+        }}
+        .aura-topbar-user-text {{ line-height: 1.15; text-align: left; }}
+        .aura-topbar-user-name {{ font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.82rem; font-weight: 600; color: {INK}; }}
+        .aura-topbar-user-role {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.66rem; color: {INK_SOFT};
+            text-transform: uppercase; letter-spacing: .04em;
+        }}
+
         /* Semáforo clínico en las alertas nativas de Streamlit --
         Critical Coral para st.error, Warning Amber para st.warning,
         Optimum Green para st.success (en vez de los rojo/ámbar/verde
@@ -242,6 +271,47 @@ def render_header(titulo: str, subtitulo: str = "", marca: str = "clinical") -> 
         """,
         unsafe_allow_html=True,
     )
+
+
+_DIAS_ABBR_ES = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+_MESES_ABBR_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+def _fecha_es(fecha) -> str:
+    return f"{_DIAS_ABBR_ES[fecha.weekday()]}, {fecha.day} {_MESES_ABBR_ES[fecha.month - 1]} {fecha.year}"
+
+
+def render_topbar(fecha, usuario_nombre: str | None = None, usuario_rol: str | None = None) -> bool:
+    """Barra superior slim -- fecha de hoy + avatar de quien tiene la
+    sesión iniciada (nombre/rol reales de st.session_state["_usuario"],
+    no un placeholder inventado), estilo HealthLine+/Buildpeer. La
+    campana es un botón real: regresa True en el rerun en que se le dio
+    clic, para que el llamador decida qué hacer (ej. saltar a la
+    sección Alertas) -- este módulo no conoce la navegación de quien lo
+    llama, así que no decide eso por su cuenta.
+
+    fecha: un date/datetime (normalmente datetime.date.today())."""
+    _, col_campana, col_usuario = st.columns([8, 1, 3])
+    with col_campana:
+        clic_campana = st.button(
+            ":material/notifications:", key="aura_topbar_bell", help="Ir a Alertas",
+        )
+    with col_usuario:
+        inicial = (usuario_nombre or "?").strip()[:1].upper()
+        st.markdown(
+            " ".join(
+                f"""<div class="aura-topbar-user">
+                <div class="aura-topbar-date">{_fecha_es(fecha)}</div>
+                <div class="aura-topbar-avatar">{inicial}</div>
+                <div class="aura-topbar-user-text">
+                    <div class="aura-topbar-user-name">{usuario_nombre or "Invitado"}</div>
+                    <div class="aura-topbar-user-role">{(usuario_rol or "").capitalize()}</div>
+                </div>
+            </div>""".split()
+            ),
+            unsafe_allow_html=True,
+        )
+    return clic_campana
 
 
 def render_seccion_nav(grupos: list[tuple[str, list[str]]], key: str) -> str:

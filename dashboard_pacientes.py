@@ -73,7 +73,7 @@ from garmin_dashboard_ui import (
     render_dashboard_body,
     render_inbody_section,
 )
-from theme import apply_theme, render_header, render_kpi_row, render_seccion_nav
+from theme import apply_theme, render_header, render_kpi_row, render_seccion_nav, render_topbar
 
 st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="wide", page_icon=":material/stethoscope:")
 apply_theme()
@@ -571,6 +571,16 @@ historial_calorias = calorias_store.leer_historial(_engine(), paciente)
 historial_estudios = estudios_store.leer_historial(_engine(), paciente)
 
 marca_actual = marca_aura.calcular(perfil_actual)
+
+_usuario_sesion = st.session_state.get("_usuario") or {}
+if render_topbar(date.today(), _usuario_sesion.get("nombre"), _usuario_sesion.get("rol")):
+    # La campana no sabe (ni debe saber) en cuál de las dos rutas de
+    # navegación está el paciente actual (con wearable usa
+    # "seccion_nav__<paciente>", sin wearable usa "seccion_nav_sw") --
+    # se escriben las dos, la que no aplique simplemente no se lee.
+    st.session_state[f"seccion_nav__{paciente}"] = ":material/siren: Alertas"
+    st.session_state["seccion_nav_sw"] = ":material/siren: Alertas"
+    st.rerun()
 
 render_header(paciente, subtitulo=fuente, marca=marca_actual)
 
