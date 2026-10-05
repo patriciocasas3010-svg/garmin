@@ -25,6 +25,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import pandas as pd
+import sqlalchemy
 import streamlit as st
 
 import ai_analisis
@@ -203,6 +204,49 @@ def _load_df() -> pd.DataFrame:
     return resumen_store.leer_todos(_engine())
 
 
+@st.cache_data(ttl=300)
+def _cargar_ultima_actividad() -> dict:
+    """Última fecha con CUALQUIER dato nuevo por paciente (wearable,
+    InBody, estudio clínico, antropometría o nota) -- un solo viaje a la
+    base de datos (UNION ALL) en vez de una consulta por paciente, para
+    que la pantalla de selección no se ponga lenta con muchos pacientes.
+    Se usa para la etiqueta "Último envío" de cada tarjeta y para decidir
+    quién pasa a la pestaña de Inactivos.
+
+    resumen.fecha se guarda en ISO ("AAAA-MM-DD", ver resumen_store.py);
+    inbody/estudios/antropometria/notas se guardan "DD.MM.AAAA" (como
+    todo lo que captura el nutriólogo a mano) -- se intentan los dos
+    formatos por fila en vez de asumir uno solo."""
+    filas = pd.read_sql(
+        sqlalchemy.text("""
+            SELECT nombre, fecha FROM resumen WHERE fecha IS NOT NULL AND fecha <> ''
+            UNION ALL
+            SELECT nombre, fecha FROM inbody WHERE fecha IS NOT NULL AND fecha <> ''
+            UNION ALL
+            SELECT nombre, fecha FROM estudios WHERE fecha IS NOT NULL AND fecha <> ''
+            UNION ALL
+            SELECT nombre, fecha FROM antropometria WHERE fecha IS NOT NULL AND fecha <> ''
+            UNION ALL
+            SELECT nombre, fecha FROM notas WHERE fecha IS NOT NULL AND fecha <> ''
+        """),
+        _engine(),
+    )
+    ultima: dict = {}
+    for _, fila in filas.iterrows():
+        nombre_fila = fila["nombre"]
+        fecha_cruda = fila["fecha"]
+        fecha_parseada = None
+        try:
+            fecha_parseada = date.fromisoformat(fecha_cruda)
+        except ValueError:
+            fecha_parseada = _parsear_fecha_ddmmaaaa(fecha_cruda)
+        if fecha_parseada is None:
+            continue
+        if nombre_fila not in ultima or fecha_parseada > ultima[nombre_fila]:
+            ultima[nombre_fila] = fecha_parseada
+    return ultima
+
+
 if "paciente_actual" not in st.session_state:
     st.session_state["paciente_actual"] = None
 
@@ -270,6 +314,60 @@ def _armar_resumen_conjunto(nombres_conjunto: list[str]) -> str:
 nombres_todos = []
 if not df.empty and "Nombre" in df.columns:
     nombres_todos = sorted(df["Nombre"].dropna().unique())
+
+# Misma paleta que las tarjetas KPI (azul/verde/ámbar/violeta) -- cada
+# paciente siempre cae en el mismo color (por su posición en la lista
+# completa, no en la lista filtrada/buscada), para que se reconozca de
+# un vistazo entre pestañas y resultados de búsqueda.
+_AVATAR_COLORES = ["#2B6CB0", "#38A169", "#DD6B20", "#6B5CA5"]
+_DIAS_INACTIVO = 45
+
+
+def _iniciales(nombre: str) -> str:
+    partes = nombre.split()
+    if len(partes) >= 2:
+        return (partes[0][0] + partes[1][0]).upper()
+    return nombre[:2].upper() if nombre else "?"
+
+
+def _render_mosaico_pacientes(nombres_mostrar: list[str], ultima_actividad: dict, key_prefix: str) -> None:
+    """Cuadrícula de tarjetas, una por paciente -- círculo con iniciales
+    (color distinto por paciente), nombre y fecha de su último dato
+    guardado en cualquier fuente (wearable, InBody, estudio clínico,
+    antropometría o nota). El botón "Ver dashboard" de cada tarjeta abre
+    ese paciente -- más interactivo que el selectbox genérico de antes."""
+    columnas_por_fila = 4
+    for inicio in range(0, len(nombres_mostrar), columnas_por_fila):
+        columnas = st.columns(columnas_por_fila)
+        for col, nombre_pac in zip(columnas, nombres_mostrar[inicio:inicio + columnas_por_fila]):
+            with col:
+                with st.container(border=True):
+                    idx = nombres_todos.index(nombre_pac) if nombre_pac in nombres_todos else 0
+                    color = _AVATAR_COLORES[idx % len(_AVATAR_COLORES)]
+                    ultima = ultima_actividad.get(nombre_pac)
+                    ultima_txt = ultima.strftime("%d.%m.%Y") if ultima else "Sin datos todavía"
+                    st.markdown(
+                        " ".join(
+                            f"""<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                            <div style="width:44px; height:44px; border-radius:50%; background:{color};
+                                color:#FFFFFF; display:flex; align-items:center; justify-content:center;
+                                font-family:'Syne',sans-serif; font-weight:800; font-size:16px; flex-shrink:0;">
+                                {_iniciales(nombre_pac)}
+                            </div>
+                            <div style="min-width:0;">
+                                <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:600;
+                                    font-size:0.95rem; color:#2A3439; overflow:hidden; text-overflow:ellipsis;
+                                    white-space:nowrap;">{nombre_pac}</div>
+                                <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:0.72rem;
+                                    color:#8B95A0;">Último envío: {ultima_txt}</div>
+                            </div>
+                        </div>""".split()
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("Ver dashboard", key=f"{key_prefix}_{nombre_pac}", use_container_width=True):
+                        st.session_state["paciente_actual"] = nombre_pac
+                        st.rerun()
 
 
 @st.dialog("Settings", width="large")
@@ -387,10 +485,39 @@ if st.session_state["paciente_actual"] is None:
         nombres = [n for n in nombres_todos if asignaciones.get(n) == usuario_actual["usuario"]]
 
     if nombres:
-        nombre = st.selectbox("Paciente", nombres, index=None, placeholder="Selecciona un paciente...")
-        if st.button("Ver dashboard", type="primary", disabled=not nombre):
-            st.session_state["paciente_actual"] = nombre
-            st.rerun()
+        ultima_actividad = _cargar_ultima_actividad()
+        busqueda = st.text_input(
+            ":material/search: Buscar paciente", key="busqueda_paciente", placeholder="Escribe un nombre...",
+        )
+        if busqueda.strip():
+            coincidencias = [n for n in nombres if busqueda.strip().lower() in n.lower()]
+            st.caption(f"{len(coincidencias)} resultado(s) para \"{busqueda.strip()}\" -- busca entre todos los pacientes, activos e inactivos.")
+            if coincidencias:
+                _render_mosaico_pacientes(coincidencias, ultima_actividad, key_prefix="buscar")
+            else:
+                st.info("Ningún paciente coincide con esa búsqueda.")
+        else:
+            hoy = date.today()
+            activos = [
+                n for n in nombres
+                if ultima_actividad.get(n) is None or (hoy - ultima_actividad[n]).days <= _DIAS_INACTIVO
+            ]
+            inactivos = [n for n in nombres if n not in activos]
+            tab_activos, tab_inactivos = st.tabs([
+                f":material/person: Activos ({len(activos)})",
+                f":material/person_off: Inactivos ({len(inactivos)})",
+            ])
+            with tab_activos:
+                if activos:
+                    _render_mosaico_pacientes(activos, ultima_actividad, key_prefix="activo")
+                else:
+                    st.info("Ningún paciente activo todavía.")
+            with tab_inactivos:
+                st.caption(f"Sin ningún dato nuevo (InBody, estudio, wearable, nota) en más de {_DIAS_INACTIVO} días.")
+                if inactivos:
+                    _render_mosaico_pacientes(inactivos, ultima_actividad, key_prefix="inactivo")
+                else:
+                    st.info("Ningún paciente inactivo -- buena señal.")
     else:
         st.info(
             "Todavía no hay ningún paciente. Se llena solo cuando alguien abre su dashboard local "
