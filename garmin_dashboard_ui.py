@@ -1492,12 +1492,12 @@ def render_dashboard_body(
         st.divider()
         st.markdown("**Pérdida de líquidos en reposo**")
         st.caption(
-            "Estimación estándar de 25 mL de agua perdida por kg de peso corporal en reposo (sin "
+            "Estimación estándar de 35 mL de agua perdida por kg de peso corporal en reposo (sin "
             "contar la actividad física) -- usa el peso del InBody más reciente del paciente."
         )
         peso_inbody = inbody_resumen.get("Peso_kg") if inbody_resumen is not None else None
         if pd.notna(peso_inbody):
-            perdida_reposo = 25 * peso_inbody
+            perdida_reposo = 35 * peso_inbody
             perdida_activa = hidratacion_diaria.get("promedio_ml_dia")
             m_r1, m_r2 = st.columns(2)
             m_r1.metric("En reposo (estimada)", f"{perdida_reposo:.0f} mL/día")
