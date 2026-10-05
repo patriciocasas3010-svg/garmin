@@ -60,12 +60,14 @@ import resumen_store
 import token_store
 import usuarios_store
 from garmin_dashboard_ui import (
+    BLUE,
     CRITICAL_CORAL,
     OPTIMUM_GREEN,
     WARNING_AMBER,
     _render_glp1_diabetes,
     inbody_historial_valido,
     inbody_ultimo_registro,
+    line_with_rule,
     render_antropometria_section,
     render_composicion_avanzada,
     render_dashboard_body,
@@ -1090,7 +1092,9 @@ def _render_glucosa_libre():
         if serie_12h:
             serie = pd.Series(serie_12h, name="mg/dL")
             serie.index = pd.to_datetime(serie.index)
-            st.line_chart(serie.sort_index())
+            chart = line_with_rule(serie.sort_index(), "mg/dL", BLUE, fmt=".0f", height=200)
+            if chart is not None:
+                st.altair_chart(chart, width="stretch")
 
 
 def _render_estudios_clinicos():

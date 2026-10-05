@@ -18,22 +18,23 @@ from theme import render_kpi_row, render_seccion_nav
 
 # ---------------------------------------------------------------------------
 # Paleta de marca "AURA CLINICAL" sobre fondo claro Clinical White (ver
-# theme.py / .streamlit/config.toml) -- BLUE (Warm Sage Green) es el
-# acento primario/default; ORANGE (Warning Amber) el acento cálido de
+# theme.py / .streamlit/config.toml) -- BLUE (Azure Blue) es el acento
+# primario/default; ORANGE (Warning Amber) el acento cálido de
 # atención; AQUA y VIOLET son dos tonos más para diferenciar series
-# (verde azulado y malva polvo) -- solo BLUE+ORANGE se combinan en la
-# misma gráfica (Body Battery, Calorías). STATUS_GOOD/CRITICAL usan el
+# (teal y violeta apagado) -- solo BLUE+ORANGE se combinan en la misma
+# gráfica (Body Battery, Calorías). STATUS_GOOD/CRITICAL usan el
 # semáforo clínico (Optimum Green / Critical Coral), no los acentos de
 # marca -- son estados de salud, no branding.
 # ---------------------------------------------------------------------------
 
-BLUE, ORANGE, AQUA, VIOLET = "#6B8E78", "#DD6B20", "#4F8A8B", "#A8677D"
+BLUE, ORANGE, AQUA, VIOLET = "#2B6CB0", "#DD6B20", "#2CA6A4", "#6B5CA5"
 OPTIMUM_GREEN, WARNING_AMBER, CRITICAL_CORAL = "#38A169", "#DD6B20", "#E53E3E"
 STATUS_GOOD, STATUS_CRITICAL = OPTIMUM_GREEN, CRITICAL_CORAL
 INK_PRIMARY, INK_SECONDARY, INK_MUTED = "#2A3439", "#5B6670", "#8B95A0"
-GRID_COLOR = "#E2DED4"
+GRID_COLOR = "#E7ECF1"
 CHART_BG = "transparent"
-ZONE_RAMP = ["#D7E4DC", "#A9C4B3", "#6B8E78", "#4A7059", "#2E4A3B"]  # Z1 (suave) -> Z5 (intenso)
+ZONE_RAMP = ["#CFE0EE", "#8FB5D6", "#2B6CB0", "#1F4E80", "#15314F"]  # Z1 (suave) -> Z5 (intenso)
+_CHART_FONT = "Inter"
 
 alt.themes.enable("none")
 
@@ -100,39 +101,71 @@ def narrativa_delta(serie: pd.Series, unidad: str, decimales: int = 1, ventana: 
     return frase
 
 
+def _estilizar(chart, height: int | None = None):
+    """Config compartida de todas las gráficas -- fondo transparente
+    (hereda el blanco de la tarjeta/página), grid horizontal suave sin
+    líneas verticales, tipografía Inter (la misma de las cifras KPI en
+    theme.py) en vez del JetBrains Mono "técnico" de antes. Centraliza
+    lo que antes era la misma cadena de .configure(...) repetida en
+    cada helper de gráfica -- un solo lugar para ajustar el look."""
+    if height is not None:
+        chart = chart.properties(height=height)
+    return (
+        chart
+        .configure(background=CHART_BG)
+        .configure_axis(
+            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFont=_CHART_FONT, titleFont=_CHART_FONT, labelFontSize=11, titleFontSize=11, titleFontWeight=500,
+        )
+        .configure_axisX(grid=False)
+        .configure_view(strokeWidth=0, fill=CHART_BG)
+        .configure_legend(
+            labelFont=_CHART_FONT, titleFont=_CHART_FONT, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
+            labelFontSize=11, symbolType="circle",
+        )
+    )
+
+
+def _area_gradient(color: str):
+    """Relleno degradado bajo la línea (se desvanece hacia abajo) --
+    estilo HealthLine+/Buildpeer, en vez de una línea pelona."""
+    return alt.Gradient(
+        gradient="linear",
+        stops=[alt.GradientStop(color=color, offset=0), alt.GradientStop(color=f"{color}00", offset=1)],
+        x1=1, y1=1, x2=1, y2=0,
+    )
+
+
 def line_with_rule(series: pd.Series, title: str, color: str, rule_value: float | None = None, fmt: str = ".1f", height: int = 220):
-    """Línea de una sola serie, con línea de referencia punteada opcional."""
+    """Línea de una sola serie con relleno degradado debajo (estilo
+    HealthLine+), y línea de referencia punteada opcional."""
     data = series.dropna().reset_index()
     data.columns = ["fecha", "valor"]
     if data.empty:
         return None
 
-    chart = (
+    x_enc = alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES))
+    area = (
         alt.Chart(data)
-        .mark_line(strokeWidth=2, color=color, point=alt.OverlayMarkDef(filled=True, size=45, color=color))
+        .mark_area(line=False, color=_area_gradient(color), opacity=0.22)
+        .encode(x=x_enc, y=alt.Y("valor:Q", title=title, scale=alt.Scale(zero=False)))
+    )
+    linea = (
+        alt.Chart(data)
+        .mark_line(strokeWidth=2.5, color=color, point=alt.OverlayMarkDef(filled=True, size=45, color=color))
         .encode(
-            x=alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES)),
+            x=x_enc,
             y=alt.Y("valor:Q", title=title, scale=alt.Scale(zero=False)),
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("valor:Q", title=title, format=fmt)],
         )
     )
-    layers = [chart]
+    layers = [area, linea]
     if rule_value is not None:
         rule_df = pd.DataFrame({"y": [rule_value]})
         rule = alt.Chart(rule_df).mark_rule(strokeDash=[4, 4], color=INK_MUTED, strokeWidth=1).encode(y="y:Q")
         layers.append(rule)
 
-    return (
-        alt.layer(*layers)
-        .properties(height=height)
-        .configure(background=CHART_BG)
-        .configure_axis(
-            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
-            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
-        )
-        .configure_view(strokeWidth=0, fill=CHART_BG)
-        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-    )
+    return _estilizar(alt.layer(*layers), height=height)
 
 
 def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, height: int = 220):
@@ -147,7 +180,7 @@ def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, hei
 
     bars = (
         alt.Chart(data)
-        .mark_bar(color=color, size=14)
+        .mark_bar(color=color, size=14, cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
         .encode(
             x=alt.X("fecha:T", title=None, axis=alt.Axis(labelExpr=_LABEL_EXPR_FECHA_ES)),
             y=alt.Y("valor:Q", title=title),
@@ -157,17 +190,7 @@ def daily_bar_with_average(series: pd.Series, title: str, color: str = BLUE, hei
     rule_df = pd.DataFrame({"y": [data["valor"].mean()]})
     rule = alt.Chart(rule_df).mark_rule(strokeDash=[4, 4], color=INK_MUTED, strokeWidth=1).encode(y="y:Q")
 
-    return (
-        alt.layer(bars, rule)
-        .properties(height=height)
-        .configure(background=CHART_BG)
-        .configure_axis(
-            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
-            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
-        )
-        .configure_view(strokeWidth=0, fill=CHART_BG)
-        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
-    )
+    return _estilizar(alt.layer(bars, rule), height=height)
 
 
 def ranked_bar_chart(labels: list[str], values: list[float], value_title: str, color: str = BLUE, height_per_bar: int = 32):
@@ -186,15 +209,8 @@ def ranked_bar_chart(labels: list[str], values: list[float], value_title: str, c
             tooltip=[alt.Tooltip("categoria:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=max(120, height_per_bar * len(labels_sorted)))
-        .configure(background=CHART_BG)
-        .configure_axis(
-            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
-            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
-        )
-        .configure_view(strokeWidth=0, fill=CHART_BG)
-        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
-    return chart
+    return _estilizar(chart)
 
 
 def ordinal_bar_chart(labels: list[str], values: list[float], value_title: str, height: int = 240):
@@ -209,15 +225,8 @@ def ordinal_bar_chart(labels: list[str], values: list[float], value_title: str, 
             tooltip=[alt.Tooltip("zona:N", title="Zona"), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=height)
-        .configure(background=CHART_BG)
-        .configure_axis(
-            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
-            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
-        )
-        .configure_view(strokeWidth=0, fill=CHART_BG)
-        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
-    return chart
+    return _estilizar(chart)
 
 
 def donut_cumplimiento(num_activos: int, meta_dias: int, color: str = BLUE, size: int = 170) -> alt.Chart:
@@ -244,7 +253,7 @@ def donut_cumplimiento(num_activos: int, meta_dias: int, color: str = BLUE, size
     )
     centro = (
         alt.Chart(pd.DataFrame({"texto": [f"{pct * 100:.0f}%"]}))
-        .mark_text(size=26, fontWeight=700, color=INK_PRIMARY, font="JetBrains Mono")
+        .mark_text(size=26, fontWeight=700, color=INK_PRIMARY, font=_CHART_FONT)
         .encode(text="texto:N")
     )
     return (
@@ -280,15 +289,8 @@ def grouped_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("serie:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=height)
-        .configure(background=CHART_BG)
-        .configure_axis(
-            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
-            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
-        )
-        .configure_view(strokeWidth=0, fill=CHART_BG)
-        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
-    return chart
+    return _estilizar(chart)
 
 
 def stacked_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], colors: list[str], value_title: str, height: int = 240):
@@ -308,15 +310,8 @@ def stacked_bar_chart(df: pd.DataFrame, cols: list[str], names: list[str], color
             tooltip=[alt.Tooltip("fecha:T", title="Fecha"), alt.Tooltip("serie:N", title=""), alt.Tooltip("valor:Q", title=value_title, format=".0f")],
         )
         .properties(height=height)
-        .configure(background=CHART_BG)
-        .configure_axis(
-            gridColor=GRID_COLOR, domainColor=GRID_COLOR, labelColor=INK_SECONDARY, titleColor=INK_SECONDARY,
-            labelFont="JetBrains Mono", titleFont="JetBrains Mono",
-        )
-        .configure_view(strokeWidth=0, fill=CHART_BG)
-        .configure_legend(labelFont="JetBrains Mono", titleFont="JetBrains Mono", labelColor=INK_SECONDARY, titleColor=INK_SECONDARY)
     )
-    return chart
+    return _estilizar(chart)
 
 
 def style_estado_table(df: pd.DataFrame):
