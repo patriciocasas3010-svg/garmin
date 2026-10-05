@@ -20,9 +20,30 @@ from pathlib import Path
 
 _NUM_RE = re.compile(r"\d+[.,]\d+|\d+")
 
+# Separador entre el texto de las dos pasadas de OCR que hace extract_text()
+# -- un byte nulo no puede salir nunca de Tesseract, así que sirve para
+# partir el texto de vuelta sin ambigüedad en parse_inbody_text().
+PSM3_MARKER = "\n\x00PSM3\x00\n"
+
 
 def extract_text(file_bytes: bytes, filename: str) -> str:
-    """Convierte el archivo (imagen o PDF-de-una-foto) a texto vía OCR."""
+    """Convierte el archivo (imagen o PDF-de-una-foto) a texto vía OCR --
+    dos pasadas de Tesseract por página, unidas con PSM3_MARKER en medio
+    (ver parse_inbody_text, que las vuelve a separar para el Nivel de
+    Grasa Visceral).
+
+    --psm 6 ("un solo bloque uniforme de texto") es la pasada principal --
+    lee muchísimo mejor las tablas densas de InBody que el modo automático,
+    sobre todo evita que se pierdan puntos decimales y que las columnas se
+    mezclen entre sí. Pero confunde "11" con "17" específicamente en la
+    fila de Nivel de Grasa Visceral (confirmado con un reporte real: un
+    entero sin punto decimal, sin ancla visual, en la columna angosta de
+    "Parámetros de Investigación") -- --psm 3 (automático, el default de
+    Tesseract) sí la lee bien ahí, a cambio de perder Peso/Grasa/Agua
+    Total/IMC/PGC en la tabla principal (confirmado con el mismo reporte).
+    Ninguna de las dos pasadas es mejor en general -- se corren ambas y
+    cada campo usa la que de verdad le funciona mejor.
+    """
     suffix = Path(filename).suffix.lower()
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -38,20 +59,18 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
         else:
             imagenes = [in_path]
 
-        texto_completo = []
+        texto_psm6 = []
+        texto_psm3 = []
         for img in imagenes:
-            out_base = tmp / (img.stem + "_ocr")
-            # --psm 6 ("un solo bloque uniforme de texto") lee muchísimo
-            # mejor las tablas densas de InBody que el modo automático por
-            # default -- sobre todo evita que se pierdan puntos decimales
-            # y que las columnas se mezclen entre sí.
-            subprocess.run(
-                ["tesseract", str(img), str(out_base), "-l", "spa", "--psm", "6"],
-                check=True, capture_output=True,
-            )
-            texto_completo.append(out_base.with_suffix(".txt").read_text(encoding="utf-8"))
+            for psm, destino in ((6, texto_psm6), (3, texto_psm3)):
+                out_base = tmp / f"{img.stem}_ocr_psm{psm}"
+                subprocess.run(
+                    ["tesseract", str(img), str(out_base), "-l", "spa", "--psm", str(psm)],
+                    check=True, capture_output=True,
+                )
+                destino.append(out_base.with_suffix(".txt").read_text(encoding="utf-8"))
 
-        return "\n".join(texto_completo)
+        return "\n".join(texto_psm6) + PSM3_MARKER + "\n".join(texto_psm3)
 
 
 def _numeros(linea: str) -> list[str]:
@@ -182,6 +201,20 @@ def parse_inbody_text(texto: str) -> dict:
     """Extrae los campos más relevantes. Cualquier campo que no se
     encuentre con confianza queda en None -- se muestra vacío en el
     formulario de revisión, nunca se inventa un valor."""
+    # texto trae las dos pasadas de OCR de extract_text() (--psm 6 primero,
+    # --psm 3 después) unidas con PSM3_MARKER -- la mayoría de los campos
+    # de abajo buscan en el texto completo (lineas, _HEADER_RE.search(texto),
+    # etc.) y por construcción encuentran primero la ocurrencia de --psm 6
+    # (que sigue siendo la pasada más confiable para casi todo), cayendo
+    # a la de --psm 3 solo si esa falla -- redundancia gratis. Para Nivel
+    # de Grasa Visceral es al revés (ver más abajo): --psm 3 es la que de
+    # verdad funciona ahí. texto puede no traer el marcador (llamadas
+    # viejas/pruebas que pasan un texto ya armado a mano) -- en ese caso
+    # texto_psm3 queda vacío y grasa_visceral cae al mismo texto completo.
+    if PSM3_MARKER in texto:
+        texto_psm3 = texto.split(PSM3_MARKER, 1)[1]
+    else:
+        texto_psm3 = ""
     lineas = texto.splitlines()
 
     # La fila de ID/Altura/Edad/Sexo/Fecha suele salir del OCR como una
@@ -215,8 +248,14 @@ def parse_inbody_text(texto: str) -> dict:
         edad_val = int(edad_bruta) if edad_bruta is not None else None
         sexo_m = re.search(r"\b(Femenino|Masculino|Female|Male)\b", texto, re.IGNORECASE)
         sexo_val = _SEXO_A_ESPANOL.get(sexo_m.group(1).lower()) if sexo_m else None
-        fecha_m = re.search(r"(\d{2}\.\d{2}\.\d{4})", texto)
-        fecha_val = fecha_m.group(1) if fecha_m else None
+        # Igual que _HEADER_RE: algunos modelos imprimen AAAA.MM.DD en vez
+        # de DD.MM.AAAA -- este fallback (cuando _HEADER_RE no hizo match
+        # de grupo completo) se había quedado sin ese segundo formato,
+        # así que una fecha AAAA.MM.DD válida se perdía por completo en
+        # vez de solo quedar sin normalizar. Confirmado con un reporte
+        # real ("2026.10.03.") que se leía como fecha=None.
+        fecha_m = re.search(r"(\d{2}\.\d{2}\.\d{4}|\d{4}\.\d{2}\.\d{2})", texto)
+        fecha_val = _normaliza_fecha(fecha_m.group(1)) if fecha_m else None
 
     modelo_m = re.search(r"\[?(InBody\s?\d{2,4})\]?", texto, re.IGNORECASE)
 
@@ -245,14 +284,20 @@ def parse_inbody_text(texto: str) -> dict:
         texto, re.IGNORECASE,
     )
     mme = _a_float(mme_m.group(1)) if mme_m else _valor_de_fila(lineas, r"\b(MME|SMM)\b", preferir_decimal=True)
-    # Nivel de Grasa Visceral es un entero (no trae decimales) que a veces
-    # cae en una línea contaminada con números de la columna vecina -- se
-    # busca puntual justo entre "Visceral" y el "(" del rango de referencia
-    # ("Nivel de Grasa Visceral 14 ( 1-9 )" / "Visceral Fat Level 6 ( 1-9 )"),
-    # en vez del método genérico.
-    grasa_visceral_m = re.search(
-        r"(?:Grasa\s*Visceral|Visceral\s*Fat\s*Level)\D*?(\d{1,3})\s*\(", texto, re.IGNORECASE,
-    )
+    # Nivel de Grasa Visceral es un entero (no trae decimales, a diferencia
+    # de casi todo lo demás en esa columna) -- sin un punto decimal de
+    # ancla visual, la pasada --psm 6 (bloque único, la que se usa para
+    # todo lo demás) confunde el "11" impreso con un "17" de forma
+    # consistente (confirmado con un reporte real: "Grasa Visceral 11"
+    # se leyó "Grasa Visceral 17" bajo --psm 6, pero correcto bajo
+    # --psm 3). Por eso esta es la única fila donde se busca primero en
+    # texto_psm3 (la segunda pasada de extract_text(), separada por
+    # PSM3_MARKER) y solo se cae al texto completo (-psm 6 incluido) si
+    # esa pasada no tiene nada -- al revés que el resto de los campos.
+    _GRASA_VISCERAL_RE = r"(?:Grasa\s*Visceral|Visceral\s*Fat\s*Level)\D*?(\d{1,3})\s*\("
+    grasa_visceral_m = re.search(_GRASA_VISCERAL_RE, texto_psm3, re.IGNORECASE) if texto_psm3 else None
+    if grasa_visceral_m is None:
+        grasa_visceral_m = re.search(_GRASA_VISCERAL_RE, texto, re.IGNORECASE)
     grasa_visceral = (
         _a_float(grasa_visceral_m.group(1)) if grasa_visceral_m
         else _valor_de_fila(lineas, r"Nivel\s*de\s*Grasa\s*Visceral|Visceral\s*Fat\s*Level", primero=True)
