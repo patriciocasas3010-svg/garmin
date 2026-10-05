@@ -206,21 +206,26 @@ def _load_df() -> pd.DataFrame:
 
 @st.cache_data(ttl=300)
 def _cargar_ultima_actividad() -> dict:
-    """Última fecha con CUALQUIER dato nuevo por paciente (wearable,
-    InBody, estudio clínico, antropometría o nota) -- un solo viaje a la
-    base de datos (UNION ALL) en vez de una consulta por paciente, para
-    que la pantalla de selección no se ponga lenta con muchos pacientes.
-    Se usa para la etiqueta "Último envío" de cada tarjeta y para decidir
-    quién pasa a la pestaña de Inactivos.
+    """Última fecha con una interacción MANUAL por paciente -- InBody,
+    estudio clínico, antropometría o nota -- un solo viaje a la base de
+    datos (UNION ALL) en vez de una consulta por paciente, para que la
+    pantalla de selección no se ponga lenta con muchos pacientes. Se usa
+    para la etiqueta "Último envío" de cada tarjeta y para decidir quién
+    pasa a la pestaña de Inactivos.
 
-    resumen.fecha se guarda en ISO ("AAAA-MM-DD", ver resumen_store.py);
+    A propósito NO incluye resumen.fecha (el snapshot del wearable):
+    guardar_snapshot() en resumen_store.py la actualiza sola todos los
+    días vía el cron de sync_diario.py para cualquier paciente con
+    Garmin/Apple/Oura conectado, sin que nadie haya tocado nada -- si
+    se incluyera aquí, todo paciente con wearable se vería "activo" para
+    siempre aunque el nutriólogo nunca vuelva a revisarlo. Activos/
+    Inactivos tiene que reflejar interacción real, no sincronización
+    automática.
+
     inbody/estudios/antropometria/notas se guardan "DD.MM.AAAA" (como
-    todo lo que captura el nutriólogo a mano) -- se intentan los dos
-    formatos por fila en vez de asumir uno solo."""
+    todo lo que captura el nutriólogo a mano)."""
     filas = pd.read_sql(
         sqlalchemy.text("""
-            SELECT nombre, fecha FROM resumen WHERE fecha IS NOT NULL AND fecha <> ''
-            UNION ALL
             SELECT nombre, fecha FROM inbody WHERE fecha IS NOT NULL AND fecha <> ''
             UNION ALL
             SELECT nombre, fecha FROM estudios WHERE fecha IS NOT NULL AND fecha <> ''
@@ -234,12 +239,7 @@ def _cargar_ultima_actividad() -> dict:
     ultima: dict = {}
     for _, fila in filas.iterrows():
         nombre_fila = fila["nombre"]
-        fecha_cruda = fila["fecha"]
-        fecha_parseada = None
-        try:
-            fecha_parseada = date.fromisoformat(fecha_cruda)
-        except ValueError:
-            fecha_parseada = _parsear_fecha_ddmmaaaa(fecha_cruda)
+        fecha_parseada = _parsear_fecha_ddmmaaaa(fila["fecha"])
         if fecha_parseada is None:
             continue
         if nombre_fila not in ultima or fecha_parseada > ultima[nombre_fila]:
@@ -332,10 +332,12 @@ def _iniciales(nombre: str) -> str:
 
 def _render_mosaico_pacientes(nombres_mostrar: list[str], ultima_actividad: dict, key_prefix: str) -> None:
     """Cuadrícula de tarjetas, una por paciente -- círculo con iniciales
-    (color distinto por paciente), nombre y fecha de su último dato
-    guardado en cualquier fuente (wearable, InBody, estudio clínico,
-    antropometría o nota). El botón "Ver dashboard" de cada tarjeta abre
-    ese paciente -- más interactivo que el selectbox genérico de antes."""
+    (color distinto por paciente), nombre y fecha de su última
+    interacción manual (InBody, estudio clínico, antropometría o nota --
+    no cuenta la sincronización automática del wearable, ver
+    _cargar_ultima_actividad()). El botón "Ver dashboard" de cada
+    tarjeta abre ese paciente -- más interactivo que el selectbox
+    genérico de antes."""
     columnas_por_fila = 4
     for inicio in range(0, len(nombres_mostrar), columnas_por_fila):
         columnas = st.columns(columnas_por_fila)
@@ -359,7 +361,7 @@ def _render_mosaico_pacientes(nombres_mostrar: list[str], ultima_actividad: dict
                                     font-size:0.95rem; color:#2A3439; overflow:hidden; text-overflow:ellipsis;
                                     white-space:nowrap;">{nombre_pac}</div>
                                 <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:0.72rem;
-                                    color:#8B95A0;">Último envío: {ultima_txt}</div>
+                                    color:#8B95A0;">Última interacción: {ultima_txt}</div>
                             </div>
                         </div>""".split()
                         ),
@@ -513,7 +515,7 @@ if st.session_state["paciente_actual"] is None:
                 else:
                     st.info("Ningún paciente activo todavía.")
             with tab_inactivos:
-                st.caption(f"Sin ningún dato nuevo (InBody, estudio, wearable, nota) en más de {_DIAS_INACTIVO} días.")
+                st.caption(f"Sin ninguna interacción manual (InBody, estudio, antropometría, nota) en más de {_DIAS_INACTIVO} días -- la sincronización automática del wearable no cuenta.")
                 if inactivos:
                     _render_mosaico_pacientes(inactivos, ultima_actividad, key_prefix="inactivo")
                 else:
@@ -524,12 +526,21 @@ if st.session_state["paciente_actual"] is None:
             "por primera vez, o puedes crear uno nuevo abajo para empezar a subirle InBody/mediciones ya."
         )
 
-    with st.expander(":material/person_add: Agregar paciente nuevo (sin Garmin/Apple/Oura todavía)"):
+    if "mostrar_form_nuevo_paciente" not in st.session_state:
+        st.session_state["mostrar_form_nuevo_paciente"] = False
+    if st.button(
+        ":material/person_add: Agregar paciente nuevo", key="toggle_nuevo_paciente",
+        type="primary", use_container_width=True,
+    ):
+        st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
+
+    if st.session_state["mostrar_form_nuevo_paciente"]:
+      with st.container(border=True):
         st.caption(
             "Unas preguntas rápidas para armar su perfil desde el inicio -- así el sistema ya sabe "
             "si este paciente vive bajo AURA Clinical, Flow o Health. Su primer InBody/estudio "
             "clínico se sube después, ya en su perfil (Composición corporal / Estudios clínicos), "
-            "y su reloj se conecta desde Wearable -- no hace falta crearlo de nuevo cuando eso pase."
+            "y su reloj se conecta desde Wearable."
         )
         nombre_nuevo = st.text_input("Nombre del paciente nuevo", key="nombre_nuevo_paciente")
 
@@ -623,6 +634,7 @@ if st.session_state["paciente_actual"] is None:
                 if notas_nuevo.strip():
                     notas_store.guardar_nota(_engine(), nombre_nuevo, notas_nuevo.strip())
                 st.cache_data.clear()
+                st.session_state["mostrar_form_nuevo_paciente"] = False
                 st.session_state["paciente_actual"] = nombre_nuevo
                 st.rerun()
 
