@@ -99,10 +99,10 @@ def apply_theme() -> None:
             gap: 2rem;
         }}
         [data-testid="stTabs"] [role="tablist"] {{
-            flex: 0 0 230px;
+            flex: 0 0 320px;
             flex-direction: column;
             align-items: stretch;
-            gap: 4px;
+            gap: 8px;
             border-bottom: none;
             overflow-x: visible;
             overflow-y: visible;
@@ -112,7 +112,8 @@ def apply_theme() -> None:
             text-align: left;
             width: 100%;
             border-radius: 10px;
-            padding: 10px 14px;
+            padding: 14px 18px;
+            font-size: 1.02rem;
             border-bottom: none !important;
         }}
         [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{

@@ -2019,8 +2019,8 @@ _DESCRIPCIONES_TABS_WEARABLE = {
     ":material/bedtime: Sueño y Bienestar": (
         "horas y calidad de sueño, HRV, hidratación diaria estimada y nivel de estrés reportado por el reloj."
     ),
-    "Calorías": "gasto energético diario (reposo + actividad) que reporta el wearable.",
-    "Alertas": (
+    ":material/local_fire_department: Calorías": "gasto energético diario (reposo + actividad) que reporta el wearable.",
+    ":material/siren: Alertas": (
         "alertas automáticas de disrupción del sueño, eficiencia y tono vagal calculadas de las series "
         "diarias del wearable."
     ),
@@ -2038,7 +2038,7 @@ if not datos_json:
 
     glp1_activo_actual = glp1_diabetes.activo(perfil_actual)
     etiquetas_sw = [
-        ":material/summarize: Resumen", ":material/auto_awesome: Análisis y plan",
+        ":material/summarize: Resumen", ":material/restaurant_menu: Análisis y plan",
         ":material/monitor_weight: Composición corporal",
         ":material/biotech: Estudios clínicos", ":material/call_merge: Cruces clínicos",
     ]
@@ -2046,7 +2046,8 @@ if not datos_json:
         etiquetas_sw.append(":material/medication: GLP-1 y Diabéticos")
     etiquetas_sw += [
         ":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas",
-        ":material/bedtime: Sueño y Bienestar", "Calorías", "Alertas",
+        ":material/bedtime: Sueño y Bienestar", ":material/local_fire_department: Calorías",
+        ":material/siren: Alertas",
     ]
     tabs_sw = st.tabs(etiquetas_sw)
 

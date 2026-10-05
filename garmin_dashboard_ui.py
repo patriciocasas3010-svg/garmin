@@ -933,7 +933,7 @@ def render_dashboard_body(
     # Cruces clínicos iba históricamente después de Composición/Estudios;
     # se sube a la 2ª posición para que no se sienta "uno de ocho módulos
     # iguales" (ver dashboard_pacientes.py y la jerarquía de marca de AURA).
-    etiquetas = [":material/summarize: Resumen", ":material/auto_awesome: Análisis y plan"]
+    etiquetas = [":material/summarize: Resumen", ":material/restaurant_menu: Análisis y plan"]
     if cruces_clinicos_renderer is not None:
         etiquetas.append(":material/call_merge: Cruces clínicos")
     if composicion_corporal_renderer is not None:
@@ -942,7 +942,7 @@ def render_dashboard_body(
         etiquetas.append(":material/biotech: Estudios clínicos")
     if glp1_activo and glp1_resumen_fn is not None:
         etiquetas.append(":material/medication: GLP-1 y Diabéticos")
-    etiquetas += [":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas", ":material/bedtime: Sueño y Bienestar", "Calorías", "Alertas"]
+    etiquetas += [":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas", ":material/bedtime: Sueño y Bienestar", ":material/local_fire_department: Calorías", ":material/siren: Alertas"]
     tabs = st.tabs(etiquetas)
     tab_resumen = tabs[0]
     tab_analisis = tabs[1]
