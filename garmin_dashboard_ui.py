@@ -14,6 +14,7 @@ import streamlit as st
 import garmin_metrics as gm
 import metabolic_calc as mc
 from resumen_pdf import build_resumen_pdf
+from theme import render_kpi_row, render_seccion_nav
 
 # ---------------------------------------------------------------------------
 # Paleta de marca "AURA CLINICAL" sobre fondo claro Clinical White (ver
@@ -927,64 +928,58 @@ def render_dashboard_body(
     resumen_mes = data["resumen_mes"]
     wellness_days = data["wellness_days"]
 
-    # Orden de pestañas: Resumen y Cruces clínicos primero (nivel 1 -- son
-    # las que convierten datos en decisión, el corazón de AURA), el resto
-    # después (nivel 2 -- los datos de soporte que sustentan esa lectura).
-    # Cruces clínicos iba históricamente después de Composición/Estudios;
-    # se sube a la 2ª posición para que no se sienta "uno de ocho módulos
-    # iguales" (ver dashboard_pacientes.py y la jerarquía de marca de AURA).
-    etiquetas = [":material/summarize: Resumen", ":material/restaurant_menu: Análisis y plan"]
+    # Navegación de secciones en un sidebar real (dark, estilo
+    # Buildpeer/HealthLine+) en vez de st.tabs() -- ver
+    # theme.render_seccion_nav(). Orden: Resumen y Cruces clínicos
+    # primero (nivel 1 -- son las que convierten datos en decisión, el
+    # corazón de AURA), el resto después (nivel 2 -- los datos de
+    # soporte que sustentan esa lectura).
+    ETQ_RESUMEN = ":material/summarize: Resumen"
+    ETQ_ANALISIS = ":material/restaurant_menu: Análisis y plan"
+    ETQ_CRUCES = ":material/call_merge: Cruces clínicos"
+    ETQ_COMPOSICION = ":material/monitor_weight: Composición corporal"
+    ETQ_ESTUDIOS = ":material/biotech: Estudios clínicos"
+    ETQ_GLP1 = ":material/medication: GLP-1 y Diabéticos"
+    ETQ_CARGA = ":material/balance: Carga y Preparación"
+    ETQ_EFICIENCIA = ":material/track_changes: Eficiencia y Zonas"
+    ETQ_BIENESTAR = ":material/bedtime: Sueño y Bienestar"
+    ETQ_CALORIAS = ":material/local_fire_department: Calorías"
+    ETQ_ALERTAS = ":material/siren: Alertas"
+
+    grupo_clinico = []
     if cruces_clinicos_renderer is not None:
-        etiquetas.append(":material/call_merge: Cruces clínicos")
+        grupo_clinico.append(ETQ_CRUCES)
     if composicion_corporal_renderer is not None:
-        etiquetas.append(":material/monitor_weight: Composición corporal")
+        grupo_clinico.append(ETQ_COMPOSICION)
     if estudios_clinicos_renderer is not None:
-        etiquetas.append(":material/biotech: Estudios clínicos")
+        grupo_clinico.append(ETQ_ESTUDIOS)
     if glp1_activo and glp1_resumen_fn is not None:
-        etiquetas.append(":material/medication: GLP-1 y Diabéticos")
-    etiquetas += [":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas", ":material/bedtime: Sueño y Bienestar", ":material/local_fire_department: Calorías", ":material/siren: Alertas"]
-    tabs = st.tabs(etiquetas)
-    tab_resumen = tabs[0]
-    tab_analisis = tabs[1]
-    idx = 2
-    tab_cruces = None
-    if cruces_clinicos_renderer is not None:
-        tab_cruces = tabs[idx]
-        idx += 1
-    tab_composicion = None
-    if composicion_corporal_renderer is not None:
-        tab_composicion = tabs[idx]
-        idx += 1
-    tab_estudios = None
-    if estudios_clinicos_renderer is not None:
-        tab_estudios = tabs[idx]
-        idx += 1
-    tab_glp1 = None
-    if glp1_activo and glp1_resumen_fn is not None:
-        tab_glp1 = tabs[idx]
-        idx += 1
-    tab_carga, tab_eficiencia, tab_bienestar, tab_calorias, tab_alertas = tabs[idx:idx + 5]
+        grupo_clinico.append(ETQ_GLP1)
 
-    if tab_composicion is not None:
-        with tab_composicion:
-            composicion_corporal_renderer(data)
+    seccion_actual = render_seccion_nav(
+        [
+            ("RESUMEN", [ETQ_RESUMEN, ETQ_ANALISIS]),
+            ("CLÍNICO", grupo_clinico),
+            ("WEARABLE", [ETQ_CARGA, ETQ_EFICIENCIA, ETQ_BIENESTAR, ETQ_CALORIAS, ETQ_ALERTAS]),
+        ],
+        key=f"seccion_nav__{paciente_nombre or 'actual'}",
+    )
 
-    if tab_estudios is not None:
-        with tab_estudios:
-            estudios_clinicos_renderer()
+    if seccion_actual == ETQ_COMPOSICION:
+        composicion_corporal_renderer(data)
 
-    if tab_cruces is not None:
-        with tab_cruces:
-            cruces_clinicos_renderer(data)
+    if seccion_actual == ETQ_ESTUDIOS:
+        estudios_clinicos_renderer()
 
-    if tab_glp1 is not None:
-        with tab_glp1:
-            _render_glp1_diabetes(glp1_resumen_fn(), glucosa_renderer)
+    if seccion_actual == ETQ_CRUCES:
+        cruces_clinicos_renderer(data)
+
+    if seccion_actual == ETQ_GLP1:
+        _render_glp1_diabetes(glp1_resumen_fn(), glucosa_renderer)
 
     # --- Resumen ---
-    with tab_resumen:
+    if seccion_actual == ETQ_RESUMEN:
         if inbody_resumen is not None:
-            b1, b2, b3, b4 = st.columns(4)
             peso_val = inbody_resumen.get("Peso_kg")
             grasa_val = inbody_resumen.get("MasaGrasa_kg")
             mme_val = inbody_resumen.get("MME_kg")
@@ -995,17 +990,29 @@ def render_dashboard_body(
                 grasa_prev = inbody_penultimo.get("MasaGrasa_kg")
                 mme_prev = inbody_penultimo.get("MME_kg")
                 if pd.notna(grasa_val) and pd.notna(grasa_prev):
-                    delta_grasa_str = f"{grasa_val - grasa_prev:+.1f} kg vs. cita anterior"
+                    delta_grasa_str = f"{grasa_val - grasa_prev:+.1f} kg"
                 if pd.notna(mme_val) and pd.notna(mme_prev):
-                    delta_mme_str = f"{mme_val - mme_prev:+.1f} kg vs. cita anterior"
+                    delta_mme_str = f"{mme_val - mme_prev:+.1f} kg"
 
-            b1.metric("Peso", f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—")
-            b2.metric(
-                "Grasa corporal", f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—",
-                delta=delta_grasa_str, delta_color="inverse",
-            )
-            b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", delta=delta_mme_str)
-            b4.metric("Hidratación (agua total)", f"{agua_val:.1f} L" if pd.notna(agua_val) else "—")
+            render_kpi_row([
+                {
+                    "icono": ":material/scale:", "color": "blue", "etiqueta": "Peso",
+                    "valor": f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—",
+                },
+                {
+                    "icono": ":material/pie_chart:", "color": "amber", "etiqueta": "Grasa corporal",
+                    "valor": f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—",
+                    "delta": delta_grasa_str, "delta_bueno_al_subir": False,
+                },
+                {
+                    "icono": ":material/fitness_center:", "color": "green", "etiqueta": "Masa muscular",
+                    "valor": f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", "delta": delta_mme_str,
+                },
+                {
+                    "icono": ":material/water_drop:", "color": "violet", "etiqueta": "Hidratación (agua total)",
+                    "valor": f"{agua_val:.1f} L" if pd.notna(agua_val) else "—",
+                },
+            ])
             st.caption(f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en :material/monitor_weight: Composición corporal.")
 
             meta_grasa_pct = (perfil or {}).get("meta_grasa_pct")
@@ -1258,12 +1265,12 @@ def render_dashboard_body(
             mime="application/pdf",
         )
 
-    with tab_analisis:
+    if seccion_actual == ETQ_ANALISIS:
         if analisis_ia_renderer is not None:
             analisis_ia_renderer(data)
 
     # --- Carga y Preparación ---
-    with tab_carga:
+    if seccion_actual == ETQ_CARGA:
         st.subheader("Carga vs. Preparación")
         st.caption(
             "ACWR: cuánto has entrenado esta semana comparado con tu promedio de las últimas 4 — muy alto y sin "
@@ -1309,7 +1316,7 @@ def render_dashboard_body(
         )
 
     # --- Eficiencia y Zonas ---
-    with tab_eficiencia:
+    if seccion_actual == ETQ_EFICIENCIA:
         st.subheader("Eficiencia cardiovascular")
         st.caption(
             "Deriva cardiaca: cuánto sube tu frecuencia cardiaca en la 2ª mitad de una sesión sostenida (>20 min) "
@@ -1366,7 +1373,7 @@ def render_dashboard_body(
                     )
 
     # --- Sueño y Bienestar ---
-    with tab_bienestar:
+    if seccion_actual == ETQ_BIENESTAR:
         st.subheader("Resiliencia del sistema nervioso autónomo")
         st.caption("FC en reposo frente a qué tan rápido baja tu FC en los primeros 2 minutos después de esforzarte.")
         col3, col4 = st.columns(2)
@@ -1515,7 +1522,7 @@ def render_dashboard_body(
             st.info("Sube un InBody con el peso del paciente para estimar la pérdida de líquidos en reposo.")
 
     # --- Calorías ---
-    with tab_calorias:
+    if seccion_actual == ETQ_CALORIAS:
         st.subheader("Calorías (reposo, actividad y total)")
         st.caption(f"Últimos {wellness_days} días.")
 
@@ -1600,7 +1607,7 @@ def render_dashboard_body(
                     )
 
     # --- Alertas ---
-    with tab_alertas:
+    if seccion_actual == ETQ_ALERTAS:
         st.subheader("Indicadores unificados")
         st.caption("Cruces de métricas que se disparan solo cuando varias señales de riesgo coinciden a la vez.")
 

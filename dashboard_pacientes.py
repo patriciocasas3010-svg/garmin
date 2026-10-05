@@ -71,7 +71,7 @@ from garmin_dashboard_ui import (
     render_dashboard_body,
     render_inbody_section,
 )
-from theme import apply_theme, render_header
+from theme import apply_theme, render_header, render_kpi_row, render_seccion_nav
 
 st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="wide", page_icon=":material/stethoscope:")
 apply_theme()
@@ -1914,7 +1914,6 @@ def _render_resumen_sin_wearable() -> None:
     inbody_penultimo = historial_valido.iloc[-2] if len(historial_valido) >= 2 else None
 
     if inbody_resumen is not None:
-        b1, b2, b3, b4 = st.columns(4)
         peso_val = inbody_resumen.get("Peso_kg")
         grasa_val = inbody_resumen.get("MasaGrasa_kg")
         mme_val = inbody_resumen.get("MME_kg")
@@ -1925,17 +1924,29 @@ def _render_resumen_sin_wearable() -> None:
             grasa_prev = inbody_penultimo.get("MasaGrasa_kg")
             mme_prev = inbody_penultimo.get("MME_kg")
             if pd.notna(grasa_val) and pd.notna(grasa_prev):
-                delta_grasa_str = f"{grasa_val - grasa_prev:+.1f} kg vs. cita anterior"
+                delta_grasa_str = f"{grasa_val - grasa_prev:+.1f} kg"
             if pd.notna(mme_val) and pd.notna(mme_prev):
-                delta_mme_str = f"{mme_val - mme_prev:+.1f} kg vs. cita anterior"
+                delta_mme_str = f"{mme_val - mme_prev:+.1f} kg"
 
-        b1.metric("Peso", f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—")
-        b2.metric(
-            "Grasa corporal", f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—",
-            delta=delta_grasa_str, delta_color="inverse",
-        )
-        b3.metric("Masa muscular", f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", delta=delta_mme_str)
-        b4.metric("Hidratación (agua total)", f"{agua_val:.1f} L" if pd.notna(agua_val) else "—")
+        render_kpi_row([
+            {
+                "icono": ":material/scale:", "color": "blue", "etiqueta": "Peso",
+                "valor": f"{peso_val:.1f} kg" if pd.notna(peso_val) else "—",
+            },
+            {
+                "icono": ":material/pie_chart:", "color": "amber", "etiqueta": "Grasa corporal",
+                "valor": f"{grasa_val:.1f} kg" if pd.notna(grasa_val) else "—",
+                "delta": delta_grasa_str, "delta_bueno_al_subir": False,
+            },
+            {
+                "icono": ":material/fitness_center:", "color": "green", "etiqueta": "Masa muscular",
+                "valor": f"{mme_val:.1f} kg" if pd.notna(mme_val) else "—", "delta": delta_mme_str,
+            },
+            {
+                "icono": ":material/water_drop:", "color": "violet", "etiqueta": "Hidratación (agua total)",
+                "valor": f"{agua_val:.1f} L" if pd.notna(agua_val) else "—",
+            },
+        ])
         st.caption(
             f"Último InBody: {inbody_resumen.get('Fecha', '')} · ver detalle completo en "
             ":material/monitor_weight: Composición corporal."
@@ -2037,43 +2048,48 @@ if not datos_json:
     )
 
     glp1_activo_actual = glp1_diabetes.activo(perfil_actual)
-    etiquetas_sw = [
-        ":material/summarize: Resumen", ":material/restaurant_menu: Análisis y plan",
-        ":material/monitor_weight: Composición corporal",
-        ":material/biotech: Estudios clínicos", ":material/call_merge: Cruces clínicos",
-    ]
-    if glp1_activo_actual:
-        etiquetas_sw.append(":material/medication: GLP-1 y Diabéticos")
-    etiquetas_sw += [
+    ETQ_RESUMEN_SW = ":material/summarize: Resumen"
+    ETQ_ANALISIS_SW = ":material/restaurant_menu: Análisis y plan"
+    ETQ_COMPOSICION_SW = ":material/monitor_weight: Composición corporal"
+    ETQ_ESTUDIOS_SW = ":material/biotech: Estudios clínicos"
+    ETQ_CRUCES_SW = ":material/call_merge: Cruces clínicos"
+    ETQ_GLP1_SW = ":material/medication: GLP-1 y Diabéticos"
+    etiquetas_wearable_sw = [
         ":material/balance: Carga y Preparación", ":material/track_changes: Eficiencia y Zonas",
         ":material/bedtime: Sueño y Bienestar", ":material/local_fire_department: Calorías",
         ":material/siren: Alertas",
     ]
-    tabs_sw = st.tabs(etiquetas_sw)
 
-    with tabs_sw[0]:
-        _render_resumen_sin_wearable()
-    with tabs_sw[1]:
-        _render_analisis_ia(None)
-    with tabs_sw[2]:
-        _render_composicion_corporal(None)
-    with tabs_sw[3]:
-        _render_estudios_clinicos()
-    with tabs_sw[4]:
-        _render_cruces_clinicos(None)
-
-    idx_sw = 5
+    grupo_clinico_sw = [ETQ_COMPOSICION_SW, ETQ_ESTUDIOS_SW, ETQ_CRUCES_SW]
     if glp1_activo_actual:
-        with tabs_sw[idx_sw]:
-            _render_glp1_diabetes(_calcular_glp1_resumen(), _render_glucosa_libre)
-        idx_sw += 1
+        grupo_clinico_sw.append(ETQ_GLP1_SW)
 
-    for etiqueta_sw in etiquetas_sw[idx_sw:]:
-        with tabs_sw[idx_sw]:
-            _placeholder_requiere_wearable(
-                etiqueta_sw, _DESCRIPCIONES_TABS_WEARABLE.get(etiqueta_sw, "datos que aporta el wearable."),
-            )
-        idx_sw += 1
+    seccion_actual_sw = render_seccion_nav(
+        [
+            ("RESUMEN", [ETQ_RESUMEN_SW, ETQ_ANALISIS_SW]),
+            ("CLÍNICO", grupo_clinico_sw),
+            ("WEARABLE", etiquetas_wearable_sw),
+        ],
+        key="seccion_nav_sw",
+    )
+
+    if seccion_actual_sw == ETQ_RESUMEN_SW:
+        _render_resumen_sin_wearable()
+    if seccion_actual_sw == ETQ_ANALISIS_SW:
+        _render_analisis_ia(None)
+    if seccion_actual_sw == ETQ_COMPOSICION_SW:
+        _render_composicion_corporal(None)
+    if seccion_actual_sw == ETQ_ESTUDIOS_SW:
+        _render_estudios_clinicos()
+    if seccion_actual_sw == ETQ_CRUCES_SW:
+        _render_cruces_clinicos(None)
+    if glp1_activo_actual and seccion_actual_sw == ETQ_GLP1_SW:
+        _render_glp1_diabetes(_calcular_glp1_resumen(), _render_glucosa_libre)
+
+    if seccion_actual_sw in etiquetas_wearable_sw:
+        _placeholder_requiere_wearable(
+            seccion_actual_sw, _DESCRIPCIONES_TABS_WEARABLE.get(seccion_actual_sw, "datos que aporta el wearable."),
+        )
 
     st.stop()
 

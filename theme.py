@@ -51,6 +51,23 @@ SKY_TINT = "#EFF6FC"
 SAND_LINEN = "#F4F1EA"
 CHARCOAL_SLATE = "#2A3439"
 
+# Sidebar de navegación -- oscuro, estilo HealthLine+/Buildpeer (las
+# referencias que mandó Pato), en vez de la franja clara del resto de
+# la plataforma -- es chrome de navegación, no contenido clínico.
+SIDEBAR_NAVY = "#132033"
+SIDEBAR_NAVY_SOFT = "#1E2F45"
+SIDEBAR_TEXT = "#E7EDF3"
+SIDEBAR_TEXT_MUTED = "#8CA0B3"
+
+# Fondos suaves para las tarjetas KPI con badge de icono (estilo
+# HealthLine+: icono en círculo de color + chip de tendencia).
+KPI_BADGE_TINTS = {
+    "blue": ("#2B6CB0", "#EFF6FC"),
+    "green": ("#38A169", "#EAF7EF"),
+    "amber": ("#DD6B20", "#FDF1E7"),
+    "violet": ("#6B5CA5", "#EFECF8"),
+}
+
 # Semáforo clínico -- estados de salud, no acentos de marca.
 OPTIMUM_GREEN = "#38A169"
 WARNING_AMBER = "#DD6B20"
@@ -85,48 +102,79 @@ def apply_theme() -> None:
         .stButton > button {{ font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; }}
         .stButton > button[kind="primary"] {{ background-color: {AZURE_BLUE}; border-color: {AZURE_BLUE}; }}
 
-        /* Navegación de secciones en el lado izquierdo, estilo Buildpeer
-        -- puro CSS sobre el st.tabs() nativo, sin tocar la lógica de
-        contenido: el wrapper interno de BaseUI pasa de fila (tablist
-        arriba, panel abajo) a columna (tablist a la izquierda, panel a
-        la derecha). Selectores anclados solo en atributos estables
-        (data-testid, data-orientation, role) -- las clases
-        st-emotion-cache-* son hashes de build, no se deben usar. */
-        [data-testid="stTabs"] > div[data-orientation="horizontal"] {{
-            display: flex;
-            flex-direction: row;
-            align-items: flex-start;
-            gap: 2rem;
+        /* Sidebar de navegación real (st.sidebar) -- fondo oscuro,
+        grupos en mayúsculas chiquitas y botón activo en Azure Blue,
+        estilo HealthLine+/Buildpeer. Reemplaza al hack de CSS sobre
+        st.tabs() de la versión anterior: ahora es un sidebar de
+        Streamlit de verdad, así que el admin (otros st.tabs() del
+        código, ej. Usuarios/Eliminar paciente) no se ve afectado. */
+        [data-testid="stSidebar"] {{
+            background-color: {SIDEBAR_NAVY};
+            min-width: 272px !important;
         }}
-        [data-testid="stTabs"] [role="tablist"] {{
-            flex: 0 0 320px;
-            flex-direction: column;
-            align-items: stretch;
-            gap: 8px;
-            border-bottom: none;
-            overflow-x: visible;
-            overflow-y: visible;
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
+            color: {SIDEBAR_TEXT};
+            margin-bottom: 0;
         }}
-        [data-testid="stTabs"] [role="tab"] {{
-            justify-content: flex-start;
-            text-align: left;
-            width: 100%;
-            border-radius: 10px;
-            padding: 14px 18px;
-            font-size: 1.02rem;
-            border-bottom: none !important;
+        [data-testid="stSidebar"] hr {{ border-color: {SIDEBAR_NAVY_SOFT}; }}
+        .aura-sidebar-brand {{
+            padding: 2px 6px 18px 6px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid {SIDEBAR_NAVY_SOFT};
         }}
-        [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
-            background-color: {SKY_TINT};
+        .aura-sidebar-brand .nombre {{
+            font-family: 'Syne', sans-serif; font-weight: 800; font-size: 19px;
+            color: {SIDEBAR_TEXT}; letter-spacing: .3px;
         }}
-        [data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        [data-testid="stTabs"] .react-aria-SelectionIndicator {{
-            display: none;
+        .aura-sidebar-brand .nombre span {{ color: {AZURE_BLUE}; }}
+        .aura-sidebar-brand .tagline {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-size: 10.5px;
+            text-transform: uppercase; letter-spacing: .1em; color: {SIDEBAR_TEXT_MUTED};
         }}
-        [data-testid="stTabs"] [role="tabpanel"] {{
-            flex: 1 1 auto;
-            min-width: 0;
+        .aura-sidebar-group {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 0.68rem;
+            text-transform: uppercase; letter-spacing: .08em; color: {SIDEBAR_TEXT_MUTED};
+            padding: 14px 10px 6px 10px;
         }}
+        [data-testid="stSidebar"] .stButton {{ margin-bottom: 2px; }}
+        [data-testid="stSidebar"] .stButton > button {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; font-size: 0.92rem;
+            justify-content: flex-start; text-align: left;
+            background-color: transparent; border: 1px solid transparent;
+            color: {SIDEBAR_TEXT_MUTED}; border-radius: 10px; padding: 10px 12px;
+        }}
+        [data-testid="stSidebar"] .stButton > button:hover {{
+            background-color: {SIDEBAR_NAVY_SOFT}; color: {SIDEBAR_TEXT}; border-color: transparent;
+        }}
+        [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+            background-color: {AZURE_BLUE}; color: #FFFFFF; border-color: {AZURE_BLUE};
+        }}
+
+        /* Tarjetas KPI con badge de icono + chip de tendencia, estilo
+        HealthLine+ (icono en círculo de color, cifra grande, chip
+        verde/rojo de variación) -- ver theme.render_kpi_row(). */
+        .aura-kpi-row {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 1rem; }}
+        .aura-kpi-card {{
+            flex: 1 1 200px; background: {CLINICAL_WHITE}; border: 1px solid #EBEDF0;
+            border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 2px rgba(16,24,40,.04);
+        }}
+        .aura-kpi-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }}
+        .aura-kpi-badge {{
+            width: 38px; height: 38px; border-radius: 10px; display: flex;
+            align-items: center; justify-content: center; font-size: 20px;
+        }}
+        .aura-kpi-delta {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 0.72rem;
+            padding: 3px 8px; border-radius: 20px;
+        }}
+        .aura-kpi-delta.up {{ background: #EAF7EF; color: {OPTIMUM_GREEN}; }}
+        .aura-kpi-delta.down {{ background: #FDECEC; color: {CRITICAL_CORAL}; }}
+        .aura-kpi-value {{ font-family: 'Inter', sans-serif; font-weight: 700; font-size: 1.7rem; color: {INK}; line-height: 1.1; }}
+        .aura-kpi-label {{
+            font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500; font-size: 0.78rem;
+            color: {INK_SOFT}; margin-top: 2px;
+        }}
+        .aura-kpi-caption {{ font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.72rem; color: #9AA5AD; margin-top: 2px; }}
 
         /* Semáforo clínico en las alertas nativas de Streamlit --
         Critical Coral para st.error, Warning Amber para st.warning,
@@ -194,3 +242,98 @@ def render_header(titulo: str, subtitulo: str = "", marca: str = "clinical") -> 
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_seccion_nav(grupos: list[tuple[str, list[str]]], key: str) -> str:
+    """Navegación de secciones en un st.sidebar real -- fondo oscuro,
+    grupos en mayúsculas chiquitas, botón activo en Azure Blue -- en vez
+    del st.tabs() de arriba, para que la plataforma se vea como las
+    referencias de Buildpeer/HealthLine+ (sidebar fijo de ancho completo,
+    no una franja de pestañas reflowed con CSS).
+
+    grupos: lista de (nombre_de_grupo, [etiquetas]) -- cada etiqueta ya
+    trae su propio ":material/icono:" al frente, igual que como se
+    armaban las listas para st.tabs() antes. key: la llave de
+    session_state donde vive la sección activa (una por cada dashboard
+    que use esta navegación, para no pisarse entre pacientes). Regresa
+    la etiqueta de la sección activa -- el llamador dibuja su contenido
+    comparando "if seccion_actual == esa_etiqueta" en vez de "with tab:".
+    """
+    etiquetas_planas = [etq for _, etqs in grupos for etq in etqs]
+    if st.session_state.get(key) not in etiquetas_planas:
+        st.session_state[key] = etiquetas_planas[0]
+
+    st.sidebar.markdown(
+        f"""<div class="aura-sidebar-brand">
+            <div class="nombre">AURA <span>CLINICAL</span></div>
+            <div class="tagline">{BRAND_TAGLINE}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+    for nombre_grupo, etiquetas_grupo in grupos:
+        if not etiquetas_grupo:
+            continue
+        st.sidebar.markdown(f'<div class="aura-sidebar-group">{nombre_grupo}</div>', unsafe_allow_html=True)
+        for etiqueta in etiquetas_grupo:
+            activo = st.session_state[key] == etiqueta
+            if st.sidebar.button(
+                etiqueta, key=f"{key}__{etiqueta}", use_container_width=True,
+                type="primary" if activo else "tertiary",
+            ):
+                st.session_state[key] = etiqueta
+                st.rerun()
+    return st.session_state[key]
+
+
+def render_kpi_row(tarjetas: list[dict]) -> None:
+    """Fila de tarjetas KPI con badge de icono + chip de tendencia,
+    estilo HealthLine+ -- reemplaza un st.columns(4) + st.metric plano
+    cuando se quiere ese look (icono en círculo de color, cifra grande,
+    "+X%" verde/rojo arriba a la derecha).
+
+    Cada tarjeta es un dict: {"icono": ":material/xxx:", "color":
+    "blue"|"green"|"amber"|"violet", "valor": "68.4 kg", "etiqueta":
+    "Peso", "caption": "texto chico opcional", "delta": "+2.1%" opcional
+    (con signo -- la flecha sigue el signo; el color del chip también,
+    salvo que "delta_bueno_al_subir" sea False -- ej. grasa corporal,
+    donde bajar es la buena noticia y debe salir en verde)."""
+
+    def _icon_span(icono: str, size: int) -> str:
+        # st.markdown() sí convierte ":material/xxx:" a icono, pero solo
+        # en texto normal -- dentro de un bloque de HTML crudo
+        # (unsafe_allow_html) ese shortcode no se procesa, así que se
+        # arma a mano el mismo <span> que Streamlit genera por dentro
+        # (fuente "Material Symbols Rounded", ya cargada en la página).
+        nombre = icono.strip().removeprefix(":material/").removesuffix(":")
+        return (
+            f'<span style="font-family:\'Material Symbols Rounded\'; font-weight:400; '
+            f'font-size:{size}px; vertical-align:middle;">{nombre}</span>'
+        )
+
+    html_tarjetas = []
+    for t in tarjetas:
+        color_icono, color_fondo = KPI_BADGE_TINTS.get(t.get("color", "blue"), KPI_BADGE_TINTS["blue"])
+        delta_html = ""
+        if t.get("delta"):
+            es_baja = t["delta"].strip().startswith("-")
+            flecha = _icon_span(":material/arrow_downward:" if es_baja else ":material/arrow_upward:", 13)
+            es_buena = (not es_baja) if t.get("delta_bueno_al_subir", True) else es_baja
+            delta_html = f'<div class="aura-kpi-delta {"up" if es_buena else "down"}">{flecha} {t["delta"]}</div>'
+        caption_html = f'<div class="aura-kpi-caption">{t["caption"]}</div>' if t.get("caption") else ""
+        # Una tarjeta por línea rompe el parser de Markdown de Streamlit
+        # a la mitad (igual que el logo SVG en _FULL_LOGO_SVG) -- se
+        # colapsa todo a una sola línea antes de unir las tarjetas.
+        html_tarjetas.append(
+            " ".join(
+                f"""<div class="aura-kpi-card">
+                <div class="aura-kpi-top">
+                    <div class="aura-kpi-badge" style="background:{color_fondo}; color:{color_icono};">{_icon_span(t["icono"], 20)}</div>
+                    {delta_html}
+                </div>
+                <div class="aura-kpi-value">{t["valor"]}</div>
+                <div class="aura-kpi-label">{t["etiqueta"]}</div>
+                {caption_html}
+            </div>""".split()
+            )
+        )
+    st.markdown(f'<div class="aura-kpi-row">{"".join(html_tarjetas)}</div>', unsafe_allow_html=True)
