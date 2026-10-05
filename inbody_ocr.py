@@ -302,6 +302,22 @@ def parse_inbody_text(texto: str) -> dict:
         _a_float(grasa_visceral_m.group(1)) if grasa_visceral_m
         else _valor_de_fila(lineas, r"Nivel\s*de\s*Grasa\s*Visceral|Visceral\s*Fat\s*Level", primero=True)
     )
+    # Red de seguridad extra (no solo confiar en que --psm 3 siempre
+    # acierta): si la pasada --psm 6 también encontró un valor y NO
+    # coincide con el que se está usando, es una señal real de que esta
+    # fila puntual salió ambigua en este reporte -- se marca como dudosa
+    # en vez de reportarla con la misma confianza que el resto (ver
+    # campos_dudosos en el dict de salida, y el aviso extra que dispara
+    # en dashboard_pacientes.py).
+    campos_dudosos = []
+    texto_psm6_solo = texto.split(PSM3_MARKER, 1)[0] if PSM3_MARKER in texto else texto
+    grasa_visceral_psm6_m = re.search(_GRASA_VISCERAL_RE, texto_psm6_solo, re.IGNORECASE)
+    if (
+        grasa_visceral_psm6_m is not None
+        and grasa_visceral is not None
+        and _a_float(grasa_visceral_psm6_m.group(1)) != grasa_visceral
+    ):
+        campos_dudosos.append("grasa_visceral")
     # preferir_decimal=True: esta fila casi siempre sale con un número
     # entero de sobra pegado (columna vecina) -- si hay un solo candidato
     # con punto decimal entre los números de la línea, es el correcto.
@@ -450,4 +466,5 @@ def parse_inbody_text(texto: str) -> dict:
         if valor is not None and not (minimo <= valor <= maximo):
             campos[campo] = None
 
+    campos["_campos_dudosos"] = campos_dudosos
     return campos

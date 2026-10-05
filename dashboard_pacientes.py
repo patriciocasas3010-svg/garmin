@@ -1424,6 +1424,16 @@ def _render_composicion_corporal(data: dict | None):
                     "encontró nada. Revisa la foto/PDF original y complétalos a mano antes de guardar, o ese "
                     "campo se va a guardar vacío y no va a aparecer en Resumen ni en las gráficas."
                 )
+            campos_dudosos = [
+                _CAMPOS_INBODY_OCR[c] for c in (draft.get("_campos_dudosos") or []) if c in _CAMPOS_INBODY_OCR
+            ]
+            if campos_dudosos:
+                st.error(
+                    f":material/report: La lectura automática encontró DOS valores distintos para: "
+                    f"{', '.join(campos_dudosos)} (dos pasadas de OCR no coincidieron). El de abajo es el que "
+                    "la app considera más confiable, pero en este reporte en particular salió ambiguo -- "
+                    "compáralo contra el PDF/foto original antes de guardar, no lo des por hecho."
+                )
             with st.form(f"inbody_form_{paciente}"):
                 col1, col2, col3 = st.columns(3)
                 fecha = col1.text_input("Fecha (DD.MM.AAAA)", value=draft.get("fecha") or "")
