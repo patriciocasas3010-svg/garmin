@@ -486,6 +486,9 @@ if st.session_state["paciente_actual"] is None:
         asignaciones = enfoque_store.leer_todas_las_asignaciones(_engine())
         nombres = [n for n in nombres_todos if asignaciones.get(n) == usuario_actual["usuario"]]
 
+    if "mostrar_form_nuevo_paciente" not in st.session_state:
+        st.session_state["mostrar_form_nuevo_paciente"] = False
+
     if nombres:
         ultima_actividad = _cargar_ultima_actividad()
         busqueda = st.text_input(
@@ -505,10 +508,16 @@ if st.session_state["paciente_actual"] is None:
                 if ultima_actividad.get(n) is None or (hoy - ultima_actividad[n]).days <= _DIAS_INACTIVO
             ]
             inactivos = [n for n in nombres if n not in activos]
-            tab_activos, tab_inactivos = st.tabs([
-                f":material/person: Activos ({len(activos)})",
-                f":material/person_off: Inactivos ({len(inactivos)})",
-            ])
+            col_tabs, col_btn_nuevo = st.columns([6, 1])
+            with col_tabs:
+                tab_activos, tab_inactivos = st.tabs([
+                    f":material/person: Activos ({len(activos)})",
+                    f":material/person_off: Inactivos ({len(inactivos)})",
+                ])
+            with col_btn_nuevo:
+                st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+                if st.button(":material/add: Nuevo", key="toggle_nuevo_paciente", use_container_width=True):
+                    st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
             with tab_activos:
                 if activos:
                     _render_mosaico_pacientes(activos, ultima_actividad, key_prefix="activo")
@@ -525,56 +534,8 @@ if st.session_state["paciente_actual"] is None:
             "Todavía no hay ningún paciente. Se llena solo cuando alguien abre su dashboard local "
             "por primera vez, o puedes crear uno nuevo abajo para empezar a subirle InBody/mediciones ya."
         )
-
-    if "mostrar_form_nuevo_paciente" not in st.session_state:
-        st.session_state["mostrar_form_nuevo_paciente"] = False
-
-    # Tile de "agregar" con borde punteado -- mismo lenguaje visual que
-    # las tarjetas del mosaico de arriba (círculo + texto centrado) en
-    # vez de una barra de color plana. ".st-key-<key>" es la clase
-    # estable que Streamlit le pone al contenedor de un widget/container
-    # con ese key (no un hash de build) -- confirmado con una inspección
-    # de DOM antes de usarla, igual que el resto del rediseño.
-    st.markdown(
-        """<style>
-        .st-key-tile_agregar_paciente {
-            border-style: dashed !important;
-            border-width: 2px !important;
-            border-color: #2B6CB0 !important;
-            border-radius: 14px !important;
-            background: #EFF6FC;
-            transition: background .15s ease;
-        }
-        .st-key-tile_agregar_paciente:hover {
-            background: #E3EEFA;
-        }
-        .st-key-tile_agregar_paciente .stButton > button {
-            background: transparent; border: 1px solid #2B6CB0; color: #2B6CB0;
-        }
-        .st-key-tile_agregar_paciente .stButton > button:hover {
-            background: #2B6CB0; color: #FFFFFF;
-        }
-        </style>""",
-        unsafe_allow_html=True,
-    )
-    col_izq, col_centro, col_der = st.columns([1, 2, 1])
-    with col_centro:
-        with st.container(key="tile_agregar_paciente", border=True):
-            st.markdown(
-                " ".join(
-                    """<div style="text-align:center; padding:6px 0 2px 0;">
-                    <div style="width:48px; height:48px; border-radius:50%; border:2px dashed #2B6CB0;
-                        display:flex; align-items:center; justify-content:center; margin:0 auto 10px auto;
-                        font-family:'Syne',sans-serif; font-weight:800; font-size:26px; color:#2B6CB0;
-                        line-height:1;">+</div>
-                    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:600; font-size:0.95rem;
-                        color:#2A3439; margin-bottom:12px;">Agregar paciente nuevo</div>
-                </div>""".split()
-                ),
-                unsafe_allow_html=True,
-            )
-            if st.button("Crear paciente", key="toggle_nuevo_paciente", use_container_width=True):
-                st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
+        if st.button(":material/add: Agregar paciente nuevo", key="toggle_nuevo_paciente_vacio"):
+            st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
 
     if st.session_state["mostrar_form_nuevo_paciente"]:
       with st.container(border=True):
