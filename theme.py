@@ -355,6 +355,21 @@ def render_seccion_nav(grupos: list[tuple[str, list[str]]], key: str) -> str:
     return st.session_state[key]
 
 
+def icon_span(icono: str, size: int = 16, color: str | None = None) -> str:
+    """<span> de un icono Material Symbols para usar DENTRO de un bloque
+    de HTML crudo (st.markdown(..., unsafe_allow_html=True)) -- fuera de
+    ahí (texto normal) st.markdown() ya convierte ":material/xxx:" solo,
+    pero ese shortcode no se procesa dentro de HTML crudo, así que se
+    arma a mano el mismo <span> que Streamlit genera por dentro (fuente
+    "Material Symbols Rounded", ya cargada en la página)."""
+    nombre = icono.strip().removeprefix(":material/").removesuffix(":")
+    color_css = f" color:{color};" if color else ""
+    return (
+        f'<span style="font-family:\'Material Symbols Rounded\'; font-weight:400; '
+        f'font-size:{size}px; vertical-align:middle;{color_css}">{nombre}</span>'
+    )
+
+
 def render_kpi_row(tarjetas: list[dict]) -> None:
     """Fila de tarjetas KPI con badge de icono + chip de tendencia,
     estilo HealthLine+ -- reemplaza un st.columns(4) + st.metric plano
@@ -367,26 +382,13 @@ def render_kpi_row(tarjetas: list[dict]) -> None:
     (con signo -- la flecha sigue el signo; el color del chip también,
     salvo que "delta_bueno_al_subir" sea False -- ej. grasa corporal,
     donde bajar es la buena noticia y debe salir en verde)."""
-
-    def _icon_span(icono: str, size: int) -> str:
-        # st.markdown() sí convierte ":material/xxx:" a icono, pero solo
-        # en texto normal -- dentro de un bloque de HTML crudo
-        # (unsafe_allow_html) ese shortcode no se procesa, así que se
-        # arma a mano el mismo <span> que Streamlit genera por dentro
-        # (fuente "Material Symbols Rounded", ya cargada en la página).
-        nombre = icono.strip().removeprefix(":material/").removesuffix(":")
-        return (
-            f'<span style="font-family:\'Material Symbols Rounded\'; font-weight:400; '
-            f'font-size:{size}px; vertical-align:middle;">{nombre}</span>'
-        )
-
     html_tarjetas = []
     for t in tarjetas:
         color_icono, color_fondo = KPI_BADGE_TINTS.get(t.get("color", "blue"), KPI_BADGE_TINTS["blue"])
         delta_html = ""
         if t.get("delta"):
             es_baja = t["delta"].strip().startswith("-")
-            flecha = _icon_span(":material/arrow_downward:" if es_baja else ":material/arrow_upward:", 13)
+            flecha = icon_span(":material/arrow_downward:" if es_baja else ":material/arrow_upward:", 13)
             es_buena = (not es_baja) if t.get("delta_bueno_al_subir", True) else es_baja
             delta_html = f'<div class="aura-kpi-delta {"up" if es_buena else "down"}">{flecha} {t["delta"]}</div>'
         caption_html = f'<div class="aura-kpi-caption">{t["caption"]}</div>' if t.get("caption") else ""
@@ -397,7 +399,7 @@ def render_kpi_row(tarjetas: list[dict]) -> None:
             " ".join(
                 f"""<div class="aura-kpi-card">
                 <div class="aura-kpi-top">
-                    <div class="aura-kpi-badge" style="background:{color_fondo}; color:{color_icono};">{_icon_span(t["icono"], 20)}</div>
+                    <div class="aura-kpi-badge" style="background:{color_fondo}; color:{color_icono};">{icon_span(t["icono"], 20)}</div>
                     {delta_html}
                 </div>
                 <div class="aura-kpi-value">{t["valor"]}</div>

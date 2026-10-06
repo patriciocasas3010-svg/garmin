@@ -74,7 +74,10 @@ from garmin_dashboard_ui import (
     render_dashboard_body,
     render_inbody_section,
 )
-from theme import apply_theme, render_header, render_kpi_row, render_seccion_nav, render_topbar
+from theme import (
+    AZURE_BLUE, SIDEBAR_NAVY, SIDEBAR_NAVY_SOFT, SIDEBAR_TEXT, SIDEBAR_TEXT_MUTED,
+    apply_theme, icon_span, render_header, render_kpi_row, render_seccion_nav, render_topbar,
+)
 
 st.set_page_config(page_title="AURA CLINICAL · Resumen de pacientes", layout="wide", page_icon=":material/stethoscope:")
 apply_theme()
@@ -82,6 +85,73 @@ apply_theme()
 
 def _engine():
     return db.engine()
+
+
+_LOGIN_PROMO_ITEMS = [
+    {
+        "icono": ":material/watch:", "color": "#2B6CB0",
+        "titulo": "Conecta cualquier wearable",
+        "texto": "Garmin, Apple Health u Oura -- se sincroniza solo todos los días, sin que tengas que hacer nada.",
+    },
+    {
+        "icono": ":material/biotech:", "color": "#38A169",
+        "titulo": "Sube laboratorios e InBody",
+        "texto": "Lectura automática por IA de PDFs y fotos -- revisa y confirma en segundos, no captures todo a mano.",
+    },
+    {
+        "icono": ":material/restaurant_menu:", "color": "#DD6B20",
+        "titulo": "Arma el plan con IA",
+        "texto": "Equivalencias SMAE, dos semanas completas, listo para mandar -- en minutos, no en horas.",
+    },
+]
+
+
+def _render_login_promo() -> None:
+    """Panel oscuro al lado del formulario de login -- muestra de un
+    vistazo lo que ya hace la plataforma (wearables, laboratorios, plan
+    con IA) en vez de dejar esa mitad de la pantalla en blanco. Mismo
+    espíritu que el panel promocional de Buildpeer (imagen + texto a la
+    derecha del login), pero con las 3 cosas reales que ya ofrece AURA
+    en vez de un mockup -- nada que no exista todavía."""
+    st.markdown(
+        f"""<style>
+        .st-key-login_promo {{
+            background: linear-gradient(165deg, {SIDEBAR_NAVY} 0%, {SIDEBAR_NAVY_SOFT} 100%);
+            border-radius: 20px; padding: 40px 36px; height: 100%;
+        }}
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    with st.container(key="login_promo"):
+        bloques = [
+            " ".join(
+                f"""<div style="margin-bottom:34px;">
+                <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:19px; color:{SIDEBAR_TEXT};
+                    margin-bottom:6px; letter-spacing:.2px;">
+                    AURA <span style="color:{AZURE_BLUE};">CLINICAL</span>
+                </div>
+                <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12px; text-transform:uppercase;
+                    letter-spacing:.1em; color:{SIDEBAR_TEXT_MUTED};">Human Coherence System</div>
+            </div>""".split()
+            )
+        ]
+        for item in _LOGIN_PROMO_ITEMS:
+            bloques.append(
+                " ".join(
+                    f"""<div style="display:flex; gap:16px; margin-bottom:28px; align-items:flex-start;">
+                    <div style="width:44px; height:44px; border-radius:12px; background:{item['color']}26;
+                        color:{item['color']}; display:flex; align-items:center; justify-content:center;
+                        flex-shrink:0;">{icon_span(item['icono'], 22)}</div>
+                    <div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:15px;
+                            color:{SIDEBAR_TEXT}; margin-bottom:4px;">{item['titulo']}</div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; line-height:1.5;
+                            color:{SIDEBAR_TEXT_MUTED};">{item['texto']}</div>
+                    </div>
+                </div>""".split()
+                )
+            )
+        st.markdown("".join(bloques), unsafe_allow_html=True)
 
 
 def _login() -> dict | None:
@@ -114,11 +184,15 @@ def _login() -> dict | None:
         st.session_state["_usuario"] = {"usuario": "admin", "nombre": "Admin", "rol": "admin"}
         return st.session_state["_usuario"]
 
-    render_header("Resumen de pacientes")
-    with st.form("login_form"):
-        usuario_input = st.text_input("Usuario", placeholder='"admin", o el usuario que te dieron')
-        pwd = st.text_input("Contraseña", type="password")
-        entrar = st.form_submit_button("Entrar", type="primary")
+    col_login, col_promo = st.columns([1, 1], gap="large")
+    with col_login:
+        render_header("Resumen de pacientes")
+        with st.form("login_form"):
+            usuario_input = st.text_input("Usuario", placeholder='"admin", o el usuario que te dieron')
+            pwd = st.text_input("Contraseña", type="password")
+            entrar = st.form_submit_button("Entrar", type="primary")
+    with col_promo:
+        _render_login_promo()
 
     if entrar:
         usuario_input = usuario_input.strip()
