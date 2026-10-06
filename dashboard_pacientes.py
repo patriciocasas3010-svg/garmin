@@ -103,7 +103,7 @@ _LOGIN_CAROUSEL_SLIDES = [
     {
         "icono": ":material/restaurant_menu:",
         "gradiente": "linear-gradient(165deg, #DD6B20 0%, #132033 100%)",
-        "titulo": "Arma el plan con IA.",
+        "titulo": "Planes ultrapersonalizados, basados en tus métricas reales.",
         "texto": "Equivalencias SMAE, dos semanas completas, listo para mandar -- en minutos, no en horas.",
     },
 ]
@@ -147,13 +147,13 @@ def _render_login_promo() -> None:
     st.markdown(
         f"""<style>
         .st-key-login_promo {{
-            border-radius: 20px; overflow: hidden; height: 100%; min-height: 560px;
-            position: relative;
+            border-radius: 20px; overflow: hidden; height: 100%;
+            min-height: calc(100vh - 160px); position: relative;
         }}
-        .login-carousel {{ position: relative; width: 100%; height: 560px; }}
+        .login-carousel {{ position: relative; width: 100%; height: 100%; min-height: calc(100vh - 160px); }}
         .login-carousel-slide {{
             position: absolute; inset: 0; display: flex; flex-direction: column;
-            justify-content: space-between; padding: 36px 36px 44px 36px; opacity: 0;
+            justify-content: space-between; padding: 48px 56px 56px 56px; opacity: 0;
         }}
         @keyframes loginCarouselFade {{
             0% {{ opacity: 0; }}
@@ -164,7 +164,7 @@ def _render_login_promo() -> None:
         }}
         {" ".join(reglas_slides)}
         .login-carousel-dots {{
-            position: absolute; left: 36px; bottom: 18px; display: flex; gap: 6px; z-index: 5;
+            position: absolute; left: 56px; bottom: 24px; display: flex; gap: 6px; z-index: 5;
         }}
         .login-carousel-dot {{
             width: 18px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.3);
@@ -191,11 +191,11 @@ def _render_login_promo() -> None:
                         <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:11px; text-transform:uppercase;
                             letter-spacing:.1em; color:rgba(255,255,255,.65); margin-top:2px;">Human Coherence System</div>
                     </div>
-                    <div style="max-width:380px;">
-                        <div style="margin-bottom:14px;">{icon_span(slide['icono'], 40, color='#FFFFFF')}</div>
-                        <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:30px; line-height:1.15;
-                            color:#FFFFFF; margin-bottom:10px;">{slide['titulo']}</div>
-                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:14px; line-height:1.55;
+                    <div style="max-width:92%;">
+                        <div style="margin-bottom:20px;">{icon_span(slide['icono'], 44, color='#FFFFFF')}</div>
+                        <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:32px; line-height:1.4;
+                            letter-spacing:.01em; color:#FFFFFF; margin-bottom:16px;">{slide['titulo']}</div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:15px; line-height:1.65;
                             color:rgba(255,255,255,.85);">{slide['texto']}</div>
                     </div>
                 </div>""".split()
