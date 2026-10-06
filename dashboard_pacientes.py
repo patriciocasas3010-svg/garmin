@@ -193,8 +193,8 @@ def _render_login_promo() -> None:
                     </div>
                     <div style="max-width:92%;">
                         <div style="margin-bottom:20px;">{icon_span(slide['icono'], 44, color='#FFFFFF')}</div>
-                        <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:32px; line-height:1.4;
-                            letter-spacing:.01em; color:#FFFFFF; margin-bottom:16px;">{slide['titulo']}</div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:32px; line-height:1.4;
+                            letter-spacing:-.005em; color:#FFFFFF; margin-bottom:16px;">{slide['titulo']}</div>
                         <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:15px; line-height:1.65;
                             color:rgba(255,255,255,.85);">{slide['texto']}</div>
                     </div>

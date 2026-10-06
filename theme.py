@@ -84,7 +84,12 @@ def apply_theme() -> None:
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-        html, body, [class*="css"] {{ font-family: 'Plus Jakarta Sans', sans-serif; }}
+        html, body, [class*="css"] {{
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+        }}
 
         /* Titulares (H1/H2): Syne Extra Bold. */
         h1, h2 {{ font-family: 'Syne', sans-serif !important; font-weight: 800 !important; letter-spacing: 0.5px; }}
