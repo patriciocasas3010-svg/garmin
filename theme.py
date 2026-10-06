@@ -270,7 +270,7 @@ def render_header(titulo: str, subtitulo: str = "", marca: str = "clinical") -> 
         f"""
         <div style="margin-bottom:14px;">
             {wordmark_html}
-            <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:26px; color:{INK};">{titulo}</div>
+            <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:26px; color:{INK};">{titulo}</div>
             {sub_html}
         </div>
         """,
