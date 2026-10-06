@@ -515,6 +515,24 @@ if st.session_state["paciente_actual"] is None:
                     f":material/person_off: Inactivos ({len(inactivos)})",
                 ])
             with col_btn_nuevo:
+                # Un poco de color + sombra suave, nada más -- ".st-key-<key>"
+                # es la clase estable que Streamlit pone en el contenedor de
+                # un widget con ese key (no un hash de build).
+                st.markdown(
+                    """<style>
+                    .st-key-toggle_nuevo_paciente button, .st-key-toggle_nuevo_paciente_vacio button {
+                        background: #EFF6FC; border: 1px solid #CFE0EE; color: #2B6CB0;
+                        box-shadow: 0 2px 6px rgba(43, 108, 176, .18);
+                        transition: box-shadow .15s ease, transform .15s ease;
+                    }
+                    .st-key-toggle_nuevo_paciente button:hover, .st-key-toggle_nuevo_paciente_vacio button:hover {
+                        background: #E3EEFA; border-color: #2B6CB0;
+                        box-shadow: 0 4px 10px rgba(43, 108, 176, .28);
+                        transform: translateY(-1px);
+                    }
+                    </style>""",
+                    unsafe_allow_html=True,
+                )
                 st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
                 if st.button(":material/add: Nuevo", key="toggle_nuevo_paciente", use_container_width=True):
                     st.session_state["mostrar_form_nuevo_paciente"] = not st.session_state["mostrar_form_nuevo_paciente"]
