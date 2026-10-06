@@ -97,7 +97,7 @@ _LOGIN_CAROUSEL_SLIDES = [
     {
         "icono": ":material/biotech:",
         "gradiente": "linear-gradient(165deg, #38A169 0%, #132033 100%)",
-        "titulo": "Interpretación y análisis de laboratorios y básculas inteligentes.",
+        "titulo": "Interpretación, análisis de laboratorios y composición corporal.",
         "texto": "Lectura automática por IA de PDFs y fotos -- revisa y confirma en segundos, no captures todo a mano.",
     },
     {
