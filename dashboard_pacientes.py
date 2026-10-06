@@ -87,71 +87,124 @@ def _engine():
     return db.engine()
 
 
-_LOGIN_PROMO_ITEMS = [
+_LOGIN_CAROUSEL_SLIDES = [
     {
-        "icono": ":material/watch:", "color": "#2B6CB0",
-        "titulo": "Conecta cualquier wearable",
+        "icono": ":material/watch:",
+        "gradiente": "linear-gradient(165deg, #2B6CB0 0%, #132033 100%)",
+        "titulo": "Conecta cualquier wearable.",
         "texto": "Garmin, Apple Health u Oura -- se sincroniza solo todos los días, sin que tengas que hacer nada.",
     },
     {
-        "icono": ":material/biotech:", "color": "#38A169",
-        "titulo": "Sube laboratorios e InBody",
+        "icono": ":material/biotech:",
+        "gradiente": "linear-gradient(165deg, #38A169 0%, #132033 100%)",
+        "titulo": "Sube laboratorios e InBody.",
         "texto": "Lectura automática por IA de PDFs y fotos -- revisa y confirma en segundos, no captures todo a mano.",
     },
     {
-        "icono": ":material/restaurant_menu:", "color": "#DD6B20",
-        "titulo": "Arma el plan con IA",
+        "icono": ":material/restaurant_menu:",
+        "gradiente": "linear-gradient(165deg, #DD6B20 0%, #132033 100%)",
+        "titulo": "Arma el plan con IA.",
         "texto": "Equivalencias SMAE, dos semanas completas, listo para mandar -- en minutos, no en horas.",
     },
 ]
+_LOGIN_CAROUSEL_SEGUNDOS_POR_SLIDE = 5
 
 
 def _render_login_promo() -> None:
-    """Panel oscuro al lado del formulario de login -- muestra de un
-    vistazo lo que ya hace la plataforma (wearables, laboratorios, plan
-    con IA) en vez de dejar esa mitad de la pantalla en blanco. Mismo
-    espíritu que el panel promocional de Buildpeer (imagen + texto a la
-    derecha del login), pero con las 3 cosas reales que ya ofrece AURA
-    en vez de un mockup -- nada que no exista todavía."""
+    """Panel al lado del formulario de login -- carrusel automático
+    (fondo degradado + icono + texto grande, puntos de navegación abajo)
+    estilo las referencias que mandó Pato (Buildpeer, apps de wellness).
+
+    Sin fotos de personas: esas referencias son material de marca de
+    OTRAS empresas (se les ve el logo -- HanPhysio, Barbell, Secret Med
+    Spa), no se pueden reusar aquí. El fondo es degradado con los
+    acentos de AURA (azul/verde/ámbar) en vez de una foto -- si después
+    hay fotos propias con licencia, se cambia el "gradiente" de cada
+    slide por "imagen" sin tocar el carrusel.
+
+    Es CSS puro (@keyframes), sin JavaScript -- st.markdown() con
+    unsafe_allow_html no ejecuta <script>, así que el avance automático
+    tiene que ser una animación de opacidad por slide, no un timer de
+    verdad. N slides a X segundos cada uno = ciclo total N*X; cada slide
+    tiene su animación retrasada (animation-delay) un múltiplo de X."""
+    n = len(_LOGIN_CAROUSEL_SLIDES)
+    duracion_total = n * _LOGIN_CAROUSEL_SEGUNDOS_POR_SLIDE
+    # Ventana (en % del ciclo) en la que cada slide está visible, con un
+    # margen de fade in/out de medio segundo a cada lado.
+    pct_fade = 50 / duracion_total / n * 100 / 100  # ~medio segundo en % del ciclo total, por slide
+    pct_on = 100 / n
+
+    reglas_slides, reglas_puntos = [], []
+    for i in range(n):
+        delay = i * _LOGIN_CAROUSEL_SEGUNDOS_POR_SLIDE
+        reglas_slides.append(
+            f'.login-carousel-slide:nth-child({i + 1}) {{ animation: loginCarouselFade {duracion_total}s ease-in-out infinite; animation-delay: {delay}s; }}'
+        )
+        reglas_puntos.append(
+            f'.login-carousel-dot:nth-child({i + 1}) {{ animation: loginCarouselDot {duracion_total}s ease-in-out infinite; animation-delay: {delay}s; }}'
+        )
+
     st.markdown(
         f"""<style>
         .st-key-login_promo {{
-            background: linear-gradient(165deg, {SIDEBAR_NAVY} 0%, {SIDEBAR_NAVY_SOFT} 100%);
-            border-radius: 20px; padding: 40px 36px; height: 100%;
+            border-radius: 20px; overflow: hidden; height: 100%; min-height: 560px;
+            position: relative;
+        }}
+        .login-carousel {{ position: relative; width: 100%; height: 560px; }}
+        .login-carousel-slide {{
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            justify-content: space-between; padding: 36px 36px 44px 36px; opacity: 0;
+        }}
+        @keyframes loginCarouselFade {{
+            0% {{ opacity: 0; }}
+            {pct_fade:.2f}% {{ opacity: 1; }}
+            {pct_on - pct_fade:.2f}% {{ opacity: 1; }}
+            {pct_on:.2f}% {{ opacity: 0; }}
+            100% {{ opacity: 0; }}
+        }}
+        {" ".join(reglas_slides)}
+        .login-carousel-dots {{
+            position: absolute; left: 36px; bottom: 18px; display: flex; gap: 6px; z-index: 5;
+        }}
+        .login-carousel-dot {{
+            width: 18px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.3);
+        }}
+        @keyframes loginCarouselDot {{
+            0% {{ background: rgba(255,255,255,.3); }}
+            {pct_fade:.2f}% {{ background: rgba(255,255,255,1); }}
+            {pct_on - pct_fade:.2f}% {{ background: rgba(255,255,255,1); }}
+            {pct_on:.2f}% {{ background: rgba(255,255,255,.3); }}
+            100% {{ background: rgba(255,255,255,.3); }}
         }}
         </style>""",
         unsafe_allow_html=True,
     )
     with st.container(key="login_promo"):
-        bloques = [
-            " ".join(
-                f"""<div style="margin-bottom:34px;">
-                <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:19px; color:{SIDEBAR_TEXT};
-                    margin-bottom:6px; letter-spacing:.2px;">
-                    AURA <span style="color:{AZURE_BLUE};">CLINICAL</span>
-                </div>
-                <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:12px; text-transform:uppercase;
-                    letter-spacing:.1em; color:{SIDEBAR_TEXT_MUTED};">Human Coherence System</div>
-            </div>""".split()
-            )
-        ]
-        for item in _LOGIN_PROMO_ITEMS:
-            bloques.append(
+        partes = ['<div class="login-carousel">']
+        for slide in _LOGIN_CAROUSEL_SLIDES:
+            partes.append(
                 " ".join(
-                    f"""<div style="display:flex; gap:16px; margin-bottom:28px; align-items:flex-start;">
-                    <div style="width:44px; height:44px; border-radius:12px; background:{item['color']}26;
-                        color:{item['color']}; display:flex; align-items:center; justify-content:center;
-                        flex-shrink:0;">{icon_span(item['icono'], 22)}</div>
+                    f"""<div class="login-carousel-slide" style="background:{slide['gradiente']};">
                     <div>
-                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:15px;
-                            color:{SIDEBAR_TEXT}; margin-bottom:4px;">{item['titulo']}</div>
-                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; line-height:1.5;
-                            color:{SIDEBAR_TEXT_MUTED};">{item['texto']}</div>
+                        <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:17px; color:#FFFFFF;
+                            letter-spacing:.2px;">AURA <span style="color:#CFE0EE;">CLINICAL</span></div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:11px; text-transform:uppercase;
+                            letter-spacing:.1em; color:rgba(255,255,255,.65); margin-top:2px;">Human Coherence System</div>
+                    </div>
+                    <div style="max-width:380px;">
+                        <div style="margin-bottom:14px;">{icon_span(slide['icono'], 40, color='#FFFFFF')}</div>
+                        <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:30px; line-height:1.15;
+                            color:#FFFFFF; margin-bottom:10px;">{slide['titulo']}</div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:14px; line-height:1.55;
+                            color:rgba(255,255,255,.85);">{slide['texto']}</div>
                     </div>
                 </div>""".split()
                 )
             )
-        st.markdown("".join(bloques), unsafe_allow_html=True)
+        partes.append('<div class="login-carousel-dots">')
+        partes.extend('<div class="login-carousel-dot"></div>' for _ in _LOGIN_CAROUSEL_SLIDES)
+        partes.append("</div></div>")
+        st.markdown("".join(partes), unsafe_allow_html=True)
 
 
 def _login() -> dict | None:
