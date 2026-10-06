@@ -114,6 +114,24 @@ def _armar_contexto(
     )
 
 
+def armar_prompt_completo(
+    paciente: str, macros: dict, equivalentes_calc: dict | None, enfoque: str | None,
+    notas_historial=None, recetas_disponibles: list[dict] | None = None,
+) -> str:
+    """El texto completo (system + mensaje de usuario) tal cual se le
+    mandaría a Claude -- para poder leerlo/revisarlo ANTES de gastar la
+    llamada real a la API. Mismo espíritu que "Descargar resumen para
+    pegar en Claude" de Análisis (ver ai_analisis.py), pero aquí no sirve
+    para pegarlo a mano en claude.ai (el system prompt no se pega ahí
+    igual) -- es nada más para inspeccionar qué le estaríamos mandando."""
+    contexto = _armar_contexto(paciente, macros, equivalentes_calc, enfoque, notas_historial, recetas_disponibles)
+    return (
+        f"MODELO: {MODEL}\n\n"
+        f"===== SYSTEM PROMPT (instrucciones fijas para Claude) =====\n\n{_SYSTEM_PROMPT}\n\n"
+        f"===== MENSAJE DE USUARIO (contexto de este paciente) =====\n\n{contexto}"
+    )
+
+
 def generar_plan_2_semanas(
     paciente: str, macros: dict, equivalentes_calc: dict | None, enfoque: str | None,
     notas_historial=None, recetas_disponibles: list[dict] | None = None,

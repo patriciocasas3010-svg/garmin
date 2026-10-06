@@ -2199,6 +2199,20 @@ def _render_analisis_ia(data: dict):
                         except Exception as e:
                             st.error(f"No se pudo generar el plan de 2 semanas: {e}")
 
+            prompt_completo = plan_generador.armar_prompt_completo(
+                paciente, macros_finales, equivalentes_calc, enfoque_actual, historial_notas, recetas_disponibles,
+            )
+            st.download_button(
+                ":material/code: Descargar el prompt completo (sin gastar API)",
+                data=prompt_completo,
+                file_name=f"prompt_plan_{paciente.replace(' ', '_')}.txt",
+                mime="text/plain",
+                key=f"descargar_prompt_plan_{paciente}",
+                help="Exactamente lo que le mandaríamos a Claude si le das \"Generar plan de 2 semanas\" -- "
+                     "las instrucciones fijas (system prompt) y el contexto de este paciente en concreto "
+                     "(macros, equivalentes, recetas, notas) -- para que lo revises antes de gastar la llamada real.",
+            )
+
 
 def _placeholder_requiere_wearable(titulo: str, descripcion: str) -> None:
     """Se usa en vez de esconder una pestaña completa cuando el paciente
