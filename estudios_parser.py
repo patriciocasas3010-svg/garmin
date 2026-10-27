@@ -208,9 +208,22 @@ def _es_salud_digna(texto: str) -> bool:
     # No todos los reportes de este laboratorio imprimen literalmente "Salud
     # Digna" (algunos solo dicen "Centro Analítico Mariano Otero", el mismo
     # centro acreditado con el mismo número "CL-251") -- se detecta por
-    # cualquiera de las dos señales, probado contra 2 reportes reales.
+    # cualquiera de las señales, probado contra reportes reales.
+    #
+    # En al menos un reporte real, el logo "SaludDigna" del encabezado es
+    # una IMAGEN dentro del PDF, no texto -- extract_text() (capa de texto
+    # del PDF, sin OCR) no lo ve en absoluto, ni pegado ("saluddigna") ni
+    # separado ("salud digna"). Por eso la señal principal es la leyenda
+    # de pie de página "RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA
+    # PARA PACIENTES NORMALES", que sí es texto real y se repite en cada
+    # página -- las demás se dejan como respaldo por si algún reporte sí
+    # trae el logo como texto.
     low = texto.lower()
-    return "salud digna" in low or "centro analítico mariano otero" in low
+    return (
+        "resultados fuera de los limites de referencia para pacientes normales" in low
+        or "salud digna" in low or "saluddigna" in low or "salud-digna.org" in low
+        or "centro analítico mariano otero" in low
+    )
 
 
 def _parse_salud_digna(texto: str) -> list[dict]:
@@ -245,10 +258,13 @@ def _parse_salud_digna(texto: str) -> list[dict]:
 
 
 def _fecha_salud_digna(texto: str) -> str | None:
+    # "de" es opcional a propósito -- un reporte real trae "Fecha Toma:" y
+    # "Fecha Validación:" sin el "de" que el patrón anterior exigía, así
+    # que nunca encontraba nada.
     return _fecha_normalizada(
         texto,
-        r"Fecha de Toma:\s*(\d{1,2}/\d{1,2}/\d{4})",
-        r"Fecha de Validaci[oó]n:\s*(\d{1,2}/\d{1,2}/\d{4})",
+        r"Fecha (?:de )?Toma:\s*(\d{1,2}/\d{1,2}/\d{4})",
+        r"Fecha (?:de )?Validaci[oó]n:\s*(\d{1,2}/\d{1,2}/\d{4})",
     )
 
 
@@ -459,8 +475,15 @@ def _fecha_rio(texto: str) -> str | None:
 
 _LABORATORIOS = [
     ("SYNLAB/MédicaSur", _es_synlab, _parse_synlab, _fecha_synlab),
-    ("Chopo", _es_chopo, _parse_chopo, _fecha_chopo),
+    # Salud Digna antes que Chopo a propósito: el pie de página de Salud
+    # Digna trae la dirección "Chopo 33, Los Reyes Ixtacala..." (es el
+    # nombre de la calle), y _es_chopo() solo busca la palabra "chopo"
+    # en cualquier parte del texto -- si Chopo se revisara primero, le
+    # robaría cualquier reporte de Salud Digna (confirmado con un
+    # reporte real: se detectaba como Chopo y el rango de cada prueba
+    # quedaba pegado a la unidad en vez de separarse).
     ("Salud Digna", _es_salud_digna, _parse_salud_digna, _fecha_salud_digna),
+    ("Chopo", _es_chopo, _parse_chopo, _fecha_chopo),
     ("Laboratorio Clínico RIO", _es_rio, _parse_rio, _fecha_rio),
 ]
 
