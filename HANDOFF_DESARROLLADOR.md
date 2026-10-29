@@ -37,36 +37,44 @@ aparecen en `dashboard_pacientes.py`. Apple Health y Oura todavía dependen de
 que el paciente exporte/sincronice manual (no tienen equivalente del flujo
 web de Garmin todavía).
 
-## 3. Modelo de datos: Google Sheets como base de datos
+## 3. Modelo de datos: Postgres real (Supabase durante el piloto)
 
-**No hay base de datos real.** Todo vive en una sola hoja de Google, con una
-pestaña por "tabla". Cada pestaña la administra un módulo `*_store.py` que
-sabe leer/escribir SU pestaña únicamente (patrón consistente en todo el repo:
-`HOJA_NOMBRE`, `ENCABEZADOS`, `_worksheet()`, funciones `guardar_*`/`leer_*`).
+**Ya NO es Google Sheets.** Esa migración ya se hizo -- `db.py` es la capa de
+conexión (SQLAlchemy + driver `psycopg` v3, Engine cacheado con
+`st.cache_resource`), y `sheet_cache.py` (el módulo viejo de Sheets) ya no lo
+importa nadie en el código actual. La cadena de conexión vive en el Secret
+`DATABASE_URL`.
 
-| Pestaña (hoja) | Módulo dueño | Qué guarda |
+Cada tabla la sigue administrando un módulo `*_store.py` dueño exclusivo de
+esa tabla (mismo patrón de antes, ahora sobre SQL en vez de gspread):
+
+| Tabla (Postgres) | Módulo dueño | Qué guarda |
 |---|---|---|
-| `Hoja1` (la principal) | `push_resumen.py` | Una fila por paciente con su snapshot de wearable completo (JSON en la columna `Datos`) |
-| `Enfoque` | `enfoque_store.py` | Perfil: enfoque, meta de grasa, días de plan, condición metabólica/GLP-1, nutriólogo asignado |
-| `Notas` | `notas_store.py` | Historial de notas libres del nutriólogo sobre el paciente |
-| `InBody` | `inbody_store.py` | Historial de resultados de báscula InBody |
-| `Antropometria` | `antropometria_store.py` | Historial de mediciones antropométricas manuales |
-| `Calorias` | `calorias_store.py` | Historial de calorías de comidas capturadas |
-| `Estudios` | `estudios_store.py` | Estudios de laboratorio (PDF parseado a JSON) |
-| `TokensGarmin` | `token_store.py` | Token OAuth de Garmin por paciente + clave de conexión de un solo uso |
-| `Usuarios` | `usuarios_store.py` | Cuentas de nutriólogas (usuario, hash+salt de contraseña, rol) |
-| `Feedback` | `feedback_store.py` | Reportes de bugs/sugerencias mandados desde el botón flotante |
-| `LibreVinculo` | `libre_store.py` | Vínculo con LibreLinkUp (CGM) |
+| `resumen` | `resumen_store.py` | Snapshot diario de wearable por paciente (JSON) |
+| `enfoque` | `enfoque_store.py` | Perfil: enfoque, meta de grasa, condición metabólica/GLP-1, nutrióloga asignada |
+| `notas` | `notas_store.py` | Historial de notas libres de la nutrióloga |
+| `inbody` | `inbody_store.py` | Historial de resultados de báscula InBody |
+| `antropometria` | `antropometria_store.py` | Mediciones antropométricas manuales |
+| `calorias` | `calorias_store.py` | Calorías de comidas capturadas |
+| `estudios` | `estudios_store.py` | Estudios de laboratorio (leídos con `estudios_parser.py`) |
+| `tokens_garmin` | `token_store.py` | Token OAuth de Garmin por paciente (sync automático diario) |
+| `tokens_oura` | OAuth de Oura por paciente |
+| `usuarios` | `usuarios_store.py` | Cuentas de nutriólogas (hash+sal de contraseña, rol) |
+| `feedback` | `feedback_store.py` | Reportes de bugs/sugerencias |
+| `libre_vinculo` | `libre_store.py` | Vínculo con LibreLinkUp (CGM) |
+| `recetas` | `recetas_store.py` | Biblioteca de recetas -- esquema listo, **tabla vacía todavía** |
+| `planes_nutricionales` / `plan_recetas` | `planes_store.py` | Planes de alimentación (borrador/aprobado) |
+| `evidencia_clinica` / `reglas_clinicas` | -- | Citas/reglas clínicas como dato |
+| `recomendaciones_generadas` / `uso_analisis_ia` | `analisis_ia_store.py` | Historial y cuota mensual de análisis con IA |
+| `consumo_observado` | -- | Lo que el paciente reporta haber comido vs. lo indicado |
 
-**Por qué Sheets y no una base real:** fue la decisión correcta para
-arrancar sin infraestructura ni costo, y sigue funcionando para el volumen
-actual. **Ya está mostrando sus límites:** cuotas de lectura/escritura de la
-API de Sheets (`sheet_cache.py` existe específicamente para mitigar esto,
-cacheando `gc.open_by_key()`), y no hay transacciones reales (dos escrituras
-casi simultáneas a la misma fila pueden pisarse). Con 250+ pacientes activos
-esto va a doler más, no menos. **Recomendación:** migrar a Postgres
-(Supabase es buena opción -- da auth + Postgres + API REST gratis para este
-volumen) es el primer proyecto de infraestructura que yo haría.
+Ver `schema.sql` para el detalle completo de columnas de cada tabla.
+
+**Qué resolvió la migración:** las cuotas de lectura/escritura de la API de
+Sheets que chocaban en producción, y la falta de transacciones reales.
+**Qué sigue pendiente:** cero pruebas automatizadas contra este esquema, y
+`dashboard_pacientes.py` sigue mezclando lógica de negocio con llamadas SQL
+directas en el mismo archivo.
 
 ## 4. Autenticación y roles
 
@@ -168,10 +176,10 @@ Secrets que usa la app (configurados en Streamlit Cloud → Settings → Secrets
 formato TOML):
 
 ```
-SHEET_ID = "..."                  # obligatorio -- id de la hoja de Google
-GOOGLE_CREDENTIALS_JSON = '''...'''  # obligatorio -- credenciales de service account
+DATABASE_URL = "..."              # obligatorio -- conexión a Postgres/Supabase
 APP_PASSWORD = "..."              # login de emergencia como "admin"
-ANTHROPIC_API_KEY = "..."         # análisis con IA (ai_analisis.py)
+ANTHROPIC_API_KEY = "..."         # análisis con IA + Crear plan (ai_analisis.py, plan_generador.py)
+USDA_API_KEY = "..."              # cálculo de macros de recetas contra USDA FoodData Central
 LIBRE_EMAIL = "..."               # cuenta de LibreLinkUp (CGM), una sola para toda la app
 LIBRE_PASSWORD = "..."
 CONECTAR_GARMIN_URL = "..."       # URL pública de conectar_garmin_web.py
@@ -182,6 +190,10 @@ OURA_CLIENT_SECRET = "..."
 CONECTAR_OURA_URL = "..."         # URL pública de conectar_oura_web.py -- debe ser IDÉNTICA
                                    # al "Redirect URI" registrado en la app de Oura
 ```
+
+Para `sync_diario.py` (corre fuera de Streamlit, vía GitHub Actions),
+`DATABASE_URL` se configura por separado en los Secrets del repositorio de
+GitHub (Settings -> Secrets and variables -> Actions), no en Streamlit Cloud.
 
 `requirements.txt` tiene las versiones mínimas -- correr con
 `pip install -r requirements.txt` en un venv de Python 3.10+.
