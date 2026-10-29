@@ -10,3 +10,4 @@ requests>=2.31
 anthropic>=0.40
 pylibrelinkup>=0.10
 pdfplumber>=0.11
+stripe>=12.0

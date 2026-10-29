@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AURA FLOW · Seguimiento clínico con datos reales</title>
+  <meta name="description" content="Plataforma para nutriólogos, médicos y coaches: wearables, InBody, antropometría y estudios de laboratorio de cada paciente en un solo tablero.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!--
+    CONFIGURA AQUÍ el link de tu app de Streamlit (el mismo que el Secret APP_URL).
+    Todos los botones "Empezar prueba" / "Entrar" lo usan.
+  -->
+  <script>window.AURA_APP_URL = "https://TU-APP.streamlit.app";</script>
+
+  <div class="wrap">
+    <header class="top">
+      <img src="assets/aura_flow_logo.svg" alt="AURA FLOW">
+      <nav>
+        <a href="#como-funciona">Cómo funciona</a>
+        <a href="#precio">Precio</a>
+        <a href="#preguntas">Preguntas</a>
+        <a class="btn ghost" data-app href="#precio">Entrar</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="hero">
+        <div class="eyebrow">Para nutriólogos, médicos del deporte y coaches</div>
+        <h1>Ve lo que pasa con tu paciente entre consulta y consulta</h1>
+        <p class="lead">
+          AURA FLOW junta en un solo tablero el sueño, la carga de entrenamiento y la recuperación de su
+          reloj, su composición corporal, sus mediciones y sus estudios de laboratorio &mdash; y te marca
+          las alertas antes de la siguiente cita.
+        </p>
+        <div class="cta-row">
+          <a class="btn" data-app href="#precio">Empieza tu prueba gratis</a>
+          <a class="btn ghost" href="#como-funciona">Ver cómo funciona</a>
+        </div>
+        <p class="small">14 días gratis · cancelas cuando quieras · precios en pesos mexicanos</p>
+      </div>
+    </main>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <h2>Todo el paciente en una pantalla</h2>
+      <p class="lead">Deja de pedir capturas de pantalla por WhatsApp y de pasar datos a mano a Excel.</p>
+      <div class="grid" style="margin-top:28px">
+        <div class="card"><h3>Wearables</h3><p>Garmin (sincronización diaria automática) y Apple Health. Sueño, frecuencia en reposo, Body Battery, carga aguda/crónica (ACWR), zonas y recuperación.</p></div>
+        <div class="card"><h3>Composición corporal</h3><p>Sube la foto o PDF del InBody y se lee solo. Historial de antropometría con tendencias.</p></div>
+        <div class="card"><h3>Estudios clínicos</h3><p>Carga resultados de laboratorio y obtén el histórico de cada prueba, con valores fuera de rango marcados.</p></div>
+        <div class="card"><h3>Cruces clínicos</h3><p>10 paneles que cruzan laboratorio, composición y wearable, cada uno con resumen ejecutivo, alerta y pauta sugerida.</p></div>
+        <div class="card"><h3>Alertas</h3><p>Banderas rojas en un solo lugar: sobrecarga, mal sueño sostenido, recuperación baja, valores clínicos fuera de rango.</p></div>
+        <div class="card"><h3>Análisis con IA</h3><p>Una lectura de apoyo cruzando todos los datos del paciente, para que llegues a consulta con hipótesis. Tu criterio clínico siempre decide.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="como-funciona">
+    <div class="wrap">
+      <h2>Cómo funciona</h2>
+      <div class="grid steps" style="margin-top:28px">
+        <div class="card"><h3>Crea tu cuenta</h3><p>En dos minutos. Tus pacientes viven en tu propio espacio, separado del de cualquier otro profesional.</p></div>
+        <div class="card"><h3>Conecta a tus pacientes</h3><p>Cada paciente vincula su reloj una sola vez. Desde ahí, sus datos llegan solos todos los días.</p></div>
+        <div class="card"><h3>Agrega lo de consulta</h3><p>InBody, mediciones, estudios de laboratorio y notas, directo desde el tablero.</p></div>
+        <div class="card"><h3>Decide con datos</h3><p>Revisa tendencias, alertas y cruces clínicos antes de cada cita, y comparte un resumen en PDF.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="precio">
+    <div class="wrap">
+      <h2 style="text-align:center">Un solo plan, todo incluido</h2>
+      <div class="card price" style="margin-top:28px">
+        <div class="eyebrow">Plan Profesional</div>
+        <div class="amount">$990 <span class="small mono">MXN / mes</span></div>
+        <p class="small">Cobro mensual en pesos mexicanos</p>
+        <ul>
+          <li>Pacientes ilimitados</li>
+          <li>Sincronización diaria de Garmin y carga de Apple Health</li>
+          <li>Lector de InBody y de estudios de laboratorio</li>
+          <li>10 paneles de cruces clínicos y alertas</li>
+          <li>Análisis con IA y resumen en PDF</li>
+          <li>Oura y FreeStyle Libre <span class="tag">próximamente</span></li>
+        </ul>
+        <div class="cta-row" style="justify-content:center">
+          <a class="btn" data-app href="#">Empieza tus 14 días gratis</a>
+        </div>
+        <p class="small">Te pedimos una tarjeta en la página segura de Stripe. No se cobra nada durante la prueba.</p>
+      </div>
+      <p class="small" style="text-align:center; margin-top:18px">¿Clínica o equipo con varios profesionales? <a href="mailto:hola@auraflow.mx">Escríbenos</a>.</p>
+    </div>
+  </section>
+
+  <section id="preguntas">
+    <div class="wrap">
+      <h2>Preguntas frecuentes</h2>
+      <details><summary>¿Quién puede ver los datos de mis pacientes?</summary>
+        <p>Solo tú. Cada cuenta tiene su propio espacio de datos, y el equipo de AURA FLOW no consulta la información de tus pacientes salvo que tú lo pidas para darte soporte. Consulta el <a href="privacidad.html">Aviso de privacidad</a>.</p></details>
+      <details><summary>¿Qué relojes funcionan?</summary>
+        <p>Hoy: Garmin (con actualización automática diaria) y Apple Watch / iPhone mediante la exportación de Salud. Oura y FreeStyle Libre llegan pronto.</p></details>
+      <details><summary>¿Mis pacientes tienen que pagar algo?</summary>
+        <p>No. La suscripción es tuya y cubre a todos tus pacientes.</p></details>
+      <details><summary>¿Puedo cancelar?</summary>
+        <p>Sí, cuando quieras, desde tu cuenta. No hay plazos forzosos.</p></details>
+      <details><summary>¿AURA FLOW da diagnósticos?</summary>
+        <p>No. Es una herramienta de apoyo para profesionales de la salud; las alertas y análisis son orientativos y la decisión clínica siempre es tuya.</p></details>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>© <span id="anio">2026</span> AURA FLOW · Human Coherence System</span>
+      <span><a href="terminos.html">Términos y condiciones</a> · <a href="privacidad.html">Aviso de privacidad</a> · <a href="mailto:hola@auraflow.mx">hola@auraflow.mx</a></span>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll("[data-app]").forEach(function (a) { a.href = window.AURA_APP_URL; });
+    document.getElementById("anio").textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

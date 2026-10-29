@@ -16,6 +16,12 @@ Requiere estos Secrets en Streamlit Cloud (Settings -> Secrets):
     '''
 
 Ver PUBLICAR_DASHBOARD_PACIENTES.md para la guía paso a paso completa.
+
+Multi-cuenta (para vender AURA FLOW a otros profesionales): cada
+profesional inicia sesión con su correo y ve SOLO los pacientes de su
+propia hoja de Google. SHEET_ID es la hoja de control (pestaña "Cuentas")
+y a la vez la hoja con tus pacientes originales. Ver acceso.py,
+billing.py, cuentas_store.py y LANZAMIENTO.md.
 """
 
 import json
@@ -28,6 +34,8 @@ import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
+import acceso
+import admin_panel
 import ai_analisis
 import antropometria_parser
 import antropometria_store
@@ -59,48 +67,31 @@ st.set_page_config(page_title="AURA FLOW · Resumen de pacientes", layout="wide"
 apply_theme()
 
 
-def _check_password() -> bool:
-    """Pide una contraseña (guardada como Secret APP_PASSWORD) antes de
-    mostrar nada -- este dashboard reúne la información de TODOS los
-    pacientes, así que a diferencia del dashboard personal, aquí sí
-    recomendamos fuerte configurar este Secret."""
-    try:
-        expected = st.secrets.get("APP_PASSWORD")
-    except Exception:
-        expected = None
-    if not expected:
-        st.warning(
-            "⚠️ Este dashboard reúne los datos de todos tus pacientes y no tiene contraseña "
-            "configurada -- cualquiera con este link puede verlo. Configura el Secret "
-            "APP_PASSWORD en Streamlit Cloud (Settings → Secrets) lo antes posible."
-        )
-        return True
-
-    if st.session_state.get("_authed"):
-        return True
-
-    render_header("Resumen de pacientes")
-    pwd = st.text_input("Contraseña", type="password")
-    if pwd == expected:
-        st.session_state["_authed"] = True
-        st.rerun()
-    elif pwd:
-        st.error("Contraseña incorrecta.")
-    return False
-
-
-if not _check_password():
-    st.stop()
-
-
 @st.cache_resource
 def _gc() -> gspread.Client:
     creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS_JSON"])
     # Antes era de solo lectura -- ahora también necesita poder escribir,
     # para guardar los resultados de InBody que subes desde aquí mismo.
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    # drive.file: para poder crear la hoja propia de cada cuenta nueva
+    # (solo da acceso a archivos creados por esta misma app).
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
+
+
+CONTROL_SHEET_ID = st.secrets["SHEET_ID"]
+
+# Inicio de sesión + suscripción: si no hay una cuenta con acceso, esto
+# dibuja la pantalla que toque (entrar / crear cuenta / pagar) y detiene
+# la página. A partir de aquí todo usa SHEET_ID = la hoja de ESTA cuenta.
+CUENTA = acceso.requerir_cuenta(_gc(), CONTROL_SHEET_ID)
+SHEET_ID = CUENTA["SheetId"]
+ES_ADMIN = acceso.es_admin(CUENTA)
+acceso.render_menu_cuenta(CUENTA, _gc(), CONTROL_SHEET_ID)
+
+if ES_ADMIN and st.sidebar.toggle("🛠️ Panel de administración"):
+    admin_panel.render_panel_admin(_gc(), CONTROL_SHEET_ID)
+    st.stop()
 
 
 @st.cache_resource(ttl=3600)
@@ -113,12 +104,14 @@ def _libre_client():
 
 
 def _worksheet():
-    return sheet_cache.abrir_hoja(_gc(), st.secrets["SHEET_ID"]).sheet1
+    return sheet_cache.abrir_hoja(_gc(), SHEET_ID).sheet1
 
 
 @st.cache_data(ttl=300)
-def _load_df() -> pd.DataFrame:
-    registros = _worksheet().get_all_records()
+def _load_df(sheet_id: str) -> pd.DataFrame:
+    # sheet_id va como argumento para que el caché sea por cuenta: sin
+    # él, una cuenta podría ver la lista de pacientes de otra.
+    registros = sheet_cache.abrir_hoja(_gc(), sheet_id).sheet1.get_all_records()
     return pd.DataFrame(registros)
 
 
@@ -126,7 +119,7 @@ if "paciente_actual" not in st.session_state:
     st.session_state["paciente_actual"] = None
 
 try:
-    df = _load_df()
+    df = _load_df(SHEET_ID)
 except Exception as e:
     st.error(f"No se pudo leer la hoja de Google. Revisa la configuración de Secrets. Detalle: {e}")
     st.stop()
@@ -194,12 +187,12 @@ fuente = fila.get("Fuente") or "Garmin"
 
 # Se leen una sola vez aquí (no dentro de _render_composicion_corporal) para
 # poder usar también el historial de InBody en la pestaña Resumen.
-historial_inbody = inbody_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_antro = antropometria_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_notas = notas_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-enfoque_actual = enfoque_store.leer_enfoque(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_calorias = calorias_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
-historial_estudios = estudios_store.leer_historial(_gc(), st.secrets["SHEET_ID"], paciente)
+historial_inbody = inbody_store.leer_historial(_gc(), SHEET_ID, paciente)
+historial_antro = antropometria_store.leer_historial(_gc(), SHEET_ID, paciente)
+historial_notas = notas_store.leer_historial(_gc(), SHEET_ID, paciente)
+enfoque_actual = enfoque_store.leer_enfoque(_gc(), SHEET_ID, paciente)
+historial_calorias = calorias_store.leer_historial(_gc(), SHEET_ID, paciente)
+historial_estudios = estudios_store.leer_historial(_gc(), SHEET_ID, paciente)
 
 top_col1, top_col2, top_col3 = st.columns([5, 1, 1])
 with top_col1:
@@ -239,7 +232,7 @@ with col_notas:
             "controlando una condición médica).",
         )
         if enfoque_elegido != enfoque_actual and st.button("Guardar enfoque", key=f"guardar_enfoque_{paciente}"):
-            enfoque_store.guardar_enfoque(_gc(), st.secrets["SHEET_ID"], paciente, enfoque_elegido)
+            enfoque_store.guardar_enfoque(_gc(), SHEET_ID, paciente, enfoque_elegido)
             st.cache_data.clear()
             st.success("Enfoque guardado.")
             st.rerun()
@@ -255,7 +248,7 @@ with col_notas:
             "entrenar. Su platillo favorito del plan fue la lasaña de calabaza.\"",
         )
         if st.button("Agregar nota", key=f"agregar_nota_{paciente}", disabled=not nota_nueva.strip()):
-            notas_store.guardar_nota(_gc(), st.secrets["SHEET_ID"], paciente, nota_nueva)
+            notas_store.guardar_nota(_gc(), SHEET_ID, paciente, nota_nueva)
             st.cache_data.clear()
             st.success("Nota guardada.")
             st.rerun()
@@ -271,7 +264,7 @@ with col_wearable:
 
         if fuente == "Garmin":
             st.divider()
-            token_actual = token_store.leer_token(_gc(), st.secrets["SHEET_ID"], paciente)
+            token_actual = token_store.leer_token(_gc(), SHEET_ID, paciente)
             if token_actual:
                 st.caption(f"✅ Sincronización automática diaria activada (token guardado el {token_actual['fecha']}).")
                 col_forzar, col_quitar = st.columns(2)
@@ -292,7 +285,7 @@ with col_wearable:
                                 )
                 with col_quitar:
                     if st.button("Quitar sincronización automática", key=f"quitar_token_{paciente}"):
-                        token_store.eliminar_token(_gc(), st.secrets["SHEET_ID"], paciente)
+                        token_store.eliminar_token(_gc(), SHEET_ID, paciente)
                         st.cache_data.clear()
                         st.success("Listo, se quitó -- vuelve a depender de que abra su programa.")
                         st.rerun()
@@ -307,7 +300,7 @@ with col_wearable:
                 placeholder="Pega aquí el bloque completo que imprimió export_token.py...",
             )
             if st.button("Guardar token", key=f"guardar_token_{paciente}", disabled=not token_pegado.strip()):
-                token_store.guardar_token(_gc(), st.secrets["SHEET_ID"], paciente, token_pegado)
+                token_store.guardar_token(_gc(), SHEET_ID, paciente, token_pegado)
                 st.cache_data.clear()
                 st.success("Token guardado -- desde la próxima sincronización diaria ya no depende de que abra nada.")
                 st.rerun()
@@ -352,7 +345,7 @@ def _render_calorias_comidas():
         st.write("")
         st.write("")
         if st.button("Guardar", key=f"guardar_calorias_{paciente}", disabled=not calorias_valor):
-            calorias_store.guardar_calorias(_gc(), st.secrets["SHEET_ID"], paciente, fecha_calorias, calorias_valor)
+            calorias_store.guardar_calorias(_gc(), SHEET_ID, paciente, fecha_calorias, calorias_valor)
             st.cache_data.clear()
             st.success("Calorías guardadas.")
             st.rerun()
@@ -368,6 +361,12 @@ def _render_calorias_comidas():
 def _render_glucosa_libre():
     """Glucosa de FreeStyle Libre (vía LibreLinkUp) -- vive dentro de la
     pestaña 🚦 Alertas, no como sección aparte."""
+    if SHEET_ID != CONTROL_SHEET_ID:
+        # LIBRE_EMAIL/LIBRE_PASSWORD es UNA sola cuenta de LibreLinkUp (la
+        # del fundador): las demás cuentas no pueden seguir a sus pacientes
+        # con ella sin ver los de otros profesionales.
+        st.info("La integración con FreeStyle Libre llega pronto a todas las cuentas.")
+        return
     if not st.secrets.get("LIBRE_EMAIL") or not st.secrets.get("LIBRE_PASSWORD"):
         st.info(
             "Para usar esto, el paciente primero te agrega como \"seguidor\" en la app LibreLinkUp "
@@ -376,7 +375,7 @@ def _render_glucosa_libre():
         )
         return
 
-    vinculo_actual = libre_store.leer_vinculo(_gc(), st.secrets["SHEET_ID"], paciente)
+    vinculo_actual = libre_store.leer_vinculo(_gc(), SHEET_ID, paciente)
     try:
         libre_pacientes = libre_metrics.listar_pacientes(_libre_client())
     except Exception as e:
@@ -402,7 +401,7 @@ def _render_glucosa_libre():
     if not vinculo_actual or str(vinculo_actual["id"]) != str(libre_elegido["id"]):
         if st.button("Vincular", key=f"libre_vincular_{paciente}"):
             libre_store.guardar_vinculo(
-                _gc(), st.secrets["SHEET_ID"], paciente, libre_elegido["id"], libre_elegido["nombre"],
+                _gc(), SHEET_ID, paciente, libre_elegido["id"], libre_elegido["nombre"],
             )
             st.cache_data.clear()
             st.success("Vinculado.")
@@ -495,7 +494,7 @@ def _render_estudios_clinicos():
                     "laboratorio": laboratorio_estudio,
                     "resultados": df_editado.to_dict("records"),
                 }
-                estudios_store.guardar_estudio(_gc(), st.secrets["SHEET_ID"], paciente, estudio_final)
+                estudios_store.guardar_estudio(_gc(), SHEET_ID, paciente, estudio_final)
                 st.session_state.pop(f"estudio_draft_{paciente}", None)
                 st.cache_data.clear()
                 st.success("Estudio guardado -- se agregó al historial de este paciente.")
@@ -652,7 +651,7 @@ def _render_composicion_corporal(data: dict | None):
                         "agua_extra_l": agua_extra or None, "imc": imc or None,
                         "pgc_pct": draft.get("pgc_pct"), "bmr_kcal": bmr or None,
                     }
-                    inbody_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                    inbody_store.guardar_registro(_gc(), SHEET_ID, paciente, campos_final)
                     st.session_state.pop(f"inbody_draft_{paciente}", None)
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()
@@ -723,7 +722,7 @@ def _render_composicion_corporal(data: dict | None):
                         **{k: (v or None) for k, v in pliegues_valores.items()},
                         **{k: (v or None) for k, v in circ_valores.items()},
                     }
-                    antropometria_store.guardar_registro(_gc(), st.secrets["SHEET_ID"], paciente, campos_final)
+                    antropometria_store.guardar_registro(_gc(), SHEET_ID, paciente, campos_final)
                     st.session_state.pop(f"antro_draft_{paciente}", None)
                     st.success("Guardado -- se agregó al historial de este paciente.")
                     st.rerun()

@@ -1,0 +1,52 @@
+<svg width="560" height="130" viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#C9CDD3"/>
+    </linearGradient>
+    <linearGradient id="iridescent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2C5E8A"/>
+      <stop offset="50%" stop-color="#8C6FB0"/>
+      <stop offset="100%" stop-color="#BCA38C"/>
+    </linearGradient>
+    <radialGradient id="flare" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="silverBevel" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#E4E7EB"/>
+      <stop offset="55%" stop-color="#9CA3AD"/>
+      <stop offset="100%" stop-color="#DEE1E5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Isotipo: "A" sin travesaño recto; ondas gruesas tipo cinta forman
+       la barra horizontal, con un destello sutil sobre el vértice.
+       Triángulo robusto, de esquinas rectas (miter/square), ángulo de
+       apertura moderado (ni tan cerrado como el original ni tan abierto
+       como la primera versión ancha). -->
+  <g>
+    <path d="M10,112 L58,22 L106,112" fill="none" stroke="url(#silverBevel)"
+          stroke-width="16" stroke-linecap="square" stroke-linejoin="miter"/>
+
+    <circle cx="58" cy="18" r="12" fill="url(#flare)"/>
+    <path d="M47,13 Q58,2 69,13" fill="none" stroke="#FFFFFF" stroke-width="2"
+          stroke-linecap="round" opacity="0.85"/>
+
+    <path d="M27,63 Q44,45 58,60 Q72,75 89,57" fill="none" stroke="url(#iridescent)"
+          stroke-width="10" stroke-linecap="round"/>
+    <path d="M30,60 Q47,42 61,57" fill="none" stroke="#FFFFFF" stroke-width="2.5"
+          stroke-linecap="round" opacity="0.35"/>
+    <path d="M25,75 Q43,59 58,73 Q73,87 91,69" fill="none" stroke="url(#iridescent)"
+          stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+    <path d="M22,87 Q41,73 58,86 Q75,99 94,81" fill="none" stroke="url(#iridescent)"
+          stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <text x="140" y="72" font-family="Syne, 'Arial Black', sans-serif" font-weight="800"
+        font-size="40" letter-spacing="2" fill="url(#silver)">AURA FLOW</text>
+  <text x="142" y="97" font-family="'JetBrains Mono', 'Courier New', monospace"
+        font-weight="600" font-size="11" letter-spacing="4.5" fill="#9AA1AB">COHERENCE FOR HEALTH DATA</text>
+</svg>

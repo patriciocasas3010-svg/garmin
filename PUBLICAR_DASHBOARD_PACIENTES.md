@@ -1,5 +1,9 @@
 # Dashboard central de pacientes (un link, cada quien ve lo suyo)
 
+> **¿Vas a vender AURA FLOW a otros profesionales?** Este dashboard ahora tiene
+> cuentas por profesional y cobro con Stripe -- sigue también
+> [LANZAMIENTO.md](LANZAMIENTO.md). La contraseña única `APP_PASSWORD` ya no se usa aquí.
+
 Esto te da **un solo link** donde cada paciente elige su nombre de una
 lista y ve su **Tablero Maestro de Rendimiento completo** — las mismas 6
 pestañas y gráficas de tu propio dashboard (ACWR, zonas, eficiencia, sueño,
